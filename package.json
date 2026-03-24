@@ -1,0 +1,46 @@
+{
+  "name": "codepro",
+  "version": "1.0.0",
+  "description": "CodePro — Gestão de Documentos A2Z Projetos",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder --win",
+    "build:publish": "electron-builder --win --publish always"
+  },
+  "build": {
+    "appId": "com.a2zprojetos.codepro",
+    "productName": "CodePro",
+    "copyright": "Copyright © 2026 A2Z Projetos",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CodePro"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "A2ZPROJ",
+      "repo": "codepro"
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.7"
+  },
+  "devDependencies": {
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3"
+  }
+}
