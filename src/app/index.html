@@ -496,6 +496,30 @@
 
   window.doLogin = window.doRegister = window.doForgotPassword = window.resendVerification = () => {};
 
+  // ── LISTENERS DE ATUALIZAÇÃO AUTOMÁTICA ──
+  if (window.electronAPI) {
+    window.electronAPI.onUpdateAvailable(v => {
+      const banner = document.getElementById('updateBanner');
+      const text = document.getElementById('updateBannerText');
+      if (banner && text) {
+        text.textContent = `Nova versão ${v} disponível — baixando em segundo plano...`;
+        banner.style.display = 'flex';
+        const btn = document.getElementById('updateInstallBtn');
+        if (btn) btn.style.display = 'none';
+      }
+    });
+    window.electronAPI.onUpdateDownloaded(v => {
+      const banner = document.getElementById('updateBanner');
+      const text = document.getElementById('updateBannerText');
+      if (banner && text) {
+        text.textContent = `Versão ${v} baixada e pronta para instalar`;
+        banner.style.display = 'flex';
+        const btn = document.getElementById('updateInstallBtn');
+        if (btn) btn.style.display = '';
+      }
+    });
+  }
+
   init();
 </script>
 
@@ -1103,6 +1127,18 @@ body {
       <div class="topbar-avatar" id="topbarAvatar"></div>
       <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Alternar tema"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button>
       <button class="signout-btn" onclick="doSignOut()">Sair</button>
+    </div>
+  </div>
+
+  <!-- BANNER DE ATUALIZAÇÃO -->
+  <div id="updateBanner" style="display:none;background:linear-gradient(90deg,#1e3a8a,#2563eb);color:#fff;padding:9px 20px;font-size:13px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:8px">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span id="updateBannerText">Nova versão disponível</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button id="updateInstallBtn" onclick="window.electronAPI&&window.electronAPI.installUpdate()" style="display:none;background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:6px;padding:5px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Reiniciar e instalar</button>
+      <button onclick="document.getElementById('updateBanner').style.display='none'" style="background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;font-size:20px;line-height:1;padding:0 4px" title="Fechar">×</button>
     </div>
   </div>
 
