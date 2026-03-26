@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "CodePro — Gestão de Documentos A2Z Projetos",
   "main": "src/main.js",
   "scripts": {

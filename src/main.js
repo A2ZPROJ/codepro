@@ -3,6 +3,10 @@ const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const isDev = process.argv.includes('--dev');
 
+// Não baixar automaticamente — o usuário decide
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = false;
+
 let splashWindow, mainWindow, sessionUser = null;
 
 function createSplash(){
@@ -25,7 +29,6 @@ function createSplash(){
 }
 
 function createMain(licenseData){
-  // Passa a licença diretamente como argumento do processo — método mais confiável
   const licArg = licenseData
     ? `--codepro-lic=${Buffer.from(JSON.stringify(licenseData)).toString('base64')}`
     : '--codepro-lic=';
@@ -84,16 +87,27 @@ app.on('window-all-closed',()=>{
   if(process.platform!=='darwin') app.quit();
 });
 
+// ── AUTO-UPDATER ──
 function checkForUpdates(){
-  autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.checkForUpdates().catch(()=>{});
 }
+
 autoUpdater.on('update-available', info=>{
   mainWindow?.webContents.send('update-available', info.version);
 });
+
+autoUpdater.on('download-progress', progress=>{
+  mainWindow?.webContents.send('update-progress', Math.round(progress.percent));
+});
+
 autoUpdater.on('update-downloaded', info=>{
   mainWindow?.webContents.send('update-downloaded', info.version);
 });
-ipcMain.on('install-update', ()=> autoUpdater.quitAndInstall());
+
+autoUpdater.on('error', ()=>{}); // silencia erros de update em logs
+
+ipcMain.on('download-update', ()=> autoUpdater.downloadUpdate().catch(()=>{}));
+ipcMain.on('install-update',  ()=> autoUpdater.quitAndInstall());
 
 ipcMain.on('sign-out', ()=>{
   sessionUser = null;

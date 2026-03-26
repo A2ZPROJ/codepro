@@ -496,27 +496,31 @@
 
   window.doLogin = window.doRegister = window.doForgotPassword = window.resendVerification = () => {};
 
-  // ── LISTENERS DE ATUALIZAÇÃO AUTOMÁTICA ──
+  // ── ATUALIZAÇÃO AUTOMÁTICA ──
+  window.startDownload = () => {
+    document.getElementById('ucAvailable').style.display = 'none';
+    document.getElementById('ucDownloading').style.display = '';
+    window.electronAPI?.downloadUpdate();
+  };
+
   if (window.electronAPI) {
     window.electronAPI.onUpdateAvailable(v => {
-      const banner = document.getElementById('updateBanner');
-      const text = document.getElementById('updateBannerText');
-      if (banner && text) {
-        text.textContent = `Nova versão ${v} disponível — baixando em segundo plano...`;
-        banner.style.display = 'flex';
-        const btn = document.getElementById('updateInstallBtn');
-        if (btn) btn.style.display = 'none';
-      }
+      document.getElementById('ucVersionText').textContent = `Versão ${v} disponível`;
+      document.getElementById('ucAvailable').style.display = '';
+      document.getElementById('ucDownloading').style.display = 'none';
+      document.getElementById('ucReady').style.display = 'none';
+      document.getElementById('updateCard').style.display = '';
+    });
+    window.electronAPI.onUpdateProgress(pct => {
+      document.getElementById('ucBar').style.width = pct + '%';
+      document.getElementById('ucPctText').textContent = pct + '%';
     });
     window.electronAPI.onUpdateDownloaded(v => {
-      const banner = document.getElementById('updateBanner');
-      const text = document.getElementById('updateBannerText');
-      if (banner && text) {
-        text.textContent = `Versão ${v} baixada e pronta para instalar`;
-        banner.style.display = 'flex';
-        const btn = document.getElementById('updateInstallBtn');
-        if (btn) btn.style.display = '';
-      }
+      document.getElementById('ucReadyText').textContent = `Versão ${v} baixada`;
+      document.getElementById('ucDownloading').style.display = 'none';
+      document.getElementById('ucAvailable').style.display = 'none';
+      document.getElementById('ucReady').style.display = '';
+      document.getElementById('updateCard').style.display = '';
     });
   }
 
@@ -1012,6 +1016,8 @@ body {
 
 @media(max-width:720px){ .auth-left{display:none} .auth-right{width:100%;padding:32px 24px} }
 @media(max-width:600px){ .opt-grid{grid-template-columns:1fr} .preview-code{font-size:16px} .topbar-user{display:none} }
+@keyframes ucSlideIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes ucSpin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -1132,15 +1138,58 @@ body {
     </div>
   </div>
 
-  <!-- BANNER DE ATUALIZAÇÃO -->
-  <div id="updateBanner" style="display:none;background:linear-gradient(90deg,#1e3a8a,#2563eb);color:#fff;padding:9px 20px;font-size:13px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-    <div style="display:flex;align-items:center;gap:8px">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      <span id="updateBannerText">Nova versão disponível</span>
+  <!-- CARD DE ATUALIZAÇÃO (canto inferior direito) -->
+  <div id="updateCard" style="display:none;position:fixed;bottom:24px;right:24px;z-index:9999;width:320px;background:#0f172a;border:1px solid rgba(37,99,235,.4);border-radius:14px;padding:20px;box-shadow:0 8px 40px rgba(0,0,0,.5);font-family:'DM Sans',sans-serif;animation:ucSlideIn .3s ease">
+    <!-- Estado: disponível -->
+    <div id="ucAvailable">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="width:36px;height:36px;border-radius:10px;background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:#f1f5f9">Atualização disponível</div>
+          <div style="font-size:12px;color:#64748b" id="ucVersionText">Nova versão disponível</div>
+        </div>
+        <button onclick="document.getElementById('updateCard').style.display='none'" style="margin-left:auto;background:none;border:none;color:#475569;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0">×</button>
+      </div>
+      <p style="font-size:12px;color:#64748b;margin:0 0 14px;line-height:1.6">Deseja baixar agora? O download acontece em segundo plano e você pode continuar usando normalmente.</p>
+      <div style="display:flex;gap:8px">
+        <button onclick="startDownload()" style="flex:1;padding:9px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Baixar agora</button>
+        <button onclick="document.getElementById('updateCard').style.display='none'" style="flex:1;padding:9px;background:rgba(255,255,255,.06);color:#94a3b8;border:1px solid rgba(255,255,255,.1);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">Depois</button>
+      </div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <button id="updateInstallBtn" onclick="window.electronAPI&&window.electronAPI.installUpdate()" style="display:none;background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:6px;padding:5px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Reiniciar e instalar</button>
-      <button onclick="document.getElementById('updateBanner').style.display='none'" style="background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;font-size:20px;line-height:1;padding:0 4px" title="Fechar">×</button>
+    <!-- Estado: baixando -->
+    <div id="ucDownloading" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="width:36px;height:36px;border-radius:10px;background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" style="animation:ucSpin 1.5s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:700;color:#f1f5f9">Baixando atualização...</div>
+          <div style="font-size:12px;color:#64748b" id="ucPctText">0%</div>
+        </div>
+      </div>
+      <div style="height:6px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden">
+        <div id="ucBar" style="height:100%;width:0%;background:linear-gradient(90deg,#2563eb,#60a5fa);border-radius:4px;transition:width .3s ease"></div>
+      </div>
+    </div>
+    <!-- Estado: pronto para instalar -->
+    <div id="ucReady" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="width:36px;height:36px;border-radius:10px;background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:#f1f5f9">Pronto para instalar</div>
+          <div style="font-size:12px;color:#64748b" id="ucReadyText">Baixado com sucesso</div>
+        </div>
+        <button onclick="document.getElementById('updateCard').style.display='none'" style="margin-left:auto;background:none;border:none;color:#475569;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0">×</button>
+      </div>
+      <p style="font-size:12px;color:#64748b;margin:0 0 14px;line-height:1.6">A atualização será instalada ao reiniciar o aplicativo.</p>
+      <div style="display:flex;gap:8px">
+        <button onclick="window.electronAPI&&window.electronAPI.installUpdate()" style="flex:1;padding:9px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Reiniciar agora</button>
+        <button onclick="document.getElementById('updateCard').style.display='none'" style="flex:1;padding:9px;background:rgba(255,255,255,.06);color:#94a3b8;border:1px solid rgba(255,255,255,.1);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">Mais tarde</button>
+      </div>
     </div>
   </div>
 

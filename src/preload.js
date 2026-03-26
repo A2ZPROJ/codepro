@@ -5,7 +5,7 @@ const os = require('os');
 
 let licenseData = null;
 
-// 1) PRINCIPAL: lê do additionalArguments passado pelo main process na criação da janela
+// 1) Principal: additionalArguments passado pelo main na criação da janela
 try {
   const arg = process.argv.find(a => a.startsWith('--codepro-lic='));
   if (arg) {
@@ -14,14 +14,12 @@ try {
   }
 } catch(e) {}
 
-// 2) Fallback: IPC síncrono com o processo principal
+// 2) Fallback: IPC síncrono
 if (!licenseData || !licenseData.id) {
-  try {
-    licenseData = ipcRenderer.sendSync('get-session-sync');
-  } catch(e) {}
+  try { licenseData = ipcRenderer.sendSync('get-session-sync'); } catch(e) {}
 }
 
-// 3) Fallback final: lê direto do arquivo de store em disco
+// 3) Fallback: leitura direta do store em disco
 if (!licenseData || !licenseData.id) {
   try {
     const storePath = path.join(os.homedir(), '.codepro', 'config.json');
@@ -31,9 +29,11 @@ if (!licenseData || !licenseData.id) {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_,v) => cb(v)),
-  onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', (_,v) => cb(v)),
-  installUpdate: () => ipcRenderer.send('install-update'),
-  getLicense: () => licenseData,
-  signOut: () => ipcRenderer.send('sign-out'),
+  getLicense:        () => licenseData,
+  signOut:           () => ipcRenderer.send('sign-out'),
+  downloadUpdate:    () => ipcRenderer.send('download-update'),
+  installUpdate:     () => ipcRenderer.send('install-update'),
+  onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_, v)   => cb(v)),
+  onUpdateProgress:  (cb) => ipcRenderer.on('update-progress',  (_, pct) => cb(pct)),
+  onUpdateDownloaded:(cb) => ipcRenderer.on('update-downloaded', (_, v)   => cb(v)),
 });
