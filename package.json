@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CodePro — Gestão de Documentos A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
@@ -16,6 +16,11 @@
     "directories": {
       "output": "dist"
     },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico"
@@ -25,7 +30,6 @@
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
-      "installerHeaderIcon": "assets/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "CodePro"
@@ -42,5 +46,9 @@
   "devDependencies": {
     "electron": "^29.1.0",
     "electron-builder": "^24.13.3"
+  },
+  "author": {
+    "name": "A2Z Projetos",
+    "email": "lucas.abdala@a2zprojetos.com.br"
   }
 }

@@ -1,0 +1,1717 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<script>
+// window.__LICENSE__ is injected by preload.js from the saved session file.
+// No localStorage reading needed in the new access-code system.
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f0f0f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="A2ZCode">
+<link rel="manifest" href="manifest.json">
+<title>A2ZCode — Gestão de Documentos</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const sb = createClient('https://xszpzsmdpbgaiodeqcpi.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhzenB6c21kcGJnYWlvZGVxY3BpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzMTI5ODYsImV4cCI6MjA4OTg4ODk4Nn0.Wv_tcovD5nc13tmrfkgsVb6M6tS-CC7q6HVjphpzTrQ');
+
+  const ROLES = {
+    master:       { label:'Master',       color:'#7c3aed', bg:'#ede9fe', canView:true, canCreate:true,  canAdmin:true,  canDelete:true  },
+    editor:       { label:'Editor',       color:'#2563eb', bg:'#eff6ff', canView:true, canCreate:true,  canAdmin:false, canDelete:false },
+    visualizador: { label:'Visualizador', color:'#d97706', bg:'#fef3c7', canView:true, canCreate:false, canAdmin:false, canDelete:false },
+  };
+
+  let currentUser = null;
+  window._allCodesData = [];
+  window._projects = [];
+  let realtimeSub = null;
+
+  function convertDate(ptDate) {
+    const p = ptDate.split('/');
+    return p.length===3 ? p[2]+'-'+p[1]+'-'+p[0] : ptDate;
+  }
+
+  async function init() {
+    const lic = window.__LICENSE__ || window.electronAPI?.getLicense() || {};
+    if (!lic.id) {
+      document.body.style.display = 'flex';
+      document.body.style.alignItems = 'center';
+      document.body.style.justifyContent = 'center';
+      document.body.innerHTML = '<div style="text-align:center;color:#64748b;font-family:DM Sans,sans-serif;padding:40px"><div style="font-size:18px;font-weight:600;color:#f1f5f9;margin-bottom:8px">Sessão inválida</div><div style="font-size:14px">Feche e abra o CodePro novamente.</div></div>';
+      return;
+    }
+    const { data: user } = await sb.from('usuarios').select('*').eq('id', lic.id).single();
+    if (!user) {
+      document.body.innerHTML = '<div style="text-align:center;color:#64748b;font-family:DM Sans,sans-serif;padding:40px"><div style="font-size:16px;color:#f87171">Usuário não encontrado. Contate o administrador.</div></div>';
+      return;
+    }
+    currentUser = user;
+    await sb.from('usuarios').update({ ultimo_acesso: new Date().toISOString() }).eq('id', currentUser.id);
+    window._currentUserRole = currentUser.role;
+    window._currentUserData = currentUser;
+    window._isMaster = currentUser.role === 'master';
+    window._canCreate = ROLES[currentUser.role]?.canCreate ?? false;
+    openApp();
+  }
+
+  function openApp() {
+    showScreen('app');
+    const displayName = currentUser?.nome || 'Usuário';
+    const userRole = currentUser?.role || 'visualizador';
+    const isAdmin = userRole === 'master';
+    document.getElementById('topbarUser').textContent = displayName;
+    const initials = displayName.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    document.getElementById('topbarAvatar').textContent = initials;
+    if (isAdmin) document.getElementById('adminTabBtn').style.display = '';
+    if (!window._canCreate) {
+      const genBtn = document.querySelector('.tab-btn[onclick*="generator"]');
+      if (genBtn) genBtn.style.display = 'none';
+    }
+    buildApp();
+    loadCodes();
+    loadProjects();
+  }
+
+  window.saveCode = async (code, company, projectId) => {
+    const dup = (window._allCodesData||[]).find(c=>c.code===code&&c.company===company);
+    if (dup) return false;
+    const { error } = await sb.from('codigos').insert({
+      codigo: code, empresa: company, projeto_id: projectId||null,
+      usuario_id: currentUser?.id, usuario_nome: currentUser?.nome,
+    });
+    if (error) { console.error(error); return false; }
+    return true;
+  };
+
+  window.checkDup = (code, company) =>
+    (window._allCodesData||[]).find(c=>c.code===code&&c.company===company&&c.company)||null;
+
+  window.rmvCode = async (id) => {
+    await sb.from('codigos').delete().eq('id', id);
+  };
+
+  function mapCode(r) {
+    return { id:r.id, code:r.codigo, company:r.empresa, projectId:r.projeto_id,
+             uid:r.usuario_id, name:r.usuario_nome||'', email:'',
+             at:{ toDate: ()=>new Date(r.criado_em) } };
+  }
+
+  function buildCodesQuery() {
+    let q = sb.from('codigos').select('*').order('criado_em', {ascending: false});
+    if (!window._isMaster && currentUser?.empresa) q = q.eq('empresa', currentUser.empresa);
+    return q;
+  }
+
+  function loadCodes() {
+    document.getElementById('hist').innerHTML='<div class="loading-msg"><span class="spin"></span>Carregando...</div>';
+    buildCodesQuery().then(({data})=>{
+      window._allCodesData=(data||[]).map(mapCode);
+      document.getElementById('histCount').textContent=window._allCodesData.length;
+      renderHist(window._allCodesData,{});
+      updateDashboard(window._allCodesData);
+    });
+    if(realtimeSub) sb.removeChannel(realtimeSub);
+    realtimeSub=sb.channel('codigos-rt')
+      .on('postgres_changes',{event:'*',schema:'public',table:'codigos'},()=>{
+        buildCodesQuery().then(({data})=>{
+          window._allCodesData=(data||[]).map(mapCode);
+          document.getElementById('histCount').textContent=window._allCodesData.length;
+          renderHist(window._allCodesData,{});
+          updateDashboard(window._allCodesData);
+        });
+      }).subscribe();
+  }
+
+  async function loadProjectsData() {
+    const {data}=await sb.from('projetos').select('*').order('criado_em',{ascending:false});
+    window._projects=(data||[]).map(p=>({id:p.id,name:p.nome,company:p.empresa,description:p.descricao}));
+    renderProjectsList();
+    populateProjectSelects();
+  }
+
+  function loadProjects() {
+    sb.channel('projetos-rt').on('postgres_changes',{event:'*',schema:'public',table:'projetos'},loadProjectsData).subscribe();
+    loadProjectsData();
+  }
+
+  function renderProjectsList() {
+    const el=document.getElementById('projectsList'); if(!el)return;
+    if(!window._projects.length){el.innerHTML='<div class="empty-msg">Nenhum projeto cadastrado.</div>';return;}
+    el.innerHTML=window._projects.map(p=>`
+      <div class="admin-row">
+        <div class="user-avatar" style="background:#333;border-radius:6px;font-size:12px">${p.name.slice(0,2).toUpperCase()}</div>
+        <div class="user-info"><div class="user-name">${p.name}</div><div class="user-email">${p.company||'—'} · ${p.description||''}</div></div>
+        <div style="display:flex;gap:6px">
+          <span style="font-size:11px;color:var(--text3);align-self:center">${(window._allCodesData||[]).filter(c=>c.projectId===p.id).length} códigos</span>
+          <button class="action-btn danger" onclick="deleteProject('${p.id}')">Remover</button>
+        </div>
+      </div>`).join('');
+  }
+
+  function populateProjectSelects() {
+    const opts=window._projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+    const empty='<option value="">Nenhum projeto</option>';
+    [document.getElementById('projectSelect'),document.getElementById('filterProject')]
+      .forEach(el=>{if(el)el.innerHTML=empty+opts;});
+  }
+
+  window.createProject=async()=>{
+    const name=document.getElementById('newProjectName').value.trim();
+    const company=document.getElementById('newProjectCompany').value;
+    const desc=document.getElementById('newProjectDesc').value.trim();
+    if(!name){alert('Informe o nome do projeto.');return;}
+    await sb.from('projetos').insert({nome:name,empresa:company,descricao:desc,usuario_id:currentUser?.id});
+    document.getElementById('newProjectName').value='';
+    document.getElementById('newProjectDesc').value='';
+    const pa=document.getElementById('projectAlert');
+    if(pa){pa.textContent='✓ Projeto criado!';pa.className='alert-box show success';setTimeout(()=>pa.className='alert-box',3000);}
+    loadProjectsData();
+  };
+
+  window.deleteProject=async(id)=>{
+    if(!confirm('Remover este projeto?'))return;
+    await sb.from('projetos').delete().eq('id',id);
+    loadProjectsData();
+  };
+
+  window.loadAdminPanel=async()=>{
+    if(!window._isMaster)return;
+    const el=document.getElementById('adminUsers'); if(!el)return;
+    el.innerHTML='<div class="loading-msg"><span class="spin"></span>Carregando...</div>';
+    const {data:users}=await sb.from('usuarios').select('*').order('criado_em',{ascending:false});
+    if(!users?.length){el.innerHTML='<div class="empty-msg">Nenhum usuário.</div>';return;}
+    document.getElementById('adminUserCount').textContent=users.length;
+    el.innerHTML=users.map(u=>renderUserRow(u)).join('');
+  };
+
+  function renderUserRow(u) {
+    const isMaster=u.role==='master';
+    const isMe=u.id===currentUser?.id;
+    const roleInfo=ROLES[u.role]||ROLES.visualizador;
+    const roleTag=`<span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;background:${roleInfo.bg};color:${roleInfo.color}">${roleInfo.label}</span>`;
+    const dtCriado=u.criado_em?new Date(u.criado_em).toLocaleDateString('pt-BR'):'—';
+    let expiryInfo='', expiryClass='';
+    if(u.license_expires){
+      const exp=new Date(u.license_expires+'T00:00:00');
+      const today=new Date();today.setHours(0,0,0,0);
+      const days=Math.ceil((exp-today)/86400000);
+      expiryClass=days<15?'color:#f87171':days<45?'color:#fbbf24':'color:#4ade80';
+      expiryInfo=`${exp.toLocaleDateString('pt-BR')} <span style="${expiryClass};font-size:10px">(${days}d)</span>`;
+    } else {
+      expiryInfo='Sem expiração';
+    }
+    const codeInfo=u.access_code?`<span style="font-family:DM Mono,monospace;font-size:11px;background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--text2)">${u.access_code}</span>`:'<span style="font-size:11px;color:var(--text3)">sem código</span>';
+    const roleSelect=!isMe?`
+      <select onchange="changeUserRole('${u.id}',this.value)" style="padding:5px 8px;font-family:inherit;font-size:11px;border:1px solid var(--border2);border-radius:6px;color:var(--text);background:var(--surface);cursor:pointer">
+        <option value="visualizador"${u.role==='visualizador'?' selected':''}>Visualizador</option>
+        <option value="editor"${u.role==='editor'?' selected':''}>Editor</option>
+        <option value="master"${u.role==='master'?' selected':''}>Master</option>
+      </select>`:'<span style="font-size:11px;color:var(--text3)">(você)</span>';
+    return `<div class="admin-row">
+      <div class="user-avatar">${(u.nome||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</div>
+      <div class="user-info">
+        <div class="user-name">${u.nome} ${roleTag} ${isMe?'<span style="font-size:10px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:8px;margin-left:2px">você</span>':''}</div>
+        <div class="user-email">${u.empresa||'—'} · Criado em ${dtCriado} · Válido até: ${expiryInfo}</div>
+        <div class="user-email" style="margin-top:2px">Código: ${codeInfo}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;align-items:center">
+        ${roleSelect}
+        ${!isMe?`<button class="action-btn" onclick="renewLicense('${u.id}','${u.license_expires||''}')">Renovar</button>`:''}
+        ${!isMe?`<button class="action-btn danger" onclick="removeUser('${u.id}')">Excluir</button>`:''}
+      </div>
+    </div>`;
+  }
+
+  window.changeUserRole=async(id,role)=>{await sb.from('usuarios').update({role}).eq('id',id);window.loadAdminPanel();};
+  window.removeUser=async(id)=>{if(!confirm('Excluir este usuário?'))return;await sb.from('usuarios').delete().eq('id',id);window.loadAdminPanel();};
+
+  window.loadAudit=async()=>{
+    const el=document.getElementById('auditList'); if(!el)return;
+    const {data}=await sb.from('auditoria').select('*').order('criado_em',{ascending:false}).limit(100);
+    if(!data?.length){el.innerHTML='<div class="empty-msg">Nenhuma atividade.</div>';return;}
+    el.innerHTML=data.map(l=>{
+      const dt=new Date(l.criado_em);
+      return `<div class="admin-row"><div class="user-avatar" style="font-size:16px;background:var(--surface2);color:var(--text2)">•</div><div class="user-info"><div class="user-name" style="font-size:12px">${l.usuario_nome||'Sistema'} <span style="font-weight:400;color:var(--text3)">— ${l.detalhes||l.acao}</span></div><div class="user-email">${dt.toLocaleDateString('pt-BR')} às ${dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div></div></div>`;
+    }).join('');
+  };
+
+  async function logAudit(acao,detalhes){
+    await sb.from('auditoria').insert({usuario_id:currentUser?.id,usuario_nome:currentUser?.nome,acao,detalhes}).catch(()=>{});
+  }
+
+  window.exportExcel=()=>{
+    const codes=window._allCodesData;
+    if(!codes.length){alert('Nenhum código para exportar.');return;}
+    let csv='Código,Concessionária,Projeto,Usuário,Data\n';
+    codes.forEach(c=>{
+      const dt=c.at?.toDate?c.at.toDate():new Date();
+      const proj=window._projects?.find(p=>p.id===c.projectId);
+      csv+=`"${c.code}","${c.company||''}","${proj?.name||''}","${c.name}","${dt.toLocaleDateString('pt-BR')}"
+`;
+    });
+    const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='codepro_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  };
+
+  window.genPDF=(code,company,userName,date)=>{
+    const w=window.open('','_blank');
+    const st='<st'+'yle>body{font-family:Segoe UI,sans-serif;max-width:600px;margin:60px auto;color:#1a1a1a}.code{font-family:Courier New,monospace;font-size:28px;font-weight:600;border:2px solid #1a1a1a;padding:16px 24px;display:inline-block;border-radius:6px;margin:16px 0 32px}.label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;border-top:1px solid #eee;padding-top:20px}.val{font-size:14px;font-weight:600}.footer{margin-top:40px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:12px}@media print{body{margin:20px auto}}</st'+'yle>';
+    const sc='<sc'+'ript>window.onload=function(){window.print();}</sc'+'ript>';
+    w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>CodePro '+code+'</title>'+st+'</head><body><h2 style="font-weight:700;margin-bottom:4px">Code<span style="color:#2563eb">Pro</span></h2><div class="label">Código do documento</div><div class="code">'+code+'</div><div class="meta"><div><div class="label">Concessionária</div><div class="val">'+(company||'—')+'</div></div><div><div class="label">Registrado por</div><div class="val">'+userName+'</div></div><div><div class="label">Data</div><div class="val">'+date+'</div></div><div><div class="label">Sistema</div><div class="val">CodePro · A2Z Projetos</div></div></div><div class="footer">Gerado pelo CodePro</div>'+sc+'</body></html>');
+    w.document.close();
+  };
+
+  let chartByCompany=null,chartByMonth=null;
+  function updateDashboard(codes){
+    const sT=document.getElementById('statTotal'),sC=document.getElementById('statCompanies'),sU=document.getElementById('statUsers'),sTd=document.getElementById('statToday');
+    if(!sT)return;
+    sT.textContent=codes.length;
+    sC.textContent=[...new Set(codes.map(c=>c.company||'N/A'))].length;
+    sU.textContent=[...new Set(codes.map(c=>c.uid))].length;
+    const today=new Date();today.setHours(0,0,0,0);
+    sTd.textContent=codes.filter(c=>{const dt=c.at?.toDate?c.at.toDate():new Date();const d2=new Date(dt);d2.setHours(0,0,0,0);return d2.getTime()===today.getTime();}).length;
+    const cc={};codes.forEach(c=>{const k=c.company||'N/A';cc[k]=(cc[k]||0)+1;});
+    const ctx1=document.getElementById('chartCompany');
+    if(ctx1){if(chartByCompany)chartByCompany.destroy();chartByCompany=new Chart(ctx1,{type:'doughnut',data:{labels:Object.keys(cc),datasets:[{data:Object.values(cc),backgroundColor:['#0f172a','#2563eb','#059669','#d97706','#7c3aed','#dc2626']}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{family:'DM Sans',size:11},boxWidth:12}}}}});}
+    const mc={};for(let i=5;i>=0;i--){const d=new Date();d.setMonth(d.getMonth()-i);mc[d.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'})]=0;}
+    codes.forEach(c=>{const dt=c.at&&c.at.toDate?c.at.toDate():new Date();const k=dt.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'});if(mc[k]!==undefined)mc[k]++;});
+    const ctx2=document.getElementById('chartMonth');
+    if(ctx2){if(chartByMonth)chartByMonth.destroy();chartByMonth=new Chart(ctx2,{type:'bar',data:{labels:Object.keys(mc),datasets:[{data:Object.values(mc),backgroundColor:'#2563eb',borderRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{family:'DM Sans',size:11}}},x:{ticks:{font:{family:'DM Sans',size:11}}}}}});}
+  }
+
+  window.verifyCode=()=>{
+    const code=document.getElementById('verifyInput').value.trim().toUpperCase();
+    const out=document.getElementById('verifyOutput');if(!out)return;
+    if(!code){out.innerHTML='';return;}
+    const matches=(window._allCodesData||[]).filter(c=>c.code.toUpperCase()===code);
+    if(!matches.length){out.innerHTML='<div style="padding:12px 16px;background:var(--green-l);border-left:3px solid var(--green);border-radius:6px;font-size:13px;color:var(--green)">✓ Código disponível — ainda não foi registrado.</div>';return;}
+    out.innerHTML=matches.map(c=>{const dt=c.at?.toDate?c.at.toDate():new Date();return `<div style="padding:12px 16px;background:var(--red-l);border-left:3px solid var(--red);border-radius:6px;font-size:13px;margin-bottom:6px"><div style="color:var(--red);font-weight:600;margin-bottom:4px">✗ Código já registrado</div><div style="color:var(--text2)">Empresa: <strong>${c.company||'—'}</strong></div><div style="color:var(--text2)">Por: <strong>${c.name}</strong></div><div style="color:var(--text2)">Data: <strong>${dt.toLocaleDateString('pt-BR')}</strong></div></div>`;}).join('');
+  };
+
+  window.importExcel=async(input)=>{
+    const file=input.files[0];if(!file)return;
+    const btn=document.getElementById('importBtn');btn.disabled=true;btn.textContent='Processando...';
+    const reader=new FileReader();
+    reader.onload=async(e)=>{
+      try{
+        const text=e.target.result;const lines=text.split('\n').filter(l=>l.trim());
+        const header=lines[0].split(',').map(h=>h.trim().replace(/"/g,'').toLowerCase());
+        const codeIdx=header.findIndex(h=>h.includes('código')||h.includes('codigo')||h==='code');
+        const compIdx=header.findIndex(h=>h.includes('concession')||h.includes('empresa')||h.includes('company'));
+        if(codeIdx<0){alert('Coluna "Código" não encontrada.');return;}
+        let imported=0,skipped=0;
+        for(let i=1;i<lines.length;i++){
+          const cols=lines[i].split(',').map(c=>c.trim().replace(/"/g,''));
+          const code=cols[codeIdx];if(!code)continue;
+          const company=compIdx>=0?cols[compIdx]:'';
+          const exists=(window._allCodesData||[]).find(c=>c.code===code&&c.company===company);
+          if(exists){skipped++;continue;}
+          await sb.from('codigos').insert({codigo:code,empresa:company,usuario_nome:'Importado',usuario_id:currentUser?.id});
+          imported++;
+        }
+        const ia=document.getElementById('importAlert');
+        if(ia){ia.textContent=`✓ ${imported} importados, ${skipped} ignorados.`;ia.className='alert-box show success';setTimeout(()=>ia.className='alert-box',5000);}
+      }catch(ex){alert('Erro: '+ex.message);}
+      finally{btn.disabled=false;btn.textContent='Selecionar arquivo CSV';input.value='';}
+    };
+    reader.readAsText(file,'UTF-8');
+  };
+
+  window.loadProfile=async()=>{
+    if(!currentUser)return;
+    const el=document.getElementById('profileName');if(el)el.value=currentUser.nome||'';
+    const ep=document.getElementById('profileEmail');if(ep)ep.textContent=currentUser.empresa||'';
+    const avWrap=document.getElementById('profileAvatarWrap');
+    if(avWrap)avWrap.textContent=currentUser.nome.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    const myCodes=(window._allCodesData||[]).filter(c=>c.uid===currentUser.id);
+    const myEl=document.getElementById('myCodesList');if(!myEl)return;
+    if(!myCodes.length){myEl.innerHTML='<div class="empty-msg">Nenhum código gerado ainda.</div>';return;}
+    myEl.innerHTML=myCodes.slice(0,20).map(c=>{const dt=c.at?.toDate?c.at.toDate():new Date();return `<div class="hist-row"><div class="hist-main"><span class="hist-code">${c.code}</span>${c.company?`<span class="hist-company">${c.company}</span>`:''}</div><div class="hist-sub">${dt.toLocaleDateString('pt-BR')}</div><div class="hist-actions"><button class="action-btn" onclick="cpyH('${c.code}',this)">Copiar</button></div></div>`;}).join('');
+  };
+
+  window.saveProfile=async()=>{
+    const name=document.getElementById('profileName').value.trim();
+    if(!name){alert('Informe seu nome.');return;}
+    const btn=document.getElementById('saveProfileBtn');btn.disabled=true;btn.textContent='Salvando...';
+    await sb.from('usuarios').update({nome:name}).eq('id',currentUser.id);
+    currentUser.nome=name;
+    document.getElementById('topbarUser').textContent=name;
+    document.getElementById('topbarAvatar').textContent=name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    const pa=document.getElementById('profileAlert');
+    if(pa){pa.textContent='✓ Nome atualizado!';pa.className='alert-box show success';setTimeout(()=>pa.className='alert-box',3000);}
+    btn.disabled=false;btn.textContent='Salvar alterações';
+  };
+
+  const GEMINI_KEY='AIzaSyCf_c-4K8uWf5zPCR4PLbNQxEn4-TbLTHI';
+  window.aiSuggest=async()=>{
+    const desc=document.getElementById('aiInput').value.trim();
+    if(!desc){alert('Descreva o documento.');return;}
+    if(!currentCompany){alert('Selecione uma concessionária.');return;}
+    const co=COMPANIES[currentCompany];
+    if(!co||co.comingSoon){alert('Concessionária sem campos configurados.');return;}
+    const btn=document.getElementById('aiBtn'),out=document.getElementById('aiOutput');
+    btn.disabled=true;btn.textContent='Analisando...';out.style.display='none';
+    const fieldsDesc=co.fields.map(f=>f.type==='mun'?'COD '+f.key+' ('+f.label+'): número 3 dígitos do município':'COD '+f.key+' ('+f.label+'): '+f.opts.map(o=>o[1]+'='+o[0]).join(' | ')).join('\n');
+    const prompt='Você é especialista em codificação de documentos de engenharia para '+currentCompany+'.\n\nCampos:\n'+fieldsDesc+'\n\nDocumento: "'+desc+'"\n\nResponda APENAS com JSON válido:\n{"codigo":"A-B-C-D-E-F-G","campos":{"A":"cod"},"justificativa":"explicação"}';
+    try{
+      const resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key='+GEMINI_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.1,maxOutputTokens:800,responseMimeType:'application/json'}})});
+      if(!resp.ok)throw new Error('API: '+resp.status);
+      const data=await resp.json();
+      const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+      const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+      out.style.display='block';
+      document.getElementById('aiCode').textContent=parsed.codigo||'—';
+      document.getElementById('aiJustif').textContent=parsed.justificativa||'';
+      window._aiSuggestion=parsed;
+    }catch(e){out.style.display='block';document.getElementById('aiCode').textContent='Erro';document.getElementById('aiJustif').textContent=e.message||'Tente novamente.';}
+    finally{btn.disabled=false;btn.textContent='Sugerir código';}
+  };
+
+  window.applyAiSuggestion=()=>{
+    const s=window._aiSuggestion;if(!s||!s.campos)return;
+    const co=COMPANIES[currentCompany];if(!co)return;
+    resetAll();
+    co.fields.forEach(f=>{
+      const val=s.campos[f.key];if(!val)return;
+      if(f.type==='mun'){const parts=val.split('-'),munNum=parts[0],distCode=parts[1]||'SDE';const mun=MUNS.find(m=>m.num===munNum);if(mun)pickDist(munNum,mun.name,distCode==='SDE'?'Sede':distCode,distCode);}
+      else{const opt=f.opts&&f.opts.find(o=>o[1]===val);if(opt)pick(f.key,opt[1],opt[0]);}
+    });
+  };
+
+  window.filterHist=()=>applyHistFilters();
+  window.applyHistFilters=()=>{
+    const f={q:document.getElementById('histSearch')?.value,company:document.getElementById('filterCompany')?.value,project:document.getElementById('filterProject')?.value,dateFrom:document.getElementById('filterDateFrom')?.value,dateTo:document.getElementById('filterDateTo')?.value};
+    Object.keys(f).forEach(k=>{if(!f[k])delete f[k];});
+    renderHist(window._allCodesData,f);
+  };
+  window.clearHistFilters=()=>{
+    ['histSearch','filterCompany','filterProject','filterDateFrom','filterDateTo'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    renderHist(window._allCodesData,{});
+  };
+
+  function renderHist(codes,filters={}) {
+    let filtered=[...codes];
+    if(filters.q)filtered=filtered.filter(c=>c.code.toLowerCase().includes(filters.q.toLowerCase())||c.name.toLowerCase().includes(filters.q.toLowerCase())||(c.company&&c.company.toLowerCase().includes(filters.q.toLowerCase())));
+    if(filters.company)filtered=filtered.filter(c=>c.company===filters.company);
+    if(filters.project)filtered=filtered.filter(c=>c.projectId===filters.project);
+    if(filters.dateFrom)filtered=filtered.filter(c=>{const dt=c.at?.toDate?c.at.toDate():new Date();return dt>=new Date(filters.dateFrom);});
+    if(filters.dateTo)filtered=filtered.filter(c=>{const dt=c.at?.toDate?c.at.toDate():new Date();return dt<=new Date(filters.dateTo+'T23:59:59');});
+    if(!filtered.length){document.getElementById('hist').innerHTML='<div class="empty-msg">'+(Object.keys(filters).length?'Nenhum resultado.':'Nenhum código registrado ainda.')+'</div>';return;}
+    const isAdmin=window._isMaster;
+    document.getElementById('hist').innerHTML=filtered.map(c=>{
+      const isMe=c.uid===currentUser?.id;
+      const dt=c.at?.toDate?c.at.toDate():new Date();
+      const dateStr=dt.toLocaleDateString('pt-BR')+' '+dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+      const proj=window._projects?.find(p=>p.id===c.projectId);
+      return `<div class="hist-row">
+        <div class="hist-main">
+          <span class="hist-code">${c.code}</span>
+          ${c.company?`<span class="hist-company">${c.company}</span>`:''}
+          ${proj?`<span class="hist-project">${proj.name}</span>`:''}
+        </div>
+        <div class="hist-sub">${c.name} · ${dateStr}</div>
+        <div class="hist-actions">
+          ${isMe?'<span class="me-tag">meu</span>':''}
+          <button class="action-btn" onclick="cpyH('${c.code}',this)">Copiar</button>
+          <button class="action-btn" onclick="genPDF('${c.code}','${c.company||''}','${c.name}','${dateStr}')">PDF</button>
+          ${(isMe||isAdmin)?`<button class="action-btn danger" onclick="rmvCode('${c.id}')">Remover</button>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function genAccessCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const raw = Array.from({length:8}, ()=>chars[Math.floor(Math.random()*chars.length)]).join('');
+    return raw.slice(0,4)+'-'+raw.slice(4);
+  }
+
+  window.createUser = async () => {
+    const name    = document.getElementById('newUserName').value.trim();
+    const empresa = document.getElementById('newUserEmpresa').value;
+    const role    = document.getElementById('newUserRole').value;
+    const expires = document.getElementById('newUserExpires').value;
+    const errEl   = document.getElementById('newUserErr');
+    errEl.style.display='none';
+    if (!name)    { errEl.textContent='Informe o nome.';       errEl.style.display='block'; return; }
+    if (!empresa) { errEl.textContent='Selecione a empresa.';  errEl.style.display='block'; return; }
+    if (!expires) { errEl.textContent='Informe a validade.';   errEl.style.display='block'; return; }
+
+    const btn = document.getElementById('createUserBtn');
+    btn.disabled = true; btn.textContent = 'Criando...';
+
+    const code = genAccessCode();
+    const { error } = await sb.from('usuarios').insert({
+      nome: name, empresa: empresa, role: role,
+      license_expires: expires, access_code: code,
+      ativo: true, ultimo_acesso: null,
+    });
+
+    btn.disabled = false; btn.textContent = 'Criar usuário';
+
+    if (error) { errEl.textContent='Erro: '+error.message; errEl.style.display='block'; return; }
+
+    document.getElementById('newUserCodeValue').textContent = code;
+    document.getElementById('newUserCodeResult').style.display = 'block';
+    document.getElementById('newUserName').value = '';
+    document.getElementById('newUserExpires').value = '';
+    logAudit('user_created', `Usuário ${name} (${empresa}) criado com nível ${role}`);
+    window.loadAdminPanel();
+  };
+
+  window.copyAccessCode = () => {
+    const code = document.getElementById('newUserCodeValue').textContent;
+    navigator.clipboard.writeText(code).then(()=>{
+      const btn = document.getElementById('copyCodeBtn');
+      btn.textContent='✓ Copiado!';
+      setTimeout(()=>btn.textContent='Copiar código',1500);
+    });
+  };
+
+  window.renewLicense = async (id, currentExpires) => {
+    const days = prompt('Renovar por quantos dias?', '365');
+    if (!days || isNaN(days)) return;
+    const from = currentExpires ? new Date(Math.max(new Date(currentExpires), new Date())) : new Date();
+    from.setDate(from.getDate() + parseInt(days));
+    const newExpires = from.toISOString().slice(0,10);
+    await sb.from('usuarios').update({license_expires: newExpires}).eq('id', id);
+    window.loadAdminPanel();
+  };
+
+  window.loadInvites = () => {};
+
+  window.doSignOut = () => {
+    if (window.electronAPI?.signOut) {
+      window.electronAPI.signOut();
+    } else {
+      location.reload();
+    }
+  };
+
+  window.doLogin = window.doRegister = window.doForgotPassword = window.resendVerification = () => {};
+
+  init();
+</script>
+
+<style>
+/* ── THEME VARIABLES ── */
+:root {
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-light: #eff6ff;
+  --accent-mid: #bfdbfe;
+  --accent-glow: rgba(37,99,235,.15);
+  --green: #16a34a;
+  --green-l: #dcfce7;
+  --red: #dc2626;
+  --red-l: #fee2e2;
+  --amber: #d97706;
+  --amber-l: #fef3c7;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --transition: .18s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── LIGHT THEME (default) ── */
+[data-theme="light"], :root {
+  --bg: #f1f5f9;
+  --bg2: #e2e8f0;
+  --surface: #ffffff;
+  --surface2: #f8fafc;
+  --border: #e2e8f0;
+  --border2: #cbd5e1;
+  --text: #0f172a;
+  --text2: #475569;
+  --text3: #94a3b8;
+  --topbar-bg: #0f172a;
+  --topbar-text: #f1f5f9;
+  --shadow: 0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,.08),0 2px 6px rgba(0,0,0,.04);
+  --shadow-lg: 0 10px 40px rgba(0,0,0,.1),0 4px 12px rgba(0,0,0,.06);
+}
+
+/* ── DARK THEME ── */
+[data-theme="dark"] {
+  --bg: #0a0f1e;
+  --bg2: #0f172a;
+  --surface: #111827;
+  --surface2: #1e293b;
+  --border: #1e293b;
+  --border2: #334155;
+  --text: #f1f5f9;
+  --text2: #94a3b8;
+  --text3: #475569;
+  --topbar-bg: #060d1a;
+  --topbar-text: #f1f5f9;
+  --shadow: 0 1px 3px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.3);
+  --shadow-md: 0 4px 16px rgba(0,0,0,.4),0 2px 6px rgba(0,0,0,.3);
+  --shadow-lg: 0 10px 40px rgba(0,0,0,.5),0 4px 12px rgba(0,0,0,.3);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  min-height: 100vh;
+  transition: background var(--transition), color var(--transition);
+}
+
+/* ── AUTH ── */
+.auth-screen { min-height: 100vh; display: flex; background: var(--surface); }
+.auth-left {
+  flex: 1;
+  background: var(--topbar-bg);
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 48px; min-height: 100vh; position: relative; overflow: hidden;
+}
+.auth-left::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse 80% 60% at 20% 80%, var(--accent-glow), transparent),
+              radial-gradient(ellipse 60% 40% at 80% 20%, rgba(37,99,235,.08), transparent);
+}
+.auth-left::after {
+  content: ''; position: absolute; top: -1px; right: 0; bottom: -1px; width: 1px;
+  background: linear-gradient(to bottom, transparent, var(--accent), transparent);
+  opacity: .4;
+}
+.auth-brand { position: relative; z-index: 1; }
+.auth-brand-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 56px; }
+.auth-brand-name { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: -.5px; }
+.auth-brand-name span { color: var(--accent); }
+.auth-headline { font-size: clamp(32px,3.5vw,48px); font-weight: 300; color: #fff; line-height: 1.15; letter-spacing: -.8px; }
+.auth-headline strong { font-weight: 700; display: block; color: #fff; }
+.auth-tagline { font-size: 15px; color: #64748b; margin-top: 18px; line-height: 1.7; }
+.auth-features { display: flex; flex-direction: column; gap: 14px; position: relative; z-index: 1; }
+.auth-feature { display: flex; align-items: center; gap: 12px; font-size: 13px; color: #64748b; }
+.auth-feature-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; box-shadow: 0 0 8px var(--accent); }
+.auth-right { width: 480px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; padding: 48px 48px; background: var(--surface); }
+.auth-form-wrap { width: 100%; max-width: 360px; }
+.auth-form-title { font-size: 26px; font-weight: 700; letter-spacing: -.5px; margin-bottom: 6px; color: var(--text); }
+.auth-form-sub { font-size: 13px; color: var(--text2); margin-bottom: 28px; }
+.field-group { margin-bottom: 16px; }
+.field-label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 6px; letter-spacing: .3px; text-transform: uppercase; }
+.field-input {
+  width: 100%; padding: 10px 14px;
+  font-family: inherit; font-size: 14px;
+  border: 1.5px solid var(--border2); border-radius: var(--radius);
+  color: var(--text); background: var(--surface2); outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+.field-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); background: var(--surface); }
+.field-error { font-size: 11px; color: var(--red); margin-top: 5px; display: none; }
+.field-error.show { display: block; }
+.primary-btn {
+  width: 100%; padding: 12px;
+  background: var(--accent); color: #fff;
+  border: none; border-radius: var(--radius);
+  font-family: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: background var(--transition), transform var(--transition), box-shadow var(--transition);
+  margin-top: 4px; letter-spacing: .2px;
+  box-shadow: 0 4px 14px rgba(37,99,235,.35);
+}
+.primary-btn:hover { background: var(--accent-hover); box-shadow: 0 6px 20px rgba(37,99,235,.45); transform: translateY(-1px); }
+.primary-btn:active { transform: translateY(0); }
+.primary-btn:disabled { background: var(--border2); color: var(--text3); cursor: not-allowed; box-shadow: none; transform: none; }
+.auth-bottom-links { display: flex; justify-content: space-between; margin-top: 14px; flex-wrap: wrap; gap: 8px; }
+.text-btn { font-size: 12px; color: var(--text3); background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; transition: color var(--transition); }
+.text-btn:hover { color: var(--accent); }
+.auth-toggle { text-align: center; margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text2); }
+.auth-toggle a { color: var(--accent); cursor: pointer; font-weight: 600; text-decoration: none; }
+.auth-toggle a:hover { text-decoration: underline; }
+.alert-box { display: none; padding: 10px 14px; border-radius: var(--radius); font-size: 13px; margin-bottom: 18px; line-height: 1.5; border-left: 3px solid; }
+.alert-box.show { display: block; }
+.alert-box.error { background: var(--red-l); color: var(--red); border-color: var(--red); }
+.alert-box.success { background: var(--green-l); color: var(--green); border-color: var(--green); }
+.alert-box.warn { background: var(--amber-l); color: var(--amber); border-color: var(--amber); }
+
+/* ── APP ── */
+#appScreen { display: none; }
+#appScreen.visible { display: block; }
+#authScreen { display: none !important; }
+#pendingScreen { display: none !important; }
+
+.topbar {
+  background: var(--topbar-bg);
+  height: 56px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; position: sticky; top: 0; z-index: 100;
+  border-bottom: 1px solid rgba(37,99,235,.2);
+}
+.topbar-brand { display: flex; align-items: center; gap: 12px; }
+.topbar-brand-name { font-size: 17px; font-weight: 700; color: #fff; letter-spacing: -.3px; }
+.topbar-brand-name span { color: var(--accent); }
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.topbar-user { font-size: 12px; color: #64748b; }
+.topbar-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--accent); border: 2px solid rgba(37,99,235,.4);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #fff;
+  box-shadow: 0 0 12px rgba(37,99,235,.3);
+}
+.theme-btn {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background var(--transition);
+  color: #94a3b8;
+}
+.theme-btn:hover { background: rgba(255,255,255,.12); color: #fff; }
+.signout-btn {
+  font-size: 12px; color: #64748b;
+  background: none; border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--radius); padding: 5px 12px; cursor: pointer;
+  font-family: inherit; transition: all var(--transition);
+}
+.signout-btn:hover { border-color: rgba(255,255,255,.25); color: var(--topbar-text); }
+
+/* ── TABS ── */
+.tab-bar { background: var(--surface); border-bottom: 1px solid var(--border); box-shadow: var(--shadow); }
+.tab-bar-inner { max-width: 1020px; margin: 0 auto; padding: 0 24px; display: flex; gap: 0; overflow-x: auto; scrollbar-width: none; }
+.tab-bar-inner::-webkit-scrollbar { display: none; }
+.tab-btn {
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  padding: 14px 18px; background: none; border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text2); cursor: pointer;
+  transition: all var(--transition); margin-bottom: -1px;
+  white-space: nowrap;
+}
+.tab-btn:hover { color: var(--text); background: var(--surface2); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ── BODY ── */
+.app-body { max-width: 1020px; margin: 0 auto; padding: 24px 20px 80px; }
+
+/* ── CARDS ── */
+.card {
+  background: var(--surface); border-radius: var(--radius-lg);
+  border: 1px solid var(--border); box-shadow: var(--shadow);
+  margin-bottom: 12px; overflow: hidden;
+  transition: background var(--transition), border-color var(--transition);
+}
+.card-pad { padding: 20px 24px; }
+
+/* ── PREVIEW ── */
+.preview-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 10px; }
+.preview-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.preview-code {
+  font-family: 'DM Mono', 'Consolas', monospace; font-size: 22px; font-weight: 500;
+  color: var(--accent); flex: 1; min-width: 200px; word-break: break-all; letter-spacing: 1.5px;
+  text-shadow: 0 0 20px rgba(37,99,235,.2);
+}
+.preview-code .ph { color: var(--border2); text-shadow: none; }
+
+/* ── BUTTONS ── */
+.copy-btn {
+  background: var(--accent); color: #fff; border: none; border-radius: var(--radius);
+  padding: 10px 20px; font-family: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; gap: 8px;
+  transition: all var(--transition); white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(37,99,235,.35);
+}
+.copy-btn:hover { background: var(--accent-hover); box-shadow: 0 6px 20px rgba(37,99,235,.45); transform: translateY(-1px); }
+.copy-btn:active { transform: translateY(0); }
+.copy-btn:disabled { background: var(--border2); color: var(--text3); cursor: not-allowed; box-shadow: none; transform: none; }
+.copy-btn.copied { background: var(--green); box-shadow: 0 4px 14px rgba(22,163,74,.35); }
+
+.ghost-btn {
+  background: var(--surface); color: var(--text2); border: 1.5px solid var(--border2);
+  border-radius: var(--radius); padding: 9px 18px; font-family: inherit;
+  font-size: 13px; font-weight: 500; cursor: pointer; transition: all var(--transition);
+}
+.ghost-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+.green-btn {
+  background: var(--green); color: #fff; border: none; border-radius: var(--radius);
+  padding: 9px 18px; font-family: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; gap: 7px;
+  transition: all var(--transition); box-shadow: 0 4px 12px rgba(22,163,74,.25);
+}
+.green-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+.dark-btn {
+  background: var(--text); color: var(--surface); border: none; border-radius: var(--radius);
+  padding: 9px 18px; font-family: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all var(--transition); white-space: nowrap;
+  box-shadow: var(--shadow);
+}
+.dark-btn:hover { opacity: .85; transform: translateY(-1px); }
+.dark-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+/* ── DUP WARNING ── */
+.dup-warn {
+  display: none; background: var(--red-l); border-left: 3px solid var(--red);
+  border-radius: var(--radius); padding: 10px 16px; font-size: 12px;
+  color: var(--red); margin-bottom: 10px; font-weight: 500; line-height: 1.5;
+}
+.dup-warn.show { display: flex; align-items: flex-start; gap: 8px; }
+
+/* ── PROGRESS ── */
+.prog-card { padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
+.prog-dots { display: flex; gap: 5px; }
+.prog-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border2); transition: background var(--transition), box-shadow var(--transition); }
+.prog-dot.done { background: var(--accent); box-shadow: 0 0 6px rgba(37,99,235,.5); }
+.prog-dot.curr { background: var(--accent); box-shadow: 0 0 10px rgba(37,99,235,.7); animation: pulse 1.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{box-shadow:0 0 6px rgba(37,99,235,.5)} 50%{box-shadow:0 0 14px rgba(37,99,235,.9)} }
+.prog-bar { flex: 1; height: 4px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.prog-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #60a5fa); border-radius: 4px; transition: width .4s ease; width: 0%; box-shadow: 0 0 8px rgba(37,99,235,.4); }
+.prog-txt { font-size: 12px; color: var(--text3); white-space: nowrap; }
+
+/* ── COMPANY SELECTOR ── */
+.company-section { padding: 16px 24px 20px; border-bottom: 1px solid var(--border); }
+.company-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 12px; }
+.company-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.company-btn {
+  padding: 8px 18px; border: 1.5px solid var(--border2);
+  border-radius: 20px; font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 600;
+  color: var(--text2); background: var(--surface2); cursor: pointer;
+  transition: all var(--transition); letter-spacing: .5px;
+}
+.company-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+.company-btn.sel { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 4px 12px rgba(37,99,235,.35); }
+.company-hint { font-size: 12px; color: var(--text3); padding: 10px 0 0; }
+
+/* ── SECTIONS ── */
+.section { border-bottom: 1px solid var(--border); transition: background var(--transition); }
+.section:last-child { border-bottom: none; }
+.sec-hdr { display: flex; align-items: center; gap: 12px; padding: 13px 24px; cursor: pointer; user-select: none; transition: background var(--transition); }
+.sec-hdr:hover { background: var(--surface2); }
+.cod-tag {
+  font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 600;
+  padding: 3px 8px; border-radius: 6px; background: var(--surface2);
+  color: var(--text3); border: 1px solid var(--border2);
+  flex-shrink: 0; min-width: 52px; text-align: center; letter-spacing: .5px;
+  transition: all var(--transition);
+}
+.section.is-done .cod-tag { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 2px 8px rgba(37,99,235,.3); }
+.section.is-open .cod-tag { background: var(--accent-light); color: var(--accent); border-color: var(--accent-mid); }
+.sec-name { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; }
+.sec-val { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent); font-weight: 600; }
+.sec-arr { font-size: 10px; color: var(--text3); transition: transform var(--transition); flex-shrink: 0; }
+.section.is-open .sec-arr { transform: rotate(90deg); color: var(--accent); }
+.sec-body { display: none; padding: 6px 24px 20px; background: var(--surface2); border-top: 1px solid var(--border); }
+.section.is-open .sec-body { display: block; }
+
+/* ── OPTIONS ── */
+.opt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(195px, 1fr)); gap: 6px; }
+.opt-btn {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 12px; background: var(--surface); border: 1.5px solid var(--border2);
+  border-radius: var(--radius); cursor: pointer; text-align: left;
+  transition: all var(--transition); width: 100%;
+}
+.opt-btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.opt-btn.sel { background: var(--accent); border-color: var(--accent); box-shadow: 0 3px 10px rgba(37,99,235,.25); }
+.opt-name { font-size: 12px; color: var(--text); flex: 1; line-height: 1.3; }
+.opt-btn.sel .opt-name { color: #fff; font-weight: 600; }
+.opt-code {
+  font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 600;
+  color: var(--text3); background: var(--surface2); padding: 2px 7px;
+  border-radius: 4px; white-space: nowrap; flex-shrink: 0;
+  border: 1px solid var(--border2); transition: all var(--transition);
+}
+.opt-btn:hover .opt-code { border-color: var(--accent-mid); color: var(--accent); background: var(--accent-light); }
+.opt-btn.sel .opt-code { background: rgba(255,255,255,.2); color: rgba(255,255,255,.9); border-color: transparent; }
+
+.seq-row { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 4px; }
+.seq-btn {
+  font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 600;
+  padding: 9px 18px; background: var(--surface); border: 1.5px solid var(--border2);
+  border-radius: var(--radius); cursor: pointer; color: var(--text);
+  transition: all var(--transition); min-width: 56px; text-align: center;
+}
+.seq-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+.seq-btn.sel { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 3px 10px rgba(37,99,235,.25); }
+
+/* ── MUNICIPALITY ── */
+.mun-search {
+  width: 100%; padding: 9px 14px; font-family: inherit; font-size: 13px;
+  border: 1.5px solid var(--border2); border-radius: var(--radius);
+  color: var(--text); background: var(--surface); margin-bottom: 10px; outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.mun-search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.mun-item { margin-bottom: 4px; }
+.mun-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: var(--radius); cursor: pointer; transition: all var(--transition);
+}
+.mun-row:hover { border-color: var(--accent); background: var(--accent-light); }
+.mun-row.expanded { border-color: var(--accent); border-bottom-left-radius: 0; border-bottom-right-radius: 0; background: var(--accent); }
+.mun-name { font-size: 12px; font-weight: 600; color: var(--text); flex: 1; }
+.mun-row.expanded .mun-name { color: #fff; }
+.mun-num {
+  font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text3);
+  background: var(--surface2); padding: 2px 7px; border-radius: 4px;
+  border: 1px solid var(--border2); flex-shrink: 0;
+}
+.mun-row.expanded .mun-num { background: rgba(255,255,255,.2); color: rgba(255,255,255,.8); border-color: transparent; }
+.mun-arr { font-size: 10px; color: var(--text3); transition: transform var(--transition); flex-shrink: 0; }
+.mun-row.expanded .mun-arr { transform: rotate(90deg); color: rgba(255,255,255,.7); }
+.dist-panel { display: none; border: 1.5px solid var(--accent); border-top: none; border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius); overflow: hidden; }
+.dist-panel.open { display: block; }
+.dist-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 26px;
+  background: var(--surface); border-top: 1px solid var(--border);
+  cursor: pointer; transition: background var(--transition);
+}
+.dist-row:first-child { border-top: none; }
+.dist-row:hover { background: var(--accent-light); }
+.dist-row.sel { background: var(--accent-light); }
+.dist-name { font-size: 12px; color: var(--text); flex: 1; }
+.dist-name.sede { color: var(--text3); font-style: italic; }
+.dist-code { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text3); background: var(--surface2); padding: 2px 7px; border-radius: 4px; border: 1px solid var(--border); flex-shrink: 0; }
+.dist-row.sel .dist-code { background: var(--accent); color: #fff; border-color: var(--accent); }
+.dist-row.sel .dist-name { color: var(--accent); font-weight: 600; }
+
+/* ── HISTORY ── */
+.hist-toolbar { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hist-title { font-size: 14px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; flex: 1; }
+.hist-count { background: var(--accent); color: #fff; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 10px; box-shadow: 0 2px 8px rgba(37,99,235,.3); }
+.hist-search {
+  flex: 1; min-width: 140px; padding: 8px 14px; font-family: inherit; font-size: 13px;
+  border: 1.5px solid var(--border2); border-radius: var(--radius);
+  color: var(--text); background: var(--surface2); outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.hist-search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); background: var(--surface); }
+.hist-body { padding: 6px 8px; }
+.hist-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius); transition: background var(--transition); }
+.hist-row:hover { background: var(--surface2); }
+.hist-main { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.hist-code { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--text); font-weight: 600; }
+.hist-company { font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-light); padding: 2px 9px; border-radius: 10px; white-space: nowrap; border: 1px solid var(--accent-mid); }
+.hist-project { font-size: 11px; color: var(--amber); background: var(--amber-l); padding: 2px 9px; border-radius: 10px; white-space: nowrap; }
+.hist-sub { font-size: 11px; color: var(--text3); white-space: nowrap; }
+.hist-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.me-tag { font-size: 10px; background: var(--accent); color: #fff; padding: 2px 8px; border-radius: 8px; font-weight: 600; box-shadow: 0 2px 6px rgba(37,99,235,.3); }
+.action-btn {
+  font-family: inherit; font-size: 11px; padding: 4px 10px;
+  border: 1px solid var(--border2); border-radius: 6px;
+  background: var(--surface); cursor: pointer; color: var(--text2);
+  transition: all var(--transition);
+}
+.action-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+.action-btn.danger:hover { border-color: var(--red); color: var(--red); background: var(--red-l); }
+.action-btn.approve { border-color: var(--green); color: var(--green); }
+.action-btn.approve:hover { background: var(--green-l); }
+
+/* ── ADMIN ── */
+.admin-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.admin-title { font-size: 14px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.admin-row { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--border); transition: background var(--transition); }
+.admin-row:last-child { border-bottom: none; }
+.admin-row:hover { background: var(--surface2); }
+.admin-row.highlight { background: rgba(217,119,6,.06); border-left: 3px solid var(--amber); }
+.user-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; box-shadow: 0 2px 8px rgba(37,99,235,.3); }
+.user-info { flex: 1; min-width: 0; }
+.user-name { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.user-email { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.status-tag { font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 600; }
+.status-tag.admin { background: var(--accent); color: #fff; }
+.status-tag.approved { background: var(--green-l); color: var(--green); }
+.status-tag.pending { background: var(--amber-l); color: var(--amber); }
+.status-tag.rejected { background: var(--red-l); color: var(--red); }
+.users-section-title { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; padding: 10px 20px 8px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+
+/* ── AI PANEL ── */
+.ai-panel { padding: 16px 20px; }
+.ai-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.ai-input {
+  flex: 1; padding: 10px 14px; font-family: inherit; font-size: 13px;
+  border: 1.5px solid var(--border2); border-radius: var(--radius);
+  color: var(--text); background: var(--surface2); outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.ai-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); background: var(--surface); }
+.ai-output { background: var(--surface2); border: 1.5px solid var(--border2); border-radius: var(--radius); padding: 16px; }
+.ai-code-out { font-family: 'DM Mono', monospace; font-size: 20px; font-weight: 600; color: var(--accent); margin-bottom: 10px; text-shadow: 0 0 20px rgba(37,99,235,.2); letter-spacing: 1px; }
+.ai-justif { font-size: 12px; color: var(--text2); line-height: 1.7; margin-bottom: 14px; }
+
+/* ── MISC ── */
+.empty-msg { padding: 28px; font-size: 13px; color: var(--text3); text-align: center; }
+.loading-msg { padding: 28px; text-align: center; font-size: 13px; color: var(--text3); }
+.spin { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; margin-right: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── FILTER ROW ── */
+.filter-select, .filter-date {
+  padding: 7px 10px; font-family: inherit; font-size: 12px;
+  border: 1.5px solid var(--border2); border-radius: var(--radius);
+  color: var(--text); background: var(--surface); outline: none; cursor: pointer;
+  transition: border-color var(--transition);
+}
+.filter-select:focus, .filter-date:focus { border-color: var(--accent); }
+
+/* ── PROJECT FORM ── */
+.form-input-sm {
+  flex: 1; min-width: 140px; padding: 9px 12px; font-family: inherit; font-size: 13px;
+  border: 1.5px solid var(--border2); border-radius: var(--radius);
+  color: var(--text); background: var(--surface); outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.form-input-sm:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.form-select {
+  padding: 9px 12px; font-family: inherit; font-size: 13px;
+  border: 1.5px solid var(--border2); border-radius: var(--radius);
+  color: var(--text); background: var(--surface); outline: none; cursor: pointer;
+}
+.form-select:focus { border-color: var(--accent); }
+
+/* ── STATS/DASHBOARD ── */
+.stat-card { background: var(--surface2); border-radius: var(--radius-lg); padding: 18px; border: 1px solid var(--border); transition: all var(--transition); }
+.stat-card:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 4px 16px rgba(37,99,235,.1); }
+.stat-label { font-size: 11px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.stat-value { font-size: 32px; font-weight: 700; color: var(--accent); letter-spacing: -1px; }
+
+/* ── PENDING SCREEN ── */
+#pendingScreen { flex-direction: column; }
+
+/* ── BOTTOM ACTIONS ── */
+.bottom-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+
+/* PWA BANNER */
+#pwaBanner { background: linear-gradient(135deg, #0f172a, #1e3a5f); border-bottom: 1px solid rgba(37,99,235,.3); }
+
+@media(max-width:720px){ .auth-left{display:none} .auth-right{width:100%;padding:32px 24px} }
+@media(max-width:600px){ .opt-grid{grid-template-columns:1fr} .preview-code{font-size:16px} .topbar-user{display:none} }
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div class="auth-screen" id="authScreen" style="display:none">
+  <div class="auth-left">
+    <div class="auth-brand">
+      <div class="auth-brand-logo">
+        <svg width="40" height="40" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="8" fill="white"/>
+          <path d="M8 10h6a6 6 0 010 12H8V10z" fill="#0f0f0f"/>
+          <rect x="18" y="10" width="6" height="3" rx="1.5" fill="#0f0f0f"/>
+          <rect x="18" y="14.5" width="6" height="3" rx="1.5" fill="#0f0f0f"/>
+          <rect x="18" y="19" width="4" height="3" rx="1.5" fill="#0f0f0f"/>
+        </svg>
+        <span class="auth-brand-name">A2Z<span>Code</span></span>
+      </div>
+      <div class="auth-headline">Gestão de<strong>Codificação<br>de Documentos</strong></div>
+      <div class="auth-tagline">Padronize e controle a nomenclatura<br>dos seus documentos de engenharia.</div>
+    </div>
+    <div class="auth-features">
+      <div class="auth-feature"><div class="auth-feature-dot"></div>Geração automática de códigos</div>
+      <div class="auth-feature"><div class="auth-feature-dot"></div>Histórico compartilhado em tempo real</div>
+      <div class="auth-feature"><div class="auth-feature-dot"></div>Múltiplas concessionárias</div>
+      <div class="auth-feature"><div class="auth-feature-dot"></div>Exportação para Excel</div>
+    </div>
+  </div>
+
+  <div class="auth-right">
+    <div class="auth-form-wrap">
+
+      <div id="loginForm">
+        <div class="auth-form-title">Entrar</div>
+        <div class="auth-form-sub">Acesse com suas credenciais</div>
+        <div class="alert-box" id="loginAlert"></div>
+        <div class="field-group">
+          <label class="field-label">E-mail</label>
+          <input class="field-input" id="loginEmail" type="email" placeholder="seu@email.com" autocomplete="email"/>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Senha</label>
+          <input class="field-input" id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password"/>
+          <div class="field-error" id="loginErr"></div>
+        </div>
+        <button class="primary-btn" id="loginBtn" onclick="doLogin()">Entrar</button>
+        <div class="auth-bottom-links">
+          <button class="text-btn" onclick="doForgotPassword()">Esqueci minha senha</button>
+          <button class="text-btn" onclick="resendVerification()">Reenviar verificação</button>
+        </div>
+        <div style="text-align:center;margin-top:16px;font-size:12px;color:var(--text3)">Acesso apenas por convite</div>
+      </div>
+
+      <div id="registerForm" style="display:none">
+        <div class="auth-form-title">Criar conta</div>
+        <div class="auth-form-sub">Um e-mail de confirmação será enviado</div>
+        <div class="alert-box" id="regAlert"></div>
+        <div class="field-group">
+          <label class="field-label">Nome completo</label>
+          <input class="field-input" id="regName" placeholder="João Silva"/>
+        </div>
+        <div class="field-group">
+          <label class="field-label">E-mail</label>
+          <input class="field-input" id="regEmail" type="email" placeholder="seu@email.com" autocomplete="email"/>
+          <div class="field-error" id="regEmailErr"></div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Senha</label>
+          <input class="field-input" id="regPass" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password"/>
+          <div class="field-error" id="regPassErr"></div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Confirmar senha</label>
+          <input class="field-input" id="regPass2" type="password" placeholder="Repita a senha" autocomplete="new-password"/>
+          <div class="field-error" id="regPass2Err"></div>
+        </div>
+        <button class="primary-btn" id="regBtn" onclick="doRegister()">Criar conta</button>
+        <div class="auth-toggle">Já tem conta? <a onclick="showLogin()">Entrar</a></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- PENDING APPROVAL SCREEN -->
+<div id="pendingScreen" style="display:none" style="display:none;min-height:100vh;background:var(--surface2);display:none;align-items:center;justify-content:center;padding:24px">
+  <div style="background:var(--white);border-radius:var(--radius-xl);border:1px solid var(--border);box-shadow:var(--shadow-lg);max-width:420px;width:100%;padding:40px 36px;text-align:center">
+    <div style="width:56px;height:56px;background:var(--amber-l);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#b7791f" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+    <h2 style="font-size:20px;font-weight:600;letter-spacing:-.3px;margin-bottom:8px">Aguardando aprovação</h2>
+    <p style="font-size:14px;color:var(--text3);line-height:1.6;margin-bottom:6px">Olá, <strong id="pendingName" style="color:var(--text)"></strong>!</p>
+    <p style="font-size:13px;color:var(--text3);line-height:1.7;margin-bottom:28px">Sua conta foi criada com sucesso. Um administrador precisa aprovar seu acesso antes que você possa usar o sistema.<br><br>Você receberá acesso assim que for aprovado.</p>
+    <button onclick="doSignOut()" style="background:var(--white);color:var(--text2);border:1.5px solid var(--gray-200);border-radius:var(--radius);padding:9px 24px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--gray-400)'" onmouseout="this.style.borderColor='var(--gray-200)'">Sair</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+  <div class="topbar">
+    <div class="topbar-brand">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="8" fill="white"/>
+          <path d="M8 10h6a6 6 0 010 12H8V10z" fill="#0f0f0f"/>
+          <rect x="18" y="10" width="6" height="3" rx="1.5" fill="#0f0f0f"/>
+          <rect x="18" y="14.5" width="6" height="3" rx="1.5" fill="#0f0f0f"/>
+          <rect x="18" y="19" width="4" height="3" rx="1.5" fill="#0f0f0f"/>
+        </svg>
+        <span style="font-size:16px;font-weight:700;color:white;letter-spacing:-.5px;font-family:'DM Sans',sans-serif">A2Z<span style="color:rgba(255,255,255,.45);font-weight:400">Code</span></span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="topbar-user" id="topbarUser"></span>
+      <div class="topbar-avatar" id="topbarAvatar"></div>
+      <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Alternar tema"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button>
+      <button class="signout-btn" onclick="doSignOut()">Sair</button>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <div class="tab-bar-inner">
+      <button class="tab-btn active" onclick="switchTab('generator',this)">Gerador</button>
+      <button class="tab-btn" onclick="switchTab('history',this)">Histórico</button>
+      <button class="tab-btn" onclick="switchTab('dashboard',this)">Dashboard</button>
+      <button class="tab-btn" onclick="switchTab('projects',this)">Projetos</button>
+      <button class="tab-btn" onclick="switchTab('verificar',this)">Verificar</button>
+      <button class="tab-btn" onclick="switchTab('perfil',this)">Perfil</button>
+      <button class="tab-btn" id="auditTabBtn" style="display:none" onclick="switchTab('audit',this)">Auditoria</button>
+      <button class="tab-btn" id="adminTabBtn" style="display:none" onclick="switchTab('admin',this);setTimeout(()=>window.loadInvites&&window.loadInvites(),300);">Admin <span id="pendingCount" style="display:none;background:#c0392b;color:white;font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;margin-left:4px">0</span></button>
+    </div>
+  </div>
+
+  <!-- GENERATOR TAB -->
+  <div class="tab-content active" id="tab-generator">
+    <div class="app-body">
+
+      <div class="card card-pad">
+        <div class="preview-label">Código gerado</div>
+        <div class="preview-row">
+          <div class="preview-code" id="pre"><span class="ph">Selecione a concessionária para começar</span></div>
+          <button class="copy-btn" id="cpyBtn" disabled onclick="doCopy()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            Copiar e Registrar
+          </button>
+        </div>
+      </div>
+
+      <div class="dup-warn" id="dupW">⚠ Este código já foi registrado!</div>
+
+      <div class="card prog-card">
+        <div class="prog-dots" id="progDots"></div>
+        <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+        <span class="prog-txt" id="pTxt">Selecione uma concessionária</span>
+      </div>
+
+      <!-- COMPANY SELECTOR -->
+      <div class="card">
+        <div class="company-section">
+          <div class="company-label">Concessionária</div>
+          <div class="company-grid" id="companyGrid"></div>
+          <div class="company-hint" id="companyHint">← Selecione uma concessionária para ver os campos disponíveis</div>
+        </div>
+        <div id="projectSelectWrap" style="display:none;padding:12px 24px;border-bottom:1px solid var(--border);align-items:center;gap:12px"><label style="font-size:12px;font-weight:500;color:var(--text2);white-space:nowrap">Vincular ao projeto</label><select id="projectSelect" style="flex:1;padding:7px 10px;font-family:inherit;font-size:13px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);background:var(--surface);outline:none"><option value="">Nenhum projeto</option></select></div>
+        <div id="secs"></div>
+      </div>
+
+      <div class="bottom-actions">
+        <button class="ghost-btn" onclick="resetAll()">↺ Limpar seleção</button>
+      </div>
+
+      <!-- AI SUGGESTION PANEL -->
+      <div class="card" style="margin-top:8px">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+          <div style="width:28px;height:28px;background:var(--gray-900);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2z"/><path d="M12 8v4l3 3"/></svg>
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text)">Sugestão por IA</div>
+            <div style="font-size:11px;color:var(--text3)">Descreva o documento e a IA sugere o código automaticamente</div>
+          </div>
+        </div>
+        <div style="padding:16px 20px">
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <input id="aiInput" style="flex:1;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);outline:none" placeholder='Ex: "Mapa topográfico da bacia PO-01, SBB-02 de Ubiratã"' onkeydown="if(event.key==='Enter')aiSuggest()"/>
+            <button id="aiBtn" onclick="aiSuggest()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:9px 18px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .15s" onmouseover="this.style.background='#333'" onmouseout="this.style.background='var(--gray-900)'">Sugerir código</button>
+          </div>
+          <div id="aiOutput" style="display:none;background:var(--surface2);border:1.5px solid var(--gray-200);border-radius:6px;padding:14px 16px">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Código sugerido</div>
+            <div id="aiCode" style="font-family:'DM Mono',monospace;font-size:18px;font-weight:500;color:var(--text);margin-bottom:8px"></div>
+            <div id="aiJustif" style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:12px"></div>
+            <button onclick="applyAiSuggestion()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:7px 16px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer">Aplicar sugestão nos campos</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- DASHBOARD -->
+  <div class="tab-content" id="tab-dashboard">
+    <div style="max-width:980px;margin:0 auto;padding:20px 20px 60px">
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;padding:20px">
+          <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border)"><div style="font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Total de códigos</div><div style="font-size:28px;font-weight:600;color:var(--text)" id="statTotal">—</div></div>
+          <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border)"><div style="font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Empresas</div><div style="font-size:28px;font-weight:600;color:var(--text)" id="statCompanies">—</div></div>
+          <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border)"><div style="font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Usuários ativos</div><div style="font-size:28px;font-weight:600;color:var(--text)" id="statUsers">—</div></div>
+          <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border)"><div style="font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Hoje</div><div style="font-size:28px;font-weight:600;color:var(--text)" id="statToday">—</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 20px 20px">
+          <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border)"><div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.8px">Por concessionária</div><canvas id="chartCompany"></canvas></div>
+          <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border)"><div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.8px">Últimos 6 meses</div><canvas id="chartMonth"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROJECTS -->
+  <div class="tab-content" id="tab-projects">
+    <div style="max-width:980px;margin:0 auto;padding:20px 20px 60px">
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center"><span style="font-size:14px;font-weight:600;color:var(--text)">Projetos</span></div>
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface2)">
+          <div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px">Novo projeto</div>
+          <div class="alert-box" id="projectAlert"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input id="newProjectName" placeholder="Nome do projeto" style="flex:1;min-width:140px;padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);outline:none"/>
+            <select id="newProjectCompany" style="padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);background:var(--surface);outline:none">
+              <option value="">Concessionária</option><option>ACCIONA</option><option>IGUA</option><option>SANEPAR</option><option>SABESP</option><option>A2Z</option><option>2S ENG</option>
+            </select>
+            <input id="newProjectDesc" placeholder="Descrição (opcional)" style="flex:2;min-width:140px;padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);outline:none"/>
+            <button onclick="createProject()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 18px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap">Criar projeto</button>
+          </div>
+        </div>
+        <div id="projectsList"><div class="empty-msg">Nenhum projeto cadastrado.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY TAB -->
+  <div class="tab-content" id="tab-history">
+    <div class="app-body">
+      <div class="card">
+        <div class="hist-toolbar">
+          <div class="hist-title">Histórico <span class="hist-count" id="histCount">0</span></div>
+          <input class="hist-search" id="histSearch" placeholder="Buscar código, usuário ou concessionária..." oninput="filterHist()"/>
+          <button class="green-btn" onclick="exportExcel()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Exportar
+          </button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface2)">
+          <select id="filterCompany" onchange="applyHistFilters()" style="padding:6px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);background:var(--surface);outline:none">
+            <option value="">Todas as empresas</option><option>ACCIONA</option><option>IGUA</option><option>SANEPAR</option><option>SABESP</option><option>A2Z</option><option>2S ENG</option>
+          </select>
+          <select id="filterProject" onchange="applyHistFilters()" style="padding:6px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);background:var(--surface);outline:none"><option value="">Todos os projetos</option></select>
+          <input id="filterDateFrom" type="date" onchange="applyHistFilters()" title="De" style="padding:6px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+          <input id="filterDateTo" type="date" onchange="applyHistFilters()" title="Até" style="padding:6px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+          <button onclick="clearHistFilters()" style="background:var(--surface);color:var(--text2);border:1.5px solid var(--gray-200);border-radius:6px;padding:6px 12px;font-family:inherit;font-size:12px;cursor:pointer">Limpar filtros</button>
+        </div>
+        <div class="hist-body" id="hist"><div class="empty-msg">Faça login para ver o histórico.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VERIFY TAB -->
+  
+
+  <!-- PROFILE TAB -->
+  
+
+  <!-- ADMIN TAB -->
+  <div class="tab-content" id="tab-admin">
+    <div class="app-body">
+      <div class="card">
+        <div class="admin-header">
+          <div class="admin-title">Gerenciador de Usuários <span class="hist-count" id="adminUserCount">0</span></div>
+        </div>
+        <div id="adminUsers"><div class="empty-msg">Carregando...</div></div>
+      </div>
+      <!-- AUDIT LOG -->
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-top:12px">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border)"><span style="font-size:14px;font-weight:600;color:var(--text)">Log de auditoria</span></div>
+        <div id="auditList"><div class="empty-msg">Carregando...</div></div>
+      </div>
+
+      <!-- CREATE USER -->
+      <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow);overflow:hidden;margin-top:12px">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+          <span style="font-size:14px;font-weight:700;color:var(--text)">Criar novo usuário</span>
+        </div>
+        <div style="padding:16px 20px;background:var(--surface2)">
+          <div id="newUserErr" style="display:none;background:var(--red-l);border:1px solid var(--red);border-radius:6px;padding:9px 12px;font-size:12px;color:var(--red);margin-bottom:12px"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Nome completo</div>
+              <input id="newUserName" placeholder="Ex: João Silva" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Empresa / Concessionária</div>
+              <select id="newUserEmpresa" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;cursor:pointer">
+                <option value="">Selecione...</option>
+                <option value="ACCIONA">ACCIONA</option>
+                <option value="IGUA">IGUA</option>
+                <option value="SANEPAR">SANEPAR</option>
+                <option value="SABESP">SABESP</option>
+                <option value="A2Z">A2Z</option>
+                <option value="2S ENG">2S ENG</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Nível de acesso</div>
+              <select id="newUserRole" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;cursor:pointer">
+                <option value="visualizador">Visualizador</option>
+                <option value="editor">Editor</option>
+                <option value="master">Master</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Licença válida até</div>
+              <input id="newUserExpires" type="date" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+          </div>
+          <button id="createUserBtn" onclick="createUser()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius);padding:10px 24px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,.3)">Criar usuário</button>
+
+          <div id="newUserCodeResult" style="display:none;margin-top:14px;background:var(--surface);border:1.5px solid var(--accent);border-radius:var(--radius);padding:14px">
+            <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">✓ Usuário criado! Compartilhe o código abaixo:</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <div id="newUserCodeValue" style="flex:1;padding:10px 14px;font-family:DM Mono,monospace;font-size:20px;font-weight:600;letter-spacing:4px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface2);text-align:center"></div>
+              <button id="copyCodeBtn" onclick="copyAccessCode()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius);padding:10px 18px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">Copiar código</button>
+            </div>
+            <div style="font-size:11px;color:var(--text3);margin-top:8px">O usuário precisará informar seu nome e este código para acessar o sistema.</div>
+          </div>
+        </div>
+      </div>
+      <!-- IMPORT IN ADMIN TAB -->
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-top:12px">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border)"><span style="font-size:14px;font-weight:600;color:var(--text)">Importação em massa</span></div>
+        <div style="padding:16px 20px">
+          <div class="alert-box" id="importAlert"></div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Importe um arquivo CSV exportado do sistema para registrar códigos em massa e evitar duplicatas.</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="file" id="importFile" accept=".csv" onchange="importExcel(this)" style="display:none"/>
+            <button id="importBtn" onclick="document.getElementById('importFile').click()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 18px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">Selecionar arquivo CSV</button>
+            <span style="font-size:11px;color:var(--text3)">Use o CSV exportado da aba Histórico</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- VERIFY TAB -->
+  <div class="tab-content" id="tab-verificar">
+    <div style="max-width:980px;margin:0 auto;padding:20px 20px 60px">
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border)">
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">Verificar código</div>
+          <div style="font-size:12px;color:var(--text3)">Consulte se um código já foi registrado e por quem</div>
+        </div>
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;gap:8px">
+            <input id="verifyInput" placeholder="Ex: DE-048-GER-PE-PHID-03-A0" style="flex:1;padding:10px 14px;font-family:'DM Mono',monospace;font-size:14px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);outline:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')verifyCode()"/>
+            <button onclick="verifyCode()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:10px 20px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap">Verificar</button>
+          </div>
+        </div>
+        <div id="verifyOutput"><div class="empty-msg">Digite um código acima para verificar.</div></div>
+      </div>
+      <div id="importSection" style="display:none;margin-top:12px;background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border)">
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">Importar códigos em massa</div>
+          <div style="font-size:12px;color:var(--text3)">Arquivo CSV com colunas: Código, Empresa</div>
+        </div>
+        <div style="padding:16px 20px">
+          <div class="alert-box" id="importAlert"></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+            <input id="importInput" type="file" accept=".csv,.txt" style="display:none" onchange="handleImport(event)"/>
+            <button id="importBtn" onclick="importExcelFile()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:9px 18px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">Importar CSV</button>
+            <span style="font-size:12px;color:var(--text3)">Formato: Código,Empresa (uma por linha)</span>
+          </div>
+          <div style="background:var(--surface2);border-radius:6px;padding:12px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;line-height:2">Código,Empresa<br>DE-048-GER-PE-PHID-03-A0,ACCIONA<br>AT-016-ETE-PB-TOPO-01-A0,ACCIONA</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFILE TAB -->
+  <div class="tab-content" id="tab-perfil">
+    <div style="max-width:600px;margin:0 auto;padding:20px 20px 60px">
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);text-align:center">
+          <div style="position:relative;display:inline-block;margin-bottom:12px">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </label>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Clique no ícone de câmera para trocar a foto (máx. 2MB)</div>
+        </div>
+        <div style="padding:20px 24px">
+          <div class="alert-box" id="profileAlert"></div>
+          <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">Nome completo</label><input id="profileName" style="width:100%;padding:9px 12px;font-family:inherit;font-size:14px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);outline:none" placeholder="Seu nome"/></div>
+          <div style="margin-bottom:16px"><label style="display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">E-mail</label><input id="profileEmail" style="width:100%;padding:9px 12px;font-family:inherit;font-size:14px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text3);background:var(--surface2);outline:none" disabled/></div>
+          <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:16px">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:12px;text-transform:uppercase;letter-spacing:.8px">Alterar senha</div>
+            <div style="margin-bottom:12px"><label style="display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">Nova senha</label><input id="profileNewPass" type="password" style="width:100%;padding:9px 12px;font-family:inherit;font-size:14px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);outline:none" placeholder="Mínimo 6 caracteres"/></div>
+            <div><label style="display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">Confirmar nova senha</label><input id="profileNewPass2" type="password" style="width:100%;padding:9px 12px;font-family:inherit;font-size:14px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);outline:none" placeholder="Repita a senha"/></div>
+          </div>
+          <button onclick="saveProfile()" style="width:100%;padding:10px;background:var(--gray-900);color:white;border:none;border-radius:6px;font-family:inherit;font-size:14px;font-weight:500;cursor:pointer">Salvar alterações</button>
+        </div>
+      </div>
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);margin-top:12px;overflow:hidden">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border);font-size:14px;font-weight:600;color:var(--text)">Meus códigos</div>
+        <div id="myCodes" style="padding:8px"><div class="empty-msg">Nenhum código ainda.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUDIT TAB (admin only, loaded dynamically) -->
+  <div class="tab-content" id="tab-audit">
+    <div style="max-width:980px;margin:0 auto;padding:20px 20px 60px">
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+          <span style="font-size:14px;font-weight:600;color:var(--text)">Auditoria</span>
+          <span class="hist-count" id="auditCount">0</span>
+        </div>
+        <div id="auditLog"><div class="empty-msg">Carregando...</div></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ── COMPANIES ──
+   Estrutura preparada para receber os códigos do Excel.
+   Quando você enviar o Excel, cada concessionária terá seus próprios campos.
+   Por enquanto, ACCIONA já está configurada com os campos existentes.
+   As demais mostram "em breve". */
+
+const COMPANIES = {
+  ACCIONA: {
+    label: 'ACCIONA',
+    fields: [
+      { key:'A', label:'Tipo de Documento', opts:[['ATA DE REUNIÃO','AT'],['DESENHO','DE'],['ESQUEMA ELÉTRICO','EE'],['ESPEC. MATERIAIS E EQUIPAMENTOS','EM'],['ESPECIFICAÇÃO TÉCNICA','ET'],['FOTOS AEROFOTOGRAMÉTRICAS','FT'],['INSTRUÇÃO COMPLEMENTAR','IC'],['ÍNDICE DE DOCUMENTOS','ID'],['LISTA DE MATERIAIS','LM'],['MANUAL DE OPERAÇÃO','MO'],['MEMORIAL DE CÁLCULO','MC'],['MEMORIAL DESCRITIVO','MD'],['NOTA DE SERVIÇO','NS'],['ORDEM DE SERVIÇO (OSE)','OSE'],['ORÇAMENTO','OR'],['PARECER TÉCNICO','PT'],['RELATÓRIO GERAL','RG'],['RELATÓRIO TÉCNICO','RT']] },
+      { key:'B', label:'Município / Distrito', type:'mun' },
+      { key:'C', label:'Infraestrutura', opts:[['ESTAÇÃO ELEVATÓRIA DE ESGOTO','EEE'],['EMISSÁRIO FINAL','EMI'],['COLETOR TRONCO','COL'],['INTERCEPTOR','INT'],['LINHA DE RECALQUE','LRE'],['REDE COLETORA DE ESGOTO','RCE'],['SIFÃO INVESTIDO','SIN'],['ESTAÇÃO DE TRATAMENTO DE ESGOTO','ETE'],['GERAL','GER']] },
+      { key:'D', label:'Nível de Projeto', opts:[['PROJETO BÁSICO','PB'],['PROJETO EXECUTIVO','PE'],['PROJETO PADRÃO','PP']] },
+      { key:'E', label:'Categoria', opts:[['PROJETO HIDRÁULICO','PHID'],['PROJETO GEOTÉCNICO','PGEO'],['PROJETO ESTRUTURAL','PEST'],['PROJETO ELÉTRICO','PELE'],['PROJETO MECÂNICO','PMEC'],['AUTOMAÇÃO E INSTRUMENTAÇÃO','PAUI'],['SONDAGEM','SOND'],['TOPOGRAFIA','TOPO'],['ESTUDOS HIDROLÓGICOS E INUNDAÇÃO','EHCI'],['AUTODEPURAÇÃO','EADP'],['POPULAÇÃO E VAZÃO','EPVA'],['ESTUDO DE CONCEPÇÃO','ECON']] },
+      { key:'F', label:'Sequência', seq:true, opts:[['Comercial','01'],['Topográfico SBB','02'],['Executivo SBB','03'],["OSE's",'04'],['Orçamento','05'],['Memorial','06'],['Geral Topográfico','07'],['Geral Executivo','08'],['Arquivo 09','09'],['Arquivo 10','10']] },
+      { key:'G', label:'Revisão', opts:[['EMISSÃO INICIAL','A0'],['REVISÃO 01','R1'],['REVISÃO 02','R2'],['REVISÃO 03','R3'],['ENTREGA FINAL','R0']] }
+    ]
+  },
+  IGUA:       { label:'IGUA',       comingSoon: true },
+  SANEPAR:    { label:'SANEPAR',    comingSoon: true },
+  SABESP:     { label:'SABESP',     comingSoon: true },
+  A2Z:        { label:'A2Z',        comingSoon: true },
+  '2S ENG':   { label:'2S ENG',     comingSoon: true },
+};
+
+const MUNS=[
+  {name:'Altamira do Paraná',num:'001',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Alto Paraná',num:'002',d:[{n:'Sede',c:'SDE'},{n:'Santa Maria',c:'SMA'}]},
+  {name:'Altônia',num:'003',d:[{n:'Sede',c:'SDE'},{n:'Jardim Paredão',c:'JPA'},{n:'São João',c:'SJO'},{n:'Vila Yara',c:'VYA'}]},
+  {name:'Amaporã',num:'004',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Barboza Ferraz',num:'005',d:[{n:'Sede',c:'SDE'},{n:'Bourbonia',c:'BOU'},{n:'Ourilândia',c:'OUR'},{n:'Pocinho',c:'POC'},{n:'Tereza Brenda',c:'TBR'},{n:'Paraíso do Sul',c:'PSU'}]},
+  {name:'Boa Esperança',num:'006',d:[{n:'Sede',c:'SDE'},{n:'Alto Palmital',c:'APA'}]},
+  {name:'Bom Sucesso',num:'007',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Brasilândia do Sul',num:'008',d:[{n:'Sede',c:'SDE'},{n:'Ercilândia',c:'ERC'}]},
+  {name:'Campina da Lagoa',num:'009',d:[{n:'Sede',c:'SDE'},{n:'Salles de Oliveira',c:'SOL'},{n:'Herveira',c:'HER'},{n:'Bela Vista do Piquiri',c:'BVP'}]},
+  {name:'Diamante do Norte',num:'010',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Engenheiro Beltrão',num:'011',d:[{n:'Sede',c:'SDE'},{n:'Ivailândia',c:'IVA'},{n:'Figueira do Oeste',c:'FOE'},{n:'Sertãozinho',c:'SER'}]},
+  {name:'Esperança Nova',num:'012',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Farol',num:'013',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Fênix',num:'014',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Floresta',num:'015',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Goioerê',num:'016',d:[{n:'Sede',c:'SDE'},{n:'Jaracatiá',c:'JAR'}]},
+  {name:'Guairaçá',num:'017',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Guaporema',num:'018',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Icaraíma',num:'019',d:[{n:'Sede',c:'SDE'},{n:'Porto Camargo',c:'PCA'},{n:'Vila Rica de Ivaí',c:'VRI'}]},
+  {name:'Inajá',num:'020',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Indianópolis',num:'021',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Iporã',num:'022',d:[{n:'Sede',c:'SDE'},{n:'Nova Santa Helena',c:'NSH'},{n:'Nilza',c:'NIL'}]},
+  {name:'Iretama',num:'023',d:[{n:'Sede',c:'SDE'},{n:'Aguas de Jurema',c:'AJU'},{n:'Marilu',c:'MAR'}]},
+  {name:'Itaúna do Sul',num:'024',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Ivatuba',num:'025',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Jandaia do Sul',num:'026',d:[{n:'Sede',c:'SDE'},{n:'São José',c:'SAJ'}]},
+  {name:'Janiópolis',num:'027',d:[{n:'Sede',c:'SDE'},{n:'Arapuá',c:'ARA'},{n:'Bredápolis',c:'BRE'}]},
+  {name:'Juranda',num:'028',d:[{n:'Sede',c:'SDE'},{n:'Rio Verde',c:'RVE'},{n:'Primavera',c:'PRI'}]},
+  {name:'Mandaguaçu',num:'029',d:[{n:'Sede',c:'SDE'},{n:'Polinópolis',c:'POL'}]},
+  {name:'Maria Helena',num:'030',d:[{n:'Sede',c:'SDE'},{n:'Carbonera',c:'CRA'}]},
+  {name:'Marilena',num:'031',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Mato Rico',num:'032',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Mirador',num:'033',d:[{n:'Sede',c:'SDE'},{n:'Quatro Marcos',c:'QMA'}]},
+  {name:'Nova Aliança do Ivaí',num:'034',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Nova Cantu',num:'035',d:[{n:'Sede',c:'SDE'},{n:'Santo Rei',c:'SOR'},{n:'Geremias Lunardelli',c:'GLU'}]},
+  {name:'Ourizona',num:'036',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Paranacity',num:'037',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Planaltina do Paraná',num:'038',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Quarto Centenário',num:'039',d:[{n:'Sede',c:'SDE'},{n:'Bandeirantes do Oeste',c:'BOE'}]},
+  {name:"Rancho Alegre d'Oeste",num:'040',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Roncador',num:'041',d:[{n:'Sede',c:'SDE'},{n:'Alto do São João',c:'ASJ'}]},
+  {name:'Santa Fé',num:'042',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Santo Antônio do Caiuá',num:'043',d:[{n:'Sede',c:'SDE'}]},
+  {name:'São Pedro do Paraná',num:'044',d:[{n:'Sede',c:'SDE'},{n:'Porto São José',c:'PSJ'}]},
+  {name:'São Tomé',num:'045',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Tamboara',num:'046',d:[{n:'Sede',c:'SDE'}]},
+  {name:'Tapira',num:'047',d:[{n:'Sede',c:'SDE'},{n:'Santa Felicidade',c:'SFE'}]},
+  {name:'Ubiratã',num:'048',d:[{n:'Sede',c:'SDE'},{n:'Yolanda',c:'YOL'},{n:'Green Ville',c:'GVI'}]},
+];
+
+let sel={}, expandedMun=null, currentCompany=null;
+
+function showScreen(s){
+  if(s==='auth'||s==='pending') return;
+  document.getElementById('authScreen').style.display='none';
+  const ps=document.getElementById('pendingScreen'); if(ps) ps.style.display='none';
+  document.getElementById('appScreen').className=s==='app'?'visible':'';
+}
+window.showRegister=()=>{
+  document.getElementById('loginForm').style.display='none';
+  document.getElementById('registerForm').style.display='block';
+  document.getElementById('regAlert').className='alert-box';
+};
+window.showLogin=()=>{
+  document.getElementById('registerForm').style.display='none';
+  document.getElementById('loginForm').style.display='block';
+  document.getElementById('loginAlert').className='alert-box';
+};
+window.switchTab=(tab,btn)=>{
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  btn.classList.add('active');
+  if(tab==='admin'){window.loadAdminPanel();window.loadAudit();if(window.loadInvites)window.loadInvites();}
+};
+
+function buildApp(){
+  // Company grid
+  const grid=document.getElementById('companyGrid');
+  grid.innerHTML=Object.entries(COMPANIES).map(([k,v])=>
+    `<button class="company-btn${v.comingSoon?' soon':''}" onclick="selectCompany('${k}')" ${v.comingSoon?'title="Em breve"':''}>${v.label}${v.comingSoon?' <span style=\'font-size:9px;opacity:.5\'>em breve</span>':''}</button>`
+  ).join('');
+  // Progress dots — empty until company selected
+  document.getElementById('progDots').innerHTML='';
+  document.getElementById('secs').innerHTML='';
+}
+
+window.selectCompany=(key)=>{
+  const co=COMPANIES[key];
+  if(co.comingSoon){ alert(`${co.label}: códigos em breve! Envie o Excel para configurarmos.`); return; }
+  currentCompany=key; sel={};
+  document.querySelectorAll('.company-btn').forEach(b=>b.classList.remove('sel'));
+  event.target.closest('.company-btn').classList.add('sel');
+  document.getElementById('companyHint').style.display='none';
+  const pw=document.getElementById('projectSelectWrap');if(pw)pw.style.display='flex';
+  buildSections(co.fields);
+  updatePre(); upProg();
+};
+
+function buildSections(fields){
+  const sc=document.getElementById('secs'); sc.innerHTML='';
+  const dots=document.getElementById('progDots');
+  dots.innerHTML=fields.map(f=>`<div class="prog-dot" id="pd${f.key}"></div>`).join('');
+  fields.forEach((f,i)=>{
+    const el=document.createElement('div');
+    el.className='section'+(i===0?' is-open':''); el.id='sec'+f.key;
+    let body='';
+    if(f.type==='mun'){
+      body=`<input class="mun-search" id="munQ" placeholder="Pesquisar município ou distrito..." oninput="filterMuns()"><div id="munList"></div>`;
+    } else if(f.seq){
+      body=`<div class="seq-row">${f.opts.map(o=>`<button class="seq-btn" data-k="${f.key}" data-v="${o[1]}" onclick="pick('${f.key}','${o[1]}','${o[0]}')">${o[1]}</button>`).join('')}</div>`;
+    } else {
+      body=`<div class="opt-grid">${f.opts.map(o=>`<button class="opt-btn" data-k="${f.key}" data-v="${o[1]}" onclick="pick('${f.key}','${o[1]}','${o[0]}')"><span class="opt-name">${o[0]}</span><span class="opt-code">${o[1]}</span></button>`).join('')}</div>`;
+    }
+    el.innerHTML=`<div class="sec-hdr" onclick="togSec('${f.key}')"><span class="cod-tag">COD ${f.key}</span><span class="sec-name">${f.label}</span><span class="sec-val" id="sc${f.key}"></span><span class="sec-arr">▶</span></div><div class="sec-body">${body}</div>`;
+    sc.appendChild(el);
+  });
+  if(fields.some(f=>f.type==='mun'))renderMuns(MUNS);
+}
+
+function togSec(k){
+  const el=document.getElementById('sec'+k),was=el.classList.contains('is-open');
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('is-open'));
+  if(!was)el.classList.add('is-open');
+}
+function pick(k,v,name){
+  sel[k]={v,name};
+  document.querySelectorAll(`[data-k="${k}"]`).forEach(b=>b.classList.toggle('sel',b.dataset.v===v));
+  document.getElementById('sc'+k).textContent=v;
+  document.getElementById('sec'+k).classList.add('is-done');
+  advance(k); updatePre(); upProg();
+}
+function advance(k){
+  const fields=COMPANIES[currentCompany]?.fields||[];
+  const idx=fields.findIndex(f=>f.key===k);
+  if(idx<fields.length-1){
+    setTimeout(()=>{
+      document.querySelectorAll('.section').forEach(s=>s.classList.remove('is-open'));
+      const nx=document.getElementById('sec'+fields[idx+1].key);
+      if(nx){nx.classList.add('is-open');nx.scrollIntoView({behavior:'smooth',block:'nearest'});}
+    },200);
+  }
+}
+function filterMuns(){
+  const q=(document.getElementById('munQ')?.value||'').toLowerCase();
+  renderMuns(q?MUNS.filter(m=>m.name.toLowerCase().includes(q)||m.d.some(d=>d.n.toLowerCase().includes(q))):MUNS);
+}
+function renderMuns(list){
+  const ml=document.getElementById('munList'); if(!ml)return;
+  ml.innerHTML=list.map(m=>{
+    const has=m.d.length>1,isExp=expandedMun===m.num,isSel=sel.B&&sel.B.munNum===m.num;
+    return `<div class="mun-item"><div class="mun-row${isExp?' expanded':''}" onclick="togMun('${m.num}',${has})"><span class="mun-name">${m.name}</span><span class="mun-num">${m.num}</span>${has?'<span class="mun-arr">▶</span>':''}</div>${has?`<div class="dist-panel${isExp?' open':''}">${m.d.map(d=>`<div class="dist-row${isSel&&sel.B.distCode===d.c?' sel':''}" onclick="pickDist('${m.num}','${m.name}','${d.n}','${d.c}')"><span class="dist-name${d.c==='SDE'?' sede':''}">${d.n}</span><span class="dist-code">${d.c}</span></div>`).join('')}</div>`:''}</div>`;
+  }).join('');
+}
+function togMun(num,has){
+  if(!has){const m=MUNS.find(x=>x.num===num);if(m)pickDist(num,m.name,'Sede','SDE');return;}
+  expandedMun=expandedMun===num?null:num; filterMuns();
+}
+function pickDist(munNum,munName,distName,distCode){
+  sel.B={v:munNum,munNum,munName,distName,distCode};
+  const display=distCode==='SDE'?munNum:`${munNum}-${distCode}`;
+  document.getElementById('scB').textContent=display;
+  document.getElementById('secB').classList.add('is-done');
+  expandedMun=munNum; filterMuns(); advance('B'); updatePre(); upProg();
+}
+function getCode(){
+  if(!currentCompany)return'';
+  const fields=COMPANIES[currentCompany].fields;
+  return fields.map(f=>{
+    if(f.type==='mun'){if(!sel.B)return'???';return sel.B.distCode==='SDE'?sel.B.munNum:`${sel.B.munNum}-${sel.B.distCode}`;}
+    return sel[f.key]?.v||'??';
+  }).join('-');
+}
+function isComplete(){
+  if(!currentCompany)return false;
+  return COMPANIES[currentCompany].fields.every(f=>sel[f.key]);
+}
+function updatePre(){
+  const code=getCode();
+  const pre=document.getElementById('pre'),btn=document.getElementById('cpyBtn'),dw=document.getElementById('dupW');
+  if(!currentCompany){pre.innerHTML='<span class="ph">Selecione a concessionária para começar</span>';pre.style.color='';btn.disabled=true;dw.classList.remove('show');return;}
+  if(isComplete()){
+    pre.textContent=code; pre.style.color='var(--gray-900)';
+    const dup=window.checkDup(code,currentCompany);
+    if(dup){
+      const dt=dup.at?.toDate?dup.at.toDate():new Date();
+      dw.classList.add('show');
+      dw.innerHTML='&#9888; Código já registrado por <strong>'+dup.name+'</strong> em '+dt.toLocaleDateString('pt-BR')+' — não é possível registrar novamente.';
+      btn.disabled=true;
+    } else {
+      dw.classList.remove('show'); dw.innerHTML='';
+      btn.disabled=false;
+    }
+  } else {
+    pre.innerHTML='<span style="color:var(--gray-300);font-size:14px">'+( code||'...')+'</span>'; pre.style.color=''; btn.disabled=true; dw.classList.remove('show');
+  }
+}
+function upProg(){
+  if(!currentCompany){document.getElementById('pTxt').textContent='Selecione uma concessionária';document.getElementById('progFill').style.width='0%';return;}
+  const fields=COMPANIES[currentCompany].fields;
+  const cnt=fields.filter(f=>sel[f.key]).length;
+  const pct=Math.round(cnt/fields.length*100);
+  document.getElementById('pTxt').textContent=`${cnt} de ${fields.length} selecionados`;
+  document.getElementById('progFill').style.width=pct+'%';
+  fields.forEach(f=>{const d=document.getElementById('pd'+f.key);if(d){d.classList.toggle('done',!!sel[f.key]);d.classList.remove('curr');}});
+  const next=fields.find(f=>!sel[f.key]);
+  if(next){const d=document.getElementById('pd'+next.key);if(d)d.classList.add('curr');}
+}
+async function doCopy(){
+  const code=getCode(); if(!isComplete())return;
+  const dup=window.checkDup(code,currentCompany);
+  if(dup){alert('Código já registrado por '+dup.name+'. Não é possível duplicar dentro da mesma empresa.');return;}
+  const projectId=document.getElementById('projectSelect')?.value||null;
+  const saved=await window.saveCode(code,currentCompany,projectId);
+  if(!saved){alert('Código já existente para esta empresa.');return;}
+  logAudit('code_created','Código '+code+' ('+currentCompany+')');
+  await navigator.clipboard.writeText(code);
+  const b=document.getElementById('cpyBtn');
+  b.textContent='✓ Copiado!'; b.classList.add('copied');
+  setTimeout(()=>{b.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copiar e Registrar';b.classList.remove('copied');},2000);
+}
+function resetAll(){
+  sel={}; expandedMun=null;
+  document.querySelectorAll('.opt-btn,.seq-btn').forEach(b=>b.classList.remove('sel'));
+  document.querySelectorAll('.section').forEach((s,i)=>{s.classList.remove('is-done','is-open');if(i===0)s.classList.add('is-open');});
+  document.querySelectorAll('[id^="sc"]').forEach(v=>v.textContent='');
+  const mq=document.getElementById('munQ');if(mq)mq.value='';
+  filterMuns(); updatePre(); upProg();
+}
+window.cpyH=(c,btn)=>navigator.clipboard.writeText(c).then(()=>{btn.textContent='✓';setTimeout(()=>btn.textContent='Copiar',1500);});
+// ── THEME ──
+function initTheme(){
+  const saved=localStorage.getItem('a2zcode_theme')||'light';
+  document.documentElement.setAttribute('data-theme',saved);
+  updateThemeIcon(saved);
+}
+function toggleTheme(){
+  const current=document.documentElement.getAttribute('data-theme')||'light';
+  const next=current==='light'?'dark':'light';
+  document.documentElement.setAttribute('data-theme',next);
+  localStorage.setItem('a2zcode_theme',next);
+  updateThemeIcon(next);
+}
+function updateThemeIcon(theme){
+  const btn=document.getElementById('themeBtn');
+  if(!btn)return;
+  btn.innerHTML=theme==='dark'
+    ?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>'
+    :'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+}
+initTheme();
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',()=>window.checkInviteToken&&window.checkInviteToken());}else{setTimeout(()=>window.checkInviteToken&&window.checkInviteToken(),800);}
+
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter')return;
+  if(document.getElementById('registerForm')?.style.display!=='none')window.doRegister();
+  else window.doLogin();
+});
+</script>
+
+<!-- PWA INSTALL BANNER -->
+<div id="pwaBanner" style="display:none;background:var(--gray-900);color:white;padding:10px 20px;font-size:13px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+  <span>Instale o A2ZCode no seu celular para acesso rápido</span>
+  <div style="display:flex;gap:8px">
+    <button id="pwaInstallBtn" style="background:var(--surface);color:var(--text);border:none;border-radius:6px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Instalar</button>
+    <button onclick="document.getElementById('pwaBanner').style.display='none'" style="background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;font-size:18px;line-height:1">×</button>
+  </div>
+</div>
+
+</body>
+</html>

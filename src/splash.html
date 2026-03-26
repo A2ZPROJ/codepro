@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodePro</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:#0a0f1e;color:#f1f5f9;min-height:100vh;display:flex;flex-direction:column;user-select:none;-webkit-app-region:drag}
+button,input,select{-webkit-app-region:no-drag}
+
+.header{background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);padding:20px 28px;display:flex;align-items:center;gap:14px;border-bottom:1px solid rgba(37,99,235,.25)}
+.logo-icon{width:48px;height:48px;border-radius:12px;background:#0f172a;border:2px solid rgba(37,99,235,.4);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo-icon svg{width:28px;height:28px}
+.logo-text{flex:1}
+.logo-name{font-size:22px;font-weight:700;letter-spacing:-.5px;color:#fff}
+.logo-name span{color:#2563eb}
+.logo-sub{font-size:11px;font-weight:500;color:#2563eb;text-transform:uppercase;letter-spacing:2px;margin-top:2px}
+.version-badge{font-size:11px;font-weight:600;background:rgba(37,99,235,.15);color:#60a5fa;border:1px solid rgba(37,99,235,.3);padding:4px 10px;border-radius:20px;white-space:nowrap}
+
+/* ACTIVATED STATE */
+#activatedView{display:none;flex:1;padding:24px 28px;flex-direction:column;gap:0}
+#activatedView.show{display:flex}
+
+.greeting{font-size:20px;font-weight:700;color:#fff;margin-bottom:4px}
+.greeting-sub{font-size:13px;color:#64748b;margin-bottom:20px}
+
+.info-table{width:100%;border-collapse:collapse;margin-bottom:20px}
+.info-table tr{border-bottom:1px solid rgba(255,255,255,.06)}
+.info-table tr:last-child{border-bottom:none}
+.info-table td{padding:11px 0;font-size:13px}
+.info-table td:first-child{color:#64748b;font-weight:500;width:130px}
+.info-table td:last-child{color:#f1f5f9;font-weight:500}
+
+.role-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700}
+.days-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:rgba(22,163,74,.15);color:#4ade80;border:1px solid rgba(22,163,74,.3)}
+.days-badge.warn{background:rgba(245,158,11,.15);color:#fbbf24;border-color:rgba(245,158,11,.3)}
+.days-badge.danger{background:rgba(239,68,68,.15);color:#f87171;border-color:rgba(239,68,68,.3)}
+
+.update-section{background:rgba(255,255,255,.04);border-radius:10px;padding:14px 16px;margin-bottom:16px;border:1px solid rgba(255,255,255,.08)}
+.update-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#475569;margin-bottom:8px}
+.update-status{font-size:13px;color:#64748b;display:flex;align-items:center;gap:8px}
+.dot{width:6px;height:6px;border-radius:50%;background:#64748b}
+.dot.ok{background:#22c55e;box-shadow:0 0 6px rgba(34,197,94,.5)}
+
+.btn-primary{width:100%;padding:14px;background:#2563eb;color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s;box-shadow:0 4px 20px rgba(37,99,235,.4);margin-top:auto}
+.btn-primary:hover{background:#1d4ed8;transform:translateY(-1px);box-shadow:0 6px 24px rgba(37,99,235,.5)}
+.btn-primary:active{transform:translateY(0)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+
+.btn-secondary{width:100%;padding:10px;background:rgba(255,255,255,.06);color:#94a3b8;border:1px solid rgba(255,255,255,.1);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;margin-top:8px}
+.btn-secondary:hover{background:rgba(255,255,255,.1);color:#cbd5e1}
+
+/* LOGIN FORM */
+#loginView{flex:1;padding:28px;display:flex;flex-direction:column;justify-content:center}
+#loginView.hide{display:none}
+
+.form-title{font-size:18px;font-weight:700;color:#fff;margin-bottom:6px}
+.form-sub{font-size:13px;color:#64748b;margin-bottom:24px;line-height:1.6}
+
+.field{margin-bottom:14px}
+.field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#64748b;margin-bottom:6px}
+.field input{width:100%;padding:10px 14px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:8px;color:#f1f5f9;font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color .15s}
+.field input:focus{border-color:#2563eb;background:rgba(37,99,235,.08)}
+.field input.code-input{font-family:'DM Mono',monospace;font-size:16px;font-weight:500;letter-spacing:3px;text-transform:uppercase;text-align:center}
+.field input::placeholder{color:#475569;letter-spacing:0;font-family:'DM Sans',sans-serif;font-size:13px}
+
+.error-msg{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px 14px;font-size:12px;color:#f87171;margin-bottom:14px;display:none}
+.error-msg.show{display:block}
+
+.footer-brand{display:flex;align-items:center;justify-content:center;gap:10px;padding:16px;border-top:1px solid rgba(255,255,255,.06);margin-top:auto}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo-icon">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="4" y="4" width="11" height="24" rx="3" fill="#2563eb"/>
+      <rect x="17" y="4" width="11" height="4" rx="2" fill="#2563eb"/>
+      <rect x="17" y="10" width="11" height="4" rx="2" fill="#2563eb"/>
+      <rect x="17" y="16" width="11" height="4" rx="2" fill="#2563eb"/>
+      <rect x="17" y="22" width="7" height="4" rx="2" fill="#60a5fa"/>
+    </svg>
+  </div>
+  <div class="logo-text">
+    <div class="logo-name">Code<span>Pro</span></div>
+    <div class="logo-sub">Gestão de Documentos</div>
+  </div>
+  <div class="version-badge" id="versionBadge">v1.0.0</div>
+  <button id="closeBtn" onclick="window.close()" style="-webkit-app-region:no-drag;width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#64748b;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0" onmouseover="this.style.background='rgba(239,68,68,.2)';this.style.color='#f87171'" onmouseout="this.style.background='rgba(255,255,255,.08)';this.style.color='#64748b'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+</div>
+
+<!-- ACTIVATED -->
+<div id="activatedView">
+  <div class="greeting" id="greetingText">Bom dia!</div>
+  <div class="greeting-sub">Seu sistema está ativo e pronto para uso.</div>
+
+  <table class="info-table">
+    <tr><td>Usuário</td><td id="infoName">—</td></tr>
+    <tr><td>Empresa</td><td id="infoCompany">—</td></tr>
+    <tr><td>Nível de acesso</td><td><span class="role-badge" id="infoRole">—</span></td></tr>
+    <tr><td>Licença válida até</td><td id="infoExpire">—</td></tr>
+    <tr><td>Dias restantes</td><td><span class="days-badge" id="infoDays">—</span></td></tr>
+    <tr><td>Versão</td><td id="infoVersion">—</td></tr>
+  </table>
+
+  <div class="update-section">
+    <div class="update-label">Atualizações</div>
+    <div class="update-status" id="updateStatus">
+      <span class="dot" id="updateDot"></span>
+      <span id="updateText">Verificando...</span>
+    </div>
+  </div>
+
+  <button class="btn-primary" id="startBtn">
+    Começar a usar
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+  </button>
+  <button class="btn-secondary" id="changeLicenseBtn">Alterar acesso</button>
+</div>
+
+<!-- LOGIN FORM -->
+<div id="loginView">
+  <div class="form-title">Acessar CodePro</div>
+  <div class="form-sub">Digite seu nome e o código de acesso fornecido pelo administrador.</div>
+
+  <div class="error-msg" id="errorMsg"></div>
+
+  <div class="field">
+    <label>Seu nome completo</label>
+    <input type="text" id="inputName" placeholder="Ex: Lucas Abdala"/>
+  </div>
+  <div class="field">
+    <label>Código de acesso</label>
+    <input type="text" id="inputKey" class="code-input" placeholder="XXXX-XXXX" maxlength="9" oninput="formatKey(this)"/>
+  </div>
+
+  <button class="btn-primary" id="loginBtn" onclick="doLogin()">
+    Entrar
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+  </button>
+</div>
+
+<div class="footer-brand" style="display:flex;align-items:center;justify-content:center;gap:12px;padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.2)">
+  <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAAAGaklEQVR4nO1X3Ytd1RVfa+99Z3rvnZn0Zr4iksloO0oQRamVlkyh6EMpVNIHg9AXQenHk0boQwUlD9oXFRpQ2pemf0CQWkuhrQjTB6kt2NJImpgYa3InydiZazJz7j337o+19urD7NM5c5P5siAVZsFhc9bZe+3f+q2PvQ/AruzK51xEBEVEi4jZ5NHHjh1TnyUolTbGT7HWiMi2we5ogwRIISIXuoWFhYnR0dFpRNyPiOMAMBxjrAAAA0BHRFqIeDmEcLFer18p2VIAAIgYd4JhQymHaGVl5Q7v/bNE9DYzX5NtCDNnRPS3EMKLeZ7f3w/0f5IilK1Wa4SZXxGR7nZAbSQxRmHm15aXl7+0FcgtQ5wWS6fTmahWq3/QWt8LABEAFABAjLEFAKdijGdEpKmUuu69J6210VqPiMitiHgnIt6nlLo1mWUA0DHGJWvtw/V6/a8ioj5VuFNBKCKaSwS4FLJ57/2Psiwb246d5eXlhnPuCBGdSnZCsvPvdrs9UezTv25TBkVEA0DsdDoPDg0NvRVj7InIgIh8EEL4Vq1WawIAhhAeEpGvIeJtiDgsIhEAlkXkIiK+a4x5GxEtAMDc3Jw5dOjQG0qpBwHAIWLdOfdMrVZ7+WYYtgKIiChnz54dHhoa2lPoY4z5gQMHrocQvquUekEpdddmdmKM7xPRsatXr/52enq61m63lVJqfwhBAACUUr2RkZGFhKdT7hIbAixyIoTwM2PM12OMDgAMAGRa62+HEA4bY35TYEgPpzkIAJRGDSlfnXNHK5XK95RS0wBgk17SOJBsfRMRz2yak0XVZlk2zsy2vwq73e6jzPy+iEQR8Wn8b5Eyc+hbEpL+7865n29R5PcUBEHh2U1EiwjWarXvKKUGAcAnRhgAOlrrryql7kwMVdLoQghPe+/vDiHcRUSPAMAniSENAKiUul0ptVLmovQUYdUbRbXMoAIAIKI3k1dU8vCC9/4nItJmZpcYjkT06347zHw+reGiAxDRY71e73nn3FsF44V9Zj4jIntl9Xy/efoV4Lrd7pSI9JKBSESLyVDHOfdSnueHrbUz1tqZdrs9MTc3Z0RkxHv/DSJ6jpk/KAGIIkLMTM1ms9putyeZ+ULSF+3mUrfbnSpj2AigSew9lTbwIiLW2idF5HJBIzP/vljjvZ9l5hPMfKkvnygBKEC8IiJjzPxxKTeFmRettQfT/puHuBTedwoGmDlPx9ybJd18lmUHieh3faC8pGZeFmb+VZZlY8x8uuw4M7fzPH+gTM6W4Ky1B5mZitwgornE1DPJeO69P1oKI8lanhWAHBGdYuZXvfez58+fH2Tmd0vgIjP7EMJDae/KpuD6wvtcMtRLAH8sIibP8wdEREIIvySi19McJ6ndMPM7RPSs9352aWlpuGybiF5P7YcTOA4hHAYAOHny5IZhXVcpslo5GGP8h1LqblgtfRVjvKKUsmn+Lc65nw4ODj5fWqq8938OIZwwxiwyszLGDDLzFxBRxxjriHhHCGG+Xq/Paq0fZuYfGGNOiEgdAELJFpdPkjI4ncJ4f4xRZH3zLYfuPefcL0qh3baEEP5prX01sXhaRJoicjE9H6bxaDma5aREAACt9SPJgwAAlRhjTyl1PcYYlVIqxvgXY8x+AKCkk7L3G0QqAoBBRIuIKr33n9+SMDTKSlMKLS8sLNQB4AlY7eY6ffv+/Pz8G9Vq1YyNjXGr1cKJiYmLAGCUuqFdbV6FAKMiMrLBvCLdBsrKYiIiYrTWTonIqRgjy2pFu06n88epqaneOldFfggAg7B2VHIybGCVeYa1SwAlfdRar6Rqbab55eIoLsF/Kr1v76cpgZUsy75srR1fWlp6b2BgYJKZF8fHx5GZxycnJz8EADhy5Ig+fvx4w1pbExHbaDTGrbUfGWNuqVQqLQAA7/3ovn37/rWdvW8AKDceMwKJYSJ63FpLzrmWMWa2UqmcrlQqHSKy3nujlLpsrb1tz549+2OMH1lrzzHzfbVabckYU2Vm45yjarX6FWvta8PDwxcSa+VrVSxfs3b627kPET9uNpvV0dHRvczsmXmoXq/vtdZeEpEZZr7SaDRUnudfvHbt2jlrbWVmZgZDCDNEtMjMTik1VavVziFiJulSvBMc/1ey4x/35C2KrHMaYa1NFB8QEaOsXZvWfQMA+Vwztyu7siu78hnJfwCrkJITavOoUQAAAABJRU5ErkJggg==" style="height:32px;width:auto;opacity:.9" alt="A2Z Projetos"/>
+  <div style="font-size:11px;color:#334155;line-height:1.6">
+    <span style="color:#475569;display:block;font-size:10px">CodePro é um produto de</span>
+    <strong style="color:#64748b;font-size:12px;letter-spacing:.5px">A2Z PROJETOS LTDA</strong>
+  </div>
+</div>
+
+<script>
+const { ipcRenderer } = require('electron');
+const Store = require('./store');
+
+const SUPA_URL = 'https://xszpzsmdpbgaiodeqcpi.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhzenB6c21kcGJnYWlvZGVxY3BpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzMTI5ODYsImV4cCI6MjA4OTg4ODk4Nn0.Wv_tcovD5nc13tmrfkgsVb6M6tS-CC7q6HVjphpzTrQ';
+
+const ROLES_INFO = {
+  master:       { label:'Master',       color:'#7c3aed' },
+  editor:       { label:'Editor',       color:'#2563eb' },
+  visualizador: { label:'Visualizador', color:'#d97706' },
+};
+
+const store = new Store();
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Bom dia';
+  if (h < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+function formatKey(input) {
+  let v = input.value.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+  if (v.length > 4) v = v.slice(0, 4) + '-' + v.slice(4, 8);
+  input.value = v;
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+function hideError() {
+  document.getElementById('errorMsg').classList.remove('show');
+}
+
+async function queryUser(code) {
+  try {
+    const resp = await fetch(
+      `${SUPA_URL}/rest/v1/usuarios?access_code=eq.${encodeURIComponent(code)}&limit=1&select=*`,
+      {
+        headers: {
+          'apikey': SUPA_KEY,
+          'Authorization': `Bearer ${SUPA_KEY}`,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+    if (!resp.ok) return null;
+    const users = await resp.json();
+    return users && users.length ? users[0] : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function doLogin() {
+  hideError();
+  const name = document.getElementById('inputName').value.trim();
+  const rawKey = document.getElementById('inputKey').value.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+
+  if (!name) { showError('Informe seu nome completo.'); return; }
+  if (rawKey.length < 8) { showError('Informe o código de acesso completo (XXXX-XXXX).'); return; }
+
+  const code = rawKey.slice(0, 4) + '-' + rawKey.slice(4, 8);
+
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  btn.textContent = 'Verificando...';
+
+  const user = await queryUser(code);
+
+  btn.disabled = false;
+  btn.innerHTML = 'Entrar <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+
+  if (!user) {
+    showError('Código de acesso inválido. Verifique e tente novamente.');
+    return;
+  }
+
+  if (user.ativo === false) {
+    showError('Acesso desativado. Contate o administrador.');
+    return;
+  }
+
+  if (user.license_expires) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const expires = new Date(user.license_expires + 'T00:00:00');
+    if (today > expires) {
+      showError(`Licença expirada em ${expires.toLocaleDateString('pt-BR')}. Contate o administrador.`);
+      return;
+    }
+  }
+
+  store.set('license', user);
+  showActivated(user);
+}
+
+function showActivated(user) {
+  document.getElementById('loginView').classList.add('hide');
+  const av = document.getElementById('activatedView');
+  av.classList.add('show');
+
+  const firstName = (user.nome || 'Usuário').split(' ')[0].toUpperCase();
+  document.getElementById('greetingText').textContent = `${getGreeting()}, ${firstName}!`;
+  document.getElementById('infoName').textContent = (user.nome || '—').toUpperCase();
+  document.getElementById('infoCompany').textContent = (user.empresa || '—').toUpperCase();
+
+  const roleInfo = ROLES_INFO[user.role] || ROLES_INFO.visualizador;
+  const roleEl = document.getElementById('infoRole');
+  roleEl.textContent = roleInfo.label;
+  roleEl.style.background = roleInfo.color + '22';
+  roleEl.style.color = roleInfo.color;
+  roleEl.style.border = `1px solid ${roleInfo.color}44`;
+
+  if (user.license_expires) {
+    const expires = new Date(user.license_expires + 'T00:00:00');
+    document.getElementById('infoExpire').textContent = expires.toLocaleDateString('pt-BR');
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const daysLeft = Math.ceil((expires - today) / 86400000);
+    const daysEl = document.getElementById('infoDays');
+    daysEl.textContent = `${daysLeft} dias`;
+    daysEl.classList.remove('warn', 'danger');
+    if (daysLeft < 15) daysEl.classList.add('danger');
+    else if (daysLeft < 45) daysEl.classList.add('warn');
+  } else {
+    document.getElementById('infoExpire').textContent = 'Sem expiração';
+    document.getElementById('infoDays').textContent = '∞';
+  }
+
+  document.getElementById('infoVersion').textContent = `CodePro v${require('../package.json').version} · ${new Date().getFullYear()}`;
+
+  setTimeout(() => {
+    document.getElementById('updateDot').classList.add('ok');
+    document.getElementById('updateText').textContent = 'Sistema atualizado';
+  }, 1200);
+}
+
+function init() {
+  const ver = require('../package.json').version;
+  document.getElementById('versionBadge').textContent = `v${ver}`;
+
+  const saved = store.get('license');
+  if (saved && saved.id) {
+    // Re-validate: check expiry
+    if (saved.license_expires) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const expires = new Date(saved.license_expires + 'T00:00:00');
+      if (today > expires) {
+        store.delete('license');
+        return;
+      }
+    }
+    showActivated(saved);
+  }
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  const saved = store.get('license');
+  ipcRenderer.send('splash-done', saved || {});
+});
+
+document.getElementById('changeLicenseBtn').addEventListener('click', () => {
+  store.delete('license');
+  document.getElementById('activatedView').classList.remove('show');
+  document.getElementById('loginView').classList.remove('hide');
+  hideError();
+  document.getElementById('inputName').value = '';
+  document.getElementById('inputKey').value = '';
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+init();
+</script>
+</body>
+</html>
