@@ -3,22 +3,30 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-// 1) Tenta buscar a sessão do processo principal via IPC síncrono
 let licenseData = null;
+
+// 1) PRINCIPAL: lê do additionalArguments passado pelo main process na criação da janela
 try {
-  licenseData = ipcRenderer.sendSync('get-session-sync');
+  const arg = process.argv.find(a => a.startsWith('--codepro-lic='));
+  if (arg) {
+    const b64 = arg.slice('--codepro-lic='.length);
+    if (b64) licenseData = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+  }
 } catch(e) {}
 
-// 2) Fallback: lê diretamente do arquivo de store se o IPC não retornou nada
-//    Preloads sempre têm acesso ao Node.js, mesmo com nodeIntegration: false
+// 2) Fallback: IPC síncrono com o processo principal
+if (!licenseData || !licenseData.id) {
+  try {
+    licenseData = ipcRenderer.sendSync('get-session-sync');
+  } catch(e) {}
+}
+
+// 3) Fallback final: lê direto do arquivo de store em disco
 if (!licenseData || !licenseData.id) {
   try {
     const storePath = path.join(os.homedir(), '.codepro', 'config.json');
-    const raw = fs.readFileSync(storePath, 'utf8');
-    const data = JSON.parse(raw);
-    if (data && data.license && data.license.id) {
-      licenseData = data.license;
-    }
+    const data = JSON.parse(fs.readFileSync(storePath, 'utf8'));
+    if (data?.license?.id) licenseData = data.license;
   } catch(e) {}
 }
 

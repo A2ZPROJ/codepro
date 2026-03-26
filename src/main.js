@@ -25,6 +25,11 @@ function createSplash(){
 }
 
 function createMain(licenseData){
+  // Passa a licença diretamente como argumento do processo — método mais confiável
+  const licArg = licenseData
+    ? `--codepro-lic=${Buffer.from(JSON.stringify(licenseData)).toString('base64')}`
+    : '--codepro-lic=';
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -36,8 +41,8 @@ function createMain(licenseData){
       preload: path.join(__dirname,'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      // Allow loading local files and external resources (Supabase, fonts, etc)
       webSecurity: false,
+      additionalArguments: [licArg],
     },
     backgroundColor: '#0f172a',
     show: false,
@@ -51,7 +56,6 @@ function createMain(licenseData){
     if(!isDev) checkForUpdates();
   });
 
-  // Open external links in browser
   mainWindow.webContents.setWindowOpenHandler(({url})=>{
     shell.openExternal(url);
     return {action:'deny'};
@@ -65,7 +69,6 @@ ipcMain.on('splash-done', (event, licenseData)=>{
   createMain(licenseData);
 });
 
-// Preload busca o usuário da sessão de forma síncrona
 ipcMain.on('get-session-sync', (event)=>{
   event.returnValue = sessionUser || null;
 });
@@ -93,16 +96,7 @@ autoUpdater.on('update-downloaded', info=>{
 ipcMain.on('install-update', ()=> autoUpdater.quitAndInstall());
 
 ipcMain.on('sign-out', ()=>{
-  const path = require('path');
-  const fs = require('fs');
-  try {
-    const configPath = path.join(app.getPath('userData'), 'config.json');
-    if (fs.existsSync(configPath)) {
-      const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      delete data.license;
-      fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
-    }
-  } catch(e) {}
+  sessionUser = null;
   if (mainWindow) { mainWindow.close(); mainWindow = null; }
   createSplash();
 });

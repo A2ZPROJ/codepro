@@ -10,9 +10,9 @@
 <meta name="theme-color" content="#0f0f0f">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="A2ZCode">
+<meta name="apple-mobile-web-app-title" content="CodePro">
 <link rel="manifest" href="manifest.json">
-<title>A2ZCode — Gestão de Documentos</title>
+<title>CodePro — Gestão de Documentos</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
@@ -1022,13 +1022,14 @@ body {
     <div class="auth-brand">
       <div class="auth-brand-logo">
         <svg width="40" height="40" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="32" height="32" rx="8" fill="white"/>
-          <path d="M8 10h6a6 6 0 010 12H8V10z" fill="#0f0f0f"/>
-          <rect x="18" y="10" width="6" height="3" rx="1.5" fill="#0f0f0f"/>
-          <rect x="18" y="14.5" width="6" height="3" rx="1.5" fill="#0f0f0f"/>
-          <rect x="18" y="19" width="4" height="3" rx="1.5" fill="#0f0f0f"/>
+          <rect width="32" height="32" rx="8" fill="#0f172a"/>
+          <rect x="4" y="4" width="10" height="24" rx="2.5" fill="#2563eb"/>
+          <rect x="16" y="4" width="12" height="5" rx="2" fill="#2563eb"/>
+          <rect x="16" y="11" width="12" height="5" rx="2" fill="#2563eb"/>
+          <rect x="16" y="18" width="12" height="5" rx="2" fill="#2563eb"/>
+          <rect x="16" y="25" width="8" height="3" rx="1.5" fill="#60a5fa"/>
         </svg>
-        <span class="auth-brand-name">A2Z<span>Code</span></span>
+        <span class="auth-brand-name">Code<span>Pro</span></span>
       </div>
       <div class="auth-headline">Gestão de<strong>Codificação<br>de Documentos</strong></div>
       <div class="auth-tagline">Padronize e controle a nomenclatura<br>dos seus documentos de engenharia.</div>
@@ -1113,13 +1114,14 @@ body {
     <div class="topbar-brand">
       <div style="display:flex;align-items:center;gap:10px">
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="32" height="32" rx="8" fill="white"/>
-          <path d="M8 10h6a6 6 0 010 12H8V10z" fill="#0f0f0f"/>
-          <rect x="18" y="10" width="6" height="3" rx="1.5" fill="#0f0f0f"/>
-          <rect x="18" y="14.5" width="6" height="3" rx="1.5" fill="#0f0f0f"/>
-          <rect x="18" y="19" width="4" height="3" rx="1.5" fill="#0f0f0f"/>
+          <rect width="32" height="32" rx="8" fill="#0f172a"/>
+          <rect x="4" y="4" width="10" height="24" rx="2.5" fill="#2563eb"/>
+          <rect x="16" y="4" width="12" height="5" rx="2" fill="#2563eb"/>
+          <rect x="16" y="11" width="12" height="5" rx="2" fill="#2563eb"/>
+          <rect x="16" y="18" width="12" height="5" rx="2" fill="#2563eb"/>
+          <rect x="16" y="25" width="8" height="3" rx="1.5" fill="#60a5fa"/>
         </svg>
-        <span style="font-size:16px;font-weight:700;color:white;letter-spacing:-.5px;font-family:'DM Sans',sans-serif">A2Z<span style="color:rgba(255,255,255,.45);font-weight:400">Code</span></span>
+        <span style="font-size:16px;font-weight:700;color:white;letter-spacing:-.5px;font-family:'DM Sans',sans-serif">Code<span style="color:#60a5fa;font-weight:400">Pro</span></span>
       </div>
     </div>
     <div class="topbar-right">
@@ -1712,7 +1714,7 @@ function resetAll(){
 window.cpyH=(c,btn)=>navigator.clipboard.writeText(c).then(()=>{btn.textContent='✓';setTimeout(()=>btn.textContent='Copiar',1500);});
 // ── THEME ──
 function initTheme(){
-  const saved=localStorage.getItem('a2zcode_theme')||'light';
+  const saved=localStorage.getItem('codepro_theme')||'light';
   document.documentElement.setAttribute('data-theme',saved);
   updateThemeIcon(saved);
 }
@@ -1720,7 +1722,7 @@ function toggleTheme(){
   const current=document.documentElement.getAttribute('data-theme')||'light';
   const next=current==='light'?'dark':'light';
   document.documentElement.setAttribute('data-theme',next);
-  localStorage.setItem('a2zcode_theme',next);
+  localStorage.setItem('codepro_theme',next);
   updateThemeIcon(next);
 }
 function updateThemeIcon(theme){
@@ -1742,7 +1744,7 @@ document.addEventListener('keydown',e=>{
 
 <!-- PWA INSTALL BANNER -->
 <div id="pwaBanner" style="display:none;background:var(--gray-900);color:white;padding:10px 20px;font-size:13px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-  <span>Instale o A2ZCode no seu celular para acesso rápido</span>
+  <span>Instale o CodePro no seu celular para acesso rápido</span>
   <div style="display:flex;gap:8px">
     <button id="pwaInstallBtn" style="background:var(--surface);color:var(--text);border:none;border-radius:6px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Instalar</button>
     <button onclick="document.getElementById('pwaBanner').style.display='none'" style="background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;font-size:18px;line-height:1">×</button>
