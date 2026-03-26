@@ -3,8 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <script>
-// window.__LICENSE__ is injected by preload.js from the saved session file.
-// No localStorage reading needed in the new access-code system.
+// Lê licença do query param ?lic= passado pelo main process via loadFile({ query })
+// Este script inline roda de forma SÍNCRONA antes de qualquer module script
+(function(){
+  try {
+    var p = new URLSearchParams(window.location.search);
+    var b = p.get('lic');
+    if (b) window.__LICENSE__ = JSON.parse(atob(b));
+  } catch(e) {}
+})();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0f0f0f">
@@ -23,7 +30,7 @@
 
   const ROLES = {
     master:       { label:'Master',       color:'#7c3aed', bg:'#ede9fe', canView:true, canCreate:true,  canAdmin:true,  canDelete:true  },
-    editor:       { label:'Editor',       color:'#2563eb', bg:'#eff6ff', canView:true, canCreate:true,  canAdmin:false, canDelete:false },
+    criador:      { label:'Editor',       color:'#2563eb', bg:'#eff6ff', canView:true, canCreate:true,  canAdmin:false, canDelete:false },
     visualizador: { label:'Visualizador', color:'#d97706', bg:'#fef3c7', canView:true, canCreate:false, canAdmin:false, canDelete:false },
   };
 
@@ -40,10 +47,18 @@
   async function init() {
     const lic = window.__LICENSE__ || window.electronAPI?.getLicense() || {};
     if (!lic.id) {
-      document.body.style.display = 'flex';
-      document.body.style.alignItems = 'center';
-      document.body.style.justifyContent = 'center';
-      document.body.innerHTML = '<div style="text-align:center;color:#64748b;font-family:DM Sans,sans-serif;padding:40px"><div style="font-size:18px;font-weight:600;color:#f1f5f9;margin-bottom:8px">Sessão inválida</div><div style="font-size:14px">Feche e abra o CodePro novamente.</div></div>';
+      const dbg = {
+        hasAPI: !!window.electronAPI,
+        fromAPI: JSON.stringify(window.electronAPI?.getLicense()),
+        fromWin: JSON.stringify(window.__LICENSE__),
+        urlSearch: window.location.search.slice(0,80),
+      };
+      document.body.style.cssText = 'display:flex;align-items:center;justify-content:center;background:#0a0f1e;min-height:100vh';
+      document.body.innerHTML = `<div style="text-align:center;color:#64748b;font-family:DM Sans,sans-serif;padding:40px;max-width:500px">
+        <div style="font-size:18px;font-weight:600;color:#f1f5f9;margin-bottom:8px">Sessão inválida</div>
+        <div style="font-size:13px;margin-bottom:20px">Feche e abra o CodePro novamente.</div>
+        <pre style="font-size:10px;color:#475569;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:12px;text-align:left;white-space:pre-wrap">${JSON.stringify(dbg,null,2)}</pre>
+      </div>`;
       return;
     }
     const { data: user } = await sb.from('usuarios').select('*').eq('id', lic.id).single();
@@ -210,7 +225,7 @@
     const roleSelect=!isMe?`
       <select onchange="changeUserRole('${u.id}',this.value)" style="padding:5px 8px;font-family:inherit;font-size:11px;border:1px solid var(--border2);border-radius:6px;color:var(--text);background:var(--surface);cursor:pointer">
         <option value="visualizador"${u.role==='visualizador'?' selected':''}>Visualizador</option>
-        <option value="editor"${u.role==='editor'?' selected':''}>Editor</option>
+        <option value="criador"${u.role==='criador'?' selected':''}>Editor</option>
         <option value="master"${u.role==='master'?' selected':''}>Master</option>
       </select>`:'<span style="font-size:11px;color:var(--text3)">(você)</span>';
     return `<div class="admin-row">
@@ -486,6 +501,17 @@
 
   window.loadInvites = () => {};
 
+  window.openWhatsApp = (e) => {
+    e.preventDefault();
+    const user = window._currentUserData;
+    const nome = user?.nome || 'usuário';
+    const empresa = user?.empresa || '';
+    const msg = `Olá, Lucas! Sou ${nome}${empresa ? ' da ' + empresa : ''} e estou usando o *CodePro* (A2Z Projetos).\n\nPreciso de suporte. Pode me ajudar?`;
+    const url = `https://wa.me/5521989664689?text=${encodeURIComponent(msg)}`;
+    // setWindowOpenHandler no main.js intercepta window.open e abre no browser externo
+    window.open(url, '_blank');
+  };
+
   window.doSignOut = () => {
     if (window.electronAPI?.signOut) {
       window.electronAPI.signOut();
@@ -496,32 +522,51 @@
 
   window.doLogin = window.doRegister = window.doForgotPassword = window.resendVerification = () => {};
 
-  // ── ATUALIZAÇÃO AUTOMÁTICA ──
-  window.startDownload = () => {
-    document.getElementById('ucAvailable').style.display = 'none';
+  // ── ATUALIZAÇÃO AUTOMÁTICA (download automático + reinício silencioso) ──
+  let _ucCountdown = null;
+
+  function showUpdateDownloading(v) {
+    document.getElementById('ucVersionText').textContent = `v${v} em download...`;
     document.getElementById('ucDownloading').style.display = '';
-    window.electronAPI?.downloadUpdate();
-  };
+    document.getElementById('ucReady').style.display = 'none';
+    document.getElementById('updateCard').style.display = '';
+  }
+
+  function showUpdateReady(v) {
+    document.getElementById('ucDownloading').style.display = 'none';
+    document.getElementById('ucReady').style.display = '';
+    document.getElementById('updateCard').style.display = '';
+    // Countdown 2s → reinício automático e silencioso
+    let secs = 2;
+    document.getElementById('ucReadyText').textContent = `Reiniciando em ${secs}s...`;
+    document.getElementById('ucReadyBar').style.width = '100%';
+    clearInterval(_ucCountdown);
+    _ucCountdown = setInterval(() => {
+      secs--;
+      document.getElementById('ucReadyBar').style.width = (secs / 2 * 100) + '%';
+      if (secs <= 0) {
+        clearInterval(_ucCountdown);
+        document.getElementById('ucReadyText').textContent = 'Reiniciando...';
+        window.electronAPI?.installUpdate();
+      } else {
+        document.getElementById('ucReadyText').textContent = `Reiniciando em ${secs}s...`;
+      }
+    }, 1000);
+  }
 
   if (window.electronAPI) {
-    window.electronAPI.onUpdateAvailable(v => {
-      document.getElementById('ucVersionText').textContent = `Versão ${v} disponível`;
-      document.getElementById('ucAvailable').style.display = '';
-      document.getElementById('ucDownloading').style.display = 'none';
-      document.getElementById('ucReady').style.display = 'none';
-      document.getElementById('updateCard').style.display = '';
-    });
+    // Consulta estado atual — resolve race condition (update pode ter sido encontrado durante o splash)
+    const updState = window.electronAPI.getUpdateState?.();
+    if (updState?.status === 'available' || updState?.status === 'downloading') showUpdateDownloading(updState.version);
+    else if (updState?.status === 'downloaded') showUpdateReady(updState.version);
+
+    // Escuta eventos futuros
+    window.electronAPI.onUpdateAvailable(v => showUpdateDownloading(v));
     window.electronAPI.onUpdateProgress(pct => {
       document.getElementById('ucBar').style.width = pct + '%';
       document.getElementById('ucPctText').textContent = pct + '%';
     });
-    window.electronAPI.onUpdateDownloaded(v => {
-      document.getElementById('ucReadyText').textContent = `Versão ${v} baixada`;
-      document.getElementById('ucDownloading').style.display = 'none';
-      document.getElementById('ucAvailable').style.display = 'none';
-      document.getElementById('ucReady').style.display = '';
-      document.getElementById('updateCard').style.display = '';
-    });
+    window.electronAPI.onUpdateDownloaded(v => showUpdateReady(v));
   }
 
   init();
@@ -701,6 +746,15 @@ body {
   font-family: inherit; transition: all var(--transition);
 }
 .signout-btn:hover { border-color: rgba(255,255,255,.25); color: var(--topbar-text); }
+.whatsapp-btn {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 500; color: #64748b;
+  background: none; border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--radius); padding: 5px 11px; cursor: pointer;
+  font-family: inherit; transition: all var(--transition); text-decoration: none;
+}
+.whatsapp-btn:hover { background: rgba(37,211,102,.08); border-color: rgba(37,211,102,.35); color: #4ade80; }
+.whatsapp-btn svg { flex-shrink: 0; transition: color var(--transition); }
 
 /* ── TABS ── */
 .tab-bar { background: var(--surface); border-bottom: 1px solid var(--border); box-shadow: var(--shadow); }
@@ -1134,61 +1188,46 @@ body {
       <span class="topbar-user" id="topbarUser"></span>
       <div class="topbar-avatar" id="topbarAvatar"></div>
       <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Alternar tema"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button>
+      <a class="whatsapp-btn" id="whatsappBtn" href="#" onclick="openWhatsApp(event)" title="Falar com suporte">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.559 4.122 1.535 5.856L.057 23.882a.5.5 0 00.611.61l6.101-1.456A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.891 0-3.667-.523-5.188-1.432l-.374-.22-3.878.926.967-3.793-.242-.389A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+        Suporte
+      </a>
       <button class="signout-btn" onclick="doSignOut()">Sair</button>
     </div>
   </div>
 
   <!-- CARD DE ATUALIZAÇÃO (canto inferior direito) -->
-  <div id="updateCard" style="display:none;position:fixed;bottom:24px;right:24px;z-index:9999;width:320px;background:#0f172a;border:1px solid rgba(37,99,235,.4);border-radius:14px;padding:20px;box-shadow:0 8px 40px rgba(0,0,0,.5);font-family:'DM Sans',sans-serif;animation:ucSlideIn .3s ease">
-    <!-- Estado: disponível -->
-    <div id="ucAvailable">
+  <div id="updateCard" style="display:none;position:fixed;bottom:24px;right:24px;z-index:9999;width:300px;background:#0f172a;border:1px solid rgba(37,99,235,.35);border-radius:12px;padding:16px 18px;box-shadow:0 8px 40px rgba(0,0,0,.6);font-family:'DM Sans',sans-serif;animation:ucSlideIn .3s ease">
+    <!-- Estado: baixando (automático) -->
+    <div id="ucDownloading">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-        <div style="width:36px;height:36px;border-radius:10px;background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div style="width:32px;height:32px;border-radius:8px;background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.5" style="animation:ucSpin 1.5s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
         </div>
-        <div>
-          <div style="font-size:14px;font-weight:700;color:#f1f5f9">Atualização disponível</div>
-          <div style="font-size:12px;color:#64748b" id="ucVersionText">Nova versão disponível</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:#f1f5f9">Baixando atualização</div>
+          <div style="font-size:11px;color:#64748b" id="ucVersionText">Nova versão disponível</div>
         </div>
-        <button onclick="document.getElementById('updateCard').style.display='none'" style="margin-left:auto;background:none;border:none;color:#475569;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0">×</button>
+        <span style="font-size:11px;color:#60a5fa;font-weight:600;font-family:monospace" id="ucPctText">0%</span>
       </div>
-      <p style="font-size:12px;color:#64748b;margin:0 0 14px;line-height:1.6">Deseja baixar agora? O download acontece em segundo plano e você pode continuar usando normalmente.</p>
-      <div style="display:flex;gap:8px">
-        <button onclick="startDownload()" style="flex:1;padding:9px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Baixar agora</button>
-        <button onclick="document.getElementById('updateCard').style.display='none'" style="flex:1;padding:9px;background:rgba(255,255,255,.06);color:#94a3b8;border:1px solid rgba(255,255,255,.1);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">Depois</button>
-      </div>
-    </div>
-    <!-- Estado: baixando -->
-    <div id="ucDownloading" style="display:none">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-        <div style="width:36px;height:36px;border-radius:10px;background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" style="animation:ucSpin 1.5s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
-        </div>
-        <div style="flex:1">
-          <div style="font-size:14px;font-weight:700;color:#f1f5f9">Baixando atualização...</div>
-          <div style="font-size:12px;color:#64748b" id="ucPctText">0%</div>
-        </div>
-      </div>
-      <div style="height:6px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden">
+      <div style="height:4px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden">
         <div id="ucBar" style="height:100%;width:0%;background:linear-gradient(90deg,#2563eb,#60a5fa);border-radius:4px;transition:width .3s ease"></div>
       </div>
     </div>
-    <!-- Estado: pronto para instalar -->
+    <!-- Estado: reiniciando -->
     <div id="ucReady" style="display:none">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-        <div style="width:36px;height:36px;border-radius:10px;background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <div style="width:32px;height:32px;border-radius:8px;background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
         </div>
-        <div>
-          <div style="font-size:14px;font-weight:700;color:#f1f5f9">Pronto para instalar</div>
-          <div style="font-size:12px;color:#64748b" id="ucReadyText">Baixado com sucesso</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700;color:#f1f5f9">Atualização baixada</div>
+          <div style="font-size:11px;color:#64748b" id="ucReadyText">Reiniciando em 2s...</div>
         </div>
-        <button onclick="document.getElementById('updateCard').style.display='none'" style="margin-left:auto;background:none;border:none;color:#475569;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0">×</button>
+        <button onclick="window.electronAPI&&window.electronAPI.installUpdate()" title="Reiniciar agora" style="background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.3);color:#4ade80;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">Agora</button>
       </div>
-      <p style="font-size:12px;color:#64748b;margin:0 0 14px;line-height:1.6">A atualização será instalada ao reiniciar o aplicativo.</p>
-      <div style="display:flex;gap:8px">
-        <button onclick="window.electronAPI&&window.electronAPI.installUpdate()" style="flex:1;padding:9px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Reiniciar agora</button>
-        <button onclick="document.getElementById('updateCard').style.display='none'" style="flex:1;padding:9px;background:rgba(255,255,255,.06);color:#94a3b8;border:1px solid rgba(255,255,255,.1);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">Mais tarde</button>
+      <div style="height:4px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden">
+        <div id="ucReadyBar" style="height:100%;width:100%;background:linear-gradient(90deg,#16a34a,#4ade80);border-radius:4px;transition:width 1s linear"></div>
       </div>
     </div>
   </div>
@@ -1388,7 +1427,7 @@ body {
               <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Nível de acesso</div>
               <select id="newUserRole" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;cursor:pointer">
                 <option value="visualizador">Visualizador</option>
-                <option value="editor">Editor</option>
+                <option value="criador">Editor</option>
                 <option value="master">Master</option>
               </select>
             </div>
@@ -1641,9 +1680,9 @@ function buildSections(fields){
     if(f.type==='mun'){
       body=`<input class="mun-search" id="munQ" placeholder="Pesquisar município ou distrito..." oninput="filterMuns()"><div id="munList"></div>`;
     } else if(f.seq){
-      body=`<div class="seq-row">${f.opts.map(o=>`<button class="seq-btn" data-k="${f.key}" data-v="${o[1]}" onclick="pick('${f.key}','${o[1]}','${o[0]}')">${o[1]}</button>`).join('')}</div>`;
+      body=`<div class="seq-row">${f.opts.map(o=>`<button class="seq-btn" data-k="${f.key}" data-v="${o[1]}" onclick="pick('${f.key}','${o[1]}','${o[0].replace(/'/g,'\\u0027')}')">${o[1]}</button>`).join('')}</div>`;
     } else {
-      body=`<div class="opt-grid">${f.opts.map(o=>`<button class="opt-btn" data-k="${f.key}" data-v="${o[1]}" onclick="pick('${f.key}','${o[1]}','${o[0]}')"><span class="opt-name">${o[0]}</span><span class="opt-code">${o[1]}</span></button>`).join('')}</div>`;
+      body=`<div class="opt-grid">${f.opts.map(o=>`<button class="opt-btn" data-k="${f.key}" data-v="${o[1]}" onclick="pick('${f.key}','${o[1]}','${o[0].replace(/'/g,'\\u0027')}')"><span class="opt-name">${o[0]}</span><span class="opt-code">${o[1]}</span></button>`).join('')}</div>`;
     }
     el.innerHTML=`<div class="sec-hdr" onclick="togSec('${f.key}')"><span class="cod-tag">COD ${f.key}</span><span class="sec-name">${f.label}</span><span class="sec-val" id="sc${f.key}"></span><span class="sec-arr">▶</span></div><div class="sec-body">${body}</div>`;
     sc.appendChild(el);
