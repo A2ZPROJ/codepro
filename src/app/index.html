@@ -42,6 +42,13 @@
     cancelado:    { label:'Cancelado',    color:'#dc2626', bg:'#fee2e2' },
   };
 
+  const CODE_STATUS = {
+    em_elaboracao: { label:'Em elaboração', color:'#2563eb', bg:'#eff6ff' },
+    em_revisao:    { label:'Em revisão',    color:'#d97706', bg:'#fef3c7' },
+    entregue:      { label:'Entregue',      color:'#16a34a', bg:'#dcfce7' },
+    cancelado:     { label:'Cancelado',     color:'#dc2626', bg:'#fee2e2' },
+  };
+
   let currentUser = null;
   window._allCodesData = [];
   window._projects = [];
@@ -124,7 +131,9 @@
 
   function mapCode(r) {
     return { id:r.id, code:r.codigo, company:r.empresa, projectId:r.projeto_id,
-             uid:r.usuario_id, name:r.usuario_nome||'', email:'',
+             uid:r.usuario_id, name:r.usuario_nome||'',
+             statusCodigo:r.status_codigo||'em_elaboracao',
+             nomeDocumento:r.nome_documento||null,
              at:{ toDate: ()=>new Date(r.criado_em) } };
   }
 
@@ -159,6 +168,8 @@
       id:p.id, name:p.nome, company:p.empresa, description:p.descricao,
       status:p.status||'a_iniciar', tipoRelatorio:p.tipo_relatorio,
       dataEntrega:p.data_entrega||null,
+      progresso:typeof p.progresso==='number'?p.progresso:0,
+      observacoes:p.observacoes||null,
       projetista:p.projetista, cadista:p.cadista, coordenador:p.coordenador,
       empresaProjetista:p.empresa_projetista, cliente:p.cliente,
     };
@@ -216,29 +227,48 @@
     return `<span style="font-size:10px;color:var(--text3)">Entrega: ${dt.toLocaleDateString('pt-BR')} (${days}d)</span>`;
   }
 
+  function _progressBar(pct) {
+    const p = Math.min(100, Math.max(0, pct||0));
+    const col = p>=100?'#16a34a':p>=60?'#2563eb':p>=30?'#d97706':'#94a3b8';
+    return `<div style="display:flex;align-items:center;gap:7px;margin-top:6px">
+      <div style="flex:1;height:5px;background:var(--border);border-radius:99px;overflow:hidden">
+        <div style="width:${p}%;height:100%;background:${col};border-radius:99px;transition:width .4s"></div>
+      </div>
+      <span style="font-size:10px;font-weight:700;color:${col};min-width:28px;text-align:right">${p}%</span>
+    </div>`;
+  }
+
   function renderProjectsHTML(projects, el) {
     el.innerHTML = projects.map(p => {
       const st = STATUS_INFO[p.status] || STATUS_INFO.a_iniciar;
       const codes = (window._allCodesData||[]).filter(c=>c.projectId===p.id);
       const team = [_renderPerson(p.projetista,'Projetista:'),_renderPerson(p.cadista,'Cadista:'),_renderPerson(p.coordenador,'Coordenador:')].filter(Boolean).join('');
-      const companies = [_renderEmpresa(p.empresaProjetista,'Projetista:'),_renderEmpresa(p.cliente,'Cliente:')].filter(Boolean).join('');
+      const companies = [_renderEmpresa(p.empresaProjetista,'Empresa:'),_renderEmpresa(p.cliente,'Cliente:')].filter(Boolean).join('');
       const entregaTag = _entregaTag(p.dataEntrega, p.status);
-      const codesHtml = codes.length ? `<div style="margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:6px;display:flex;flex-wrap:wrap;gap:5px">${codes.map(c=>`<span style="font-family:DM Mono,monospace;font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:2px 8px;color:var(--text2)">${c.code}</span>`).join('')}</div>` : '';
+      const codesHtml = codes.length ? `<div style="margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:6px;display:flex;flex-wrap:wrap;gap:5px">${
+        codes.map(c=>{
+          const cs=CODE_STATUS[c.statusCodigo]||CODE_STATUS.em_elaboracao;
+          return `<span title="${cs.label}" style="font-family:DM Mono,monospace;font-size:11px;background:${cs.bg};border:1px solid ${cs.color}33;border-radius:5px;padding:2px 8px;color:${cs.color};cursor:pointer" onclick="cycleCodeStatus('${c.id}','${c.statusCodigo}')">${c.nomeDocumento||c.code}</span>`;
+        }).join('')
+      }</div>` : '';
       return `<div class="admin-row" style="align-items:flex-start;padding:14px 20px;flex-direction:column">
         <div style="display:flex;align-items:flex-start;gap:12px;width:100%">
           <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:5px">
-              <span style="font-size:13px;font-weight:600;color:var(--text)">${p.name}</span>
+            <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:4px">
+              <span style="font-size:13px;font-weight:600;color:var(--text);cursor:pointer;text-decoration-color:var(--border);text-underline-offset:3px" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'" onclick="openProjectDetail('${p.id}')">${p.name}</span>
               <span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;background:${st.bg};color:${st.color}">${st.label}</span>
               ${p.tipoRelatorio?`<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:var(--surface2);color:var(--text2);border:1px solid var(--border)">${p.tipoRelatorio}</span>`:''}
               ${entregaTag}
-              <span style="font-size:11px;color:var(--text3)">${codes.length} código${codes.length!==1?'s':''}</span>
+              <span style="font-size:11px;color:var(--text3)">${codes.length} cód.</span>
             </div>
-            ${p.description?`<div style="font-size:11px;color:var(--text3);margin-bottom:5px">${p.description}</div>`:''}
-            ${(team||companies)?`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">${team}${companies}</div>`:''}
+            ${_progressBar(p.progresso)}
+            ${p.observacoes?`<div style="font-size:11px;color:var(--text3);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:500px" title="${p.observacoes.replace(/"/g,'&quot;')}">📝 ${p.observacoes}</div>`:''}
+            ${(team||companies)?`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:5px">${team}${companies}</div>`:''}
           </div>
-          <div style="display:flex;gap:5px;flex-shrink:0;margin-top:2px">
-            ${window._canCreate?`<button class="action-btn" onclick="editProjectModal('${p.id}')">Editar</button>`:''}
+          <div style="display:flex;gap:5px;flex-shrink:0;margin-top:2px;flex-wrap:wrap;justify-content:flex-end">
+            <button class="action-btn" onclick="openProjectDetail('${p.id}')">Detalhe</button>
+            ${window._canCreate?`<button class="action-btn" onclick="openEditProject('${p.id}')">Editar</button>`:''}
+            <button class="action-btn" onclick="exportProjectPDF('${p.id}')">PDF</button>
             ${window._isMaster?`<button class="action-btn danger" onclick="deleteProject('${p.id}')">Remover</button>`:''}
           </div>
         </div>
@@ -271,18 +301,226 @@
     loadProjectsData();
   };
 
-  window.editProjectModal=async(id)=>{
+  // ── EDIT PROJECT MODAL ──
+  window.openEditProject=(id)=>{
     const p=window._projects.find(x=>x.id===id); if(!p)return;
-    const newName=prompt('Nome do projeto:',p.name); if(newName===null)return;
-    if(!newName.trim()){alert('Nome não pode ser vazio.');return;}
-    const newStatus=prompt('Status (a_iniciar / em_andamento / concluido / pausado / cancelado):',p.status||'a_iniciar'); if(newStatus===null)return;
-    const newEntrega=prompt('Previsão de entrega (AAAA-MM-DD) ou deixe vazio:',p.dataEntrega||''); if(newEntrega===null)return;
+    document.getElementById('epId').value=id;
+    document.getElementById('epNome').value=p.name||'';
+    document.getElementById('epStatus').value=p.status||'a_iniciar';
+    document.getElementById('epEntrega').value=p.dataEntrega||'';
+    document.getElementById('epTipoRel').value=p.tipoRelatorio||'';
+    document.getElementById('epProgresso').value=p.progresso||0;
+    document.getElementById('epProgressoVal').textContent=(p.progresso||0)+'%';
+    document.getElementById('epObs').value=p.observacoes||'';
+    // Populate selects
+    const respOpts='<option value="">—</option>'+(window._responsaveis||[]).map(r=>`<option value="${r.id}">${r.nome}${r.empresa?' · '+r.empresa.nome:''}</option>`).join('');
+    const empOpts='<option value="">—</option>'+(window._equipes||[]).map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+    ['epProjetista','epCadista','epCoordenador'].forEach(id=>{const el=document.getElementById(id);if(el){el.innerHTML=respOpts;el.value='';}});
+    ['epEmpProjetista','epCliente'].forEach(id=>{const el=document.getElementById(id);if(el){el.innerHTML=empOpts;el.value='';}});
+    if(p.projetista)document.getElementById('epProjetista').value=p.projetista.id||'';
+    if(p.cadista)document.getElementById('epCadista').value=p.cadista.id||'';
+    if(p.coordenador)document.getElementById('epCoordenador').value=p.coordenador.id||'';
+    if(p.empresaProjetista)document.getElementById('epEmpProjetista').value=p.empresaProjetista.id||'';
+    if(p.cliente)document.getElementById('epCliente').value=p.cliente.id||'';
+    document.getElementById('editProjModal').style.display='flex';
+  };
+
+  window.closeEditProject=()=>{ document.getElementById('editProjModal').style.display='none'; };
+
+  window.saveEditProject=async()=>{
+    const id=document.getElementById('epId').value;
+    const nome=document.getElementById('epNome').value.trim();
+    if(!nome){alert('Nome obrigatório.');return;}
+    const btn=document.getElementById('btnSaveEditProj');
+    btn.disabled=true;btn.textContent='Salvando...';
     const {error}=await sb.from('projetos').update({
-      nome:newName.trim(), status:newStatus.trim()||'a_iniciar',
-      data_entrega:newEntrega.trim()||null,
+      nome,
+      status:document.getElementById('epStatus').value,
+      data_entrega:document.getElementById('epEntrega').value||null,
+      tipo_relatorio:document.getElementById('epTipoRel').value||null,
+      progresso:parseInt(document.getElementById('epProgresso').value)||0,
+      observacoes:document.getElementById('epObs').value||null,
+      projetista_id:document.getElementById('epProjetista').value||null,
+      cadista_id:document.getElementById('epCadista').value||null,
+      coordenador_id:document.getElementById('epCoordenador').value||null,
+      empresa_projetista_id:document.getElementById('epEmpProjetista').value||null,
+      cliente_id:document.getElementById('epCliente').value||null,
     }).eq('id',id);
+    btn.disabled=false;btn.textContent='Salvar';
     if(error){alert('Erro: '+error.message);return;}
+    window.closeEditProject();
     loadProjectsData();
+  };
+
+  // ── PROJECT DETAIL ──
+  window.openProjectDetail=(id)=>{
+    const p=window._projects.find(x=>x.id===id); if(!p)return;
+    const st=STATUS_INFO[p.status]||STATUS_INFO.a_iniciar;
+    const codes=(window._allCodesData||[]).filter(c=>c.projectId===id);
+    const today=new Date();today.setHours(0,0,0,0);
+    const entregaTag=_entregaTag(p.dataEntrega,p.status);
+    const team=[_renderPerson(p.projetista,'Projetista'),_renderPerson(p.cadista,'Cadista'),_renderPerson(p.coordenador,'Coordenador')].filter(Boolean).join('');
+    const companies=[_renderEmpresa(p.empresaProjetista,'Empresa projetista'),_renderEmpresa(p.cliente,'Cliente')].filter(Boolean).join('');
+    const codesHtml=codes.length?codes.map(c=>{
+      const cs=CODE_STATUS[c.statusCodigo]||CODE_STATUS.em_elaboracao;
+      const dt=c.at?.toDate?c.at.toDate():new Date();
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--border)">
+        <div style="flex:1;min-width:0">
+          <div style="font-family:DM Mono,monospace;font-size:12px;font-weight:500;color:var(--text)">${c.code}</div>
+          ${c.nomeDocumento?`<div style="font-size:11px;color:var(--text3)">${c.nomeDocumento}</div>`:''}
+        </div>
+        <span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;background:${cs.bg};color:${cs.color};white-space:nowrap">${cs.label}</span>
+        <span style="font-size:10px;color:var(--text3);white-space:nowrap">${dt.toLocaleDateString('pt-BR')}</span>
+        <select onchange="updateCodeStatus('${c.id}',this.value)" style="padding:3px 6px;font-family:inherit;font-size:11px;border:1px solid var(--border2);border-radius:5px;color:var(--text);background:var(--surface);outline:none;cursor:pointer">
+          ${Object.entries(CODE_STATUS).map(([k,v])=>`<option value="${k}"${c.statusCodigo===k?' selected':''}>${v.label}</option>`).join('')}
+        </select>
+      </div>`;
+    }).join(''):`<div class="empty-msg">Nenhum código vinculado.</div>`;
+    const el=document.getElementById('projDetailContent');
+    el.innerHTML=`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px">${p.name}</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+            <span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;background:${st.bg};color:${st.color}">${st.label}</span>
+            ${p.tipoRelatorio?`<span style="font-size:10px;color:var(--text3)">${p.tipoRelatorio}</span>`:''}
+            ${entregaTag}
+          </div>
+        </div>
+        <button onclick="closeProjectDetail()" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:4px 8px;border-radius:6px" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">✕</button>
+      </div>
+      <div style="padding:16px 24px;border-bottom:1px solid var(--border)">
+        ${_progressBar(p.progresso)}
+      </div>
+      ${(team||companies)?`<div style="padding:14px 24px;border-bottom:1px solid var(--border);display:flex;gap:16px;flex-wrap:wrap">${team}${companies}</div>`:''}
+      ${p.observacoes?`<div style="padding:14px 24px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.7"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);display:block;margin-bottom:4px">Observações</span>${p.observacoes}</div>`:''}
+      <div style="padding:12px 24px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3)">Códigos (${codes.length})</div>
+      <div style="overflow-y:auto;max-height:320px">${codesHtml}</div>
+      <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        ${window._canCreate?`<button class="action-btn" onclick="closeProjectDetail();openEditProject('${p.id}')">Editar projeto</button>`:''}
+        <button class="action-btn" onclick="exportProjectPDF('${p.id}')">Exportar PDF</button>
+      </div>`;
+    document.getElementById('projDetailModal').style.display='flex';
+  };
+
+  window.closeProjectDetail=()=>{ document.getElementById('projDetailModal').style.display='none'; };
+
+  window.updateCodeStatus=async(id,status)=>{
+    await sb.from('codigos').update({status_codigo:status}).eq('id',id);
+    // update local cache
+    const c=window._allCodesData.find(x=>x.id===id);
+    if(c) c.statusCodigo=status;
+    renderProjectsList();
+    // rerender detail if open
+    const modal=document.getElementById('projDetailModal');
+    if(modal&&modal.style.display!=='none'){
+      const c2=window._allCodesData.find(x=>x.id===id);
+      if(c2?.projectId) openProjectDetail(c2.projectId);
+    }
+  };
+
+  window.cycleCodeStatus=async(id,current)=>{
+    const keys=Object.keys(CODE_STATUS);
+    const next=keys[(keys.indexOf(current)+1)%keys.length];
+    await window.updateCodeStatus(id,next);
+  };
+
+  // ── KANBAN ──
+  window.renderKanban=()=>{
+    const el=document.getElementById('kanbanBoard'); if(!el)return;
+    const today=new Date();today.setHours(0,0,0,0);
+    el.innerHTML=Object.entries(STATUS_INFO).map(([key,st])=>{
+      const projs=(window._projects||[]).filter(p=>p.status===key);
+      const cards=projs.map(p=>{
+        const codes=(window._allCodesData||[]).filter(c=>c.projectId===p.id);
+        const isAtrasado=p.dataEntrega&&new Date(p.dataEntrega+'T00:00:00')<today&&key!=='concluido'&&key!=='cancelado';
+        const entregaTag=_entregaTag(p.dataEntrega,p.status);
+        const avatars=[p.projetista,p.cadista,p.coordenador].filter(Boolean).map(r=>{
+          const cor=r.empresa?.cor||'#2563eb';
+          const init=r.nome.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+          return `<span title="${r.nome}" style="width:20px;height:20px;border-radius:50%;background:${cor};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;border:1.5px solid var(--surface);flex-shrink:0">${init}</span>`;
+        }).join('');
+        return `<div class="kanban-card" onclick="openProjectDetail('${p.id}')" style="${isAtrasado?'border-left:3px solid #dc2626;':''}">
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:5px;line-height:1.4">${p.name}</div>
+          ${_progressBar(p.progresso)}
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;flex-wrap:wrap;gap:4px">
+            <div style="display:flex;gap:3px">${avatars}</div>
+            <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+              ${entregaTag}
+              <span style="font-size:10px;color:var(--text3)">${codes.length} cód.</span>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+      return `<div class="kanban-col">
+        <div class="kanban-col-hdr" style="color:${st.color}">
+          <span style="width:8px;height:8px;border-radius:50%;background:${st.color};display:inline-block;flex-shrink:0"></span>
+          ${st.label} <span style="font-size:11px;font-weight:400;opacity:.6">${projs.length}</span>
+        </div>
+        <div class="kanban-cards">${cards||'<div style="font-size:11px;color:var(--text3);padding:8px 0">Nenhum projeto</div>'}</div>
+      </div>`;
+    }).join('');
+  };
+
+  window.switchProjectView=(mode)=>{
+    document.getElementById('projListView').style.display=mode==='list'?'':'none';
+    document.getElementById('kanbanBoard').style.display=mode==='kanban'?'':'none';
+    document.querySelectorAll('.view-toggle-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===mode));
+    if(mode==='kanban') renderKanban();
+  };
+
+  // ── TOPBAR BADGE ──
+  function updateAlertBadge(){
+    const today=new Date();today.setHours(0,0,0,0);
+    const count=(window._projects||[]).filter(p=>{
+      if(p.status==='concluido'||p.status==='cancelado') return false;
+      if(!p.dataEntrega) return false;
+      const dt=new Date(p.dataEntrega+'T00:00:00');
+      const days=Math.round((dt-today)/86400000);
+      return days<=7;
+    }).length;
+    const badge=document.getElementById('alertBadge');
+    if(!badge)return;
+    badge.textContent=count;
+    badge.style.display=count>0?'flex':'none';
+    badge.title=count>0?`${count} projeto(s) vencendo em 7 dias`:'';
+  }
+
+  // ── EXPORT PROJECT PDF ──
+  window.exportProjectPDF=(id)=>{
+    const p=window._projects.find(x=>x.id===id); if(!p)return;
+    const codes=(window._allCodesData||[]).filter(c=>c.projectId===id);
+    const st=STATUS_INFO[p.status]||STATUS_INFO.a_iniciar;
+    const today=new Date().toLocaleDateString('pt-BR');
+    const teamRows=[
+      p.projetista?`<tr><td>Projetista</td><td>${p.projetista.nome}</td><td>${p.projetista.empresa?.nome||'—'}</td></tr>`:'',
+      p.cadista?`<tr><td>Cadista</td><td>${p.cadista.nome}</td><td>${p.cadista.empresa?.nome||'—'}</td></tr>`:'',
+      p.coordenador?`<tr><td>Coordenador</td><td>${p.coordenador.nome}</td><td>${p.coordenador.empresa?.nome||'—'}</td></tr>`:'',
+    ].filter(Boolean).join('');
+    const codeRows=codes.map((c,i)=>{
+      const cs=CODE_STATUS[c.statusCodigo]||CODE_STATUS.em_elaboracao;
+      const dt=c.at?.toDate?c.at.toDate():new Date();
+      return `<tr><td>${i+1}</td><td style="font-family:monospace">${c.code}</td><td>${c.nomeDocumento||'—'}</td><td>${cs.label}</td><td>${dt.toLocaleDateString('pt-BR')}</td></tr>`;
+    }).join('');
+    const w=window.open('','_blank');
+    const css=`<style>body{font-family:Segoe UI,sans-serif;max-width:800px;margin:40px auto;color:#1a1a1a;font-size:13px}h1{font-size:22px;font-weight:700;margin-bottom:4px}h2{font-size:13px;font-weight:600;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.8px;color:#64748b}table{width:100%;border-collapse:collapse;margin-bottom:16px}th{background:#f1f5f9;padding:7px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #e2e8f0}td{padding:7px 10px;border-bottom:1px solid #e2e8f0;font-size:12px}.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}.footer{margin-top:32px;font-size:10px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:10px}@media print{body{margin:20px}}</style>`;
+    const sc=`<script>window.onload=function(){window.print();}<\/script>`;
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Relatório — ${p.name}</title>${css}</head><body>
+      <h1>${p.name}</h1>
+      <span class="badge" style="background:${st.bg};color:${st.color}">${st.label}</span>
+      ${p.tipoRelatorio?`<span class="badge" style="background:#f1f5f9;color:#64748b;margin-left:6px">${p.tipoRelatorio}</span>`:''}
+      ${p.dataEntrega?`<span style="font-size:12px;color:#64748b;margin-left:8px">Entrega: ${new Date(p.dataEntrega+'T00:00:00').toLocaleDateString('pt-BR')}</span>`:''}
+      <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+        <div style="flex:1;height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden"><div style="width:${p.progresso||0}%;height:100%;background:#2563eb;border-radius:99px"></div></div>
+        <span style="font-size:12px;font-weight:700;color:#2563eb">${p.progresso||0}%</span>
+      </div>
+      ${p.observacoes?`<h2>Observações</h2><p style="white-space:pre-wrap;color:#475569">${p.observacoes}</p>`:''}
+      ${teamRows?`<h2>Equipe</h2><table><tr><th>Função</th><th>Nome</th><th>Empresa</th></tr>${teamRows}</table>`:''}
+      <h2>Códigos (${codes.length})</h2>
+      <table><tr><th>#</th><th>Código</th><th>Documento</th><th>Status</th><th>Data</th></tr>${codeRows||'<tr><td colspan="5" style="color:#94a3b8;text-align:center">Nenhum código vinculado</td></tr>'}</table>
+      <div class="footer">Gerado pelo Nexus · A2Z Projetos · ${today}</div>
+      ${sc}</body></html>`);
+    w.document.close();
   };
 
   async function loadEquipes() {
@@ -398,6 +636,7 @@
     const empProjetistaId=document.getElementById('newProjEmpresaProjetista')?.value||null;
     const clienteId=document.getElementById('newProjCliente')?.value||null;
     const dataEntrega=document.getElementById('newProjDataEntrega')?.value||null;
+    const observacoes=document.getElementById('newProjObs')?.value.trim()||null;
     if(!name){alert('Informe o nome do projeto.');return;}
     const btn=document.getElementById('btnCreateProj');
     if(btn){btn.disabled=true;btn.textContent='Criando...';}
@@ -406,7 +645,7 @@
       projetista_id:projetistaId||null, cadista_id:cadistaId||null,
       coordenador_id:coordenadorId||null, empresa_projetista_id:empProjetistaId||null,
       cliente_id:clienteId||null, usuario_id:currentUser?.id,
-      data_entrega:dataEntrega||null,
+      data_entrega:dataEntrega||null, progresso:0, observacoes:observacoes||null,
     });
     if(btn){btn.disabled=false;btn.textContent='Criar projeto';}
     if(error){alert('Erro ao criar: '+error.message);return;}
@@ -414,6 +653,7 @@
     if(document.getElementById('newProjectDesc'))document.getElementById('newProjectDesc').value='';
     if(document.getElementById('newProjTipoRelatorio'))document.getElementById('newProjTipoRelatorio').value='';
     if(document.getElementById('newProjDataEntrega'))document.getElementById('newProjDataEntrega').value='';
+    if(document.getElementById('newProjObs'))document.getElementById('newProjObs').value='';
     ['newProjProjetista','newProjCadista','newProjCoordenador','newProjEmpresaProjetista','newProjCliente'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     if(document.getElementById('newProjStatus'))document.getElementById('newProjStatus').value='a_iniciar';
     const pa=document.getElementById('projectAlert');
@@ -542,6 +782,7 @@
     }
 
     // Legend lateral
+    updateAlertBadge();
     const dps=document.getElementById('dashProjStatus');
     if(dps) dps.innerHTML=Object.entries(STATUS_INFO).map(([k,v])=>
       `<div style="display:flex;align-items:center;gap:7px"><span style="width:10px;height:10px;border-radius:50%;background:${v.color};flex-shrink:0"></span><span style="font-size:12px;color:var(--text2);flex:1">${v.label}</span><span style="font-size:13px;font-weight:700;color:${v.color}">${counts[k]||0}</span></div>`
@@ -1323,6 +1564,89 @@ body {
 .spin { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; margin-right: 8px; vertical-align: middle; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── MODALS ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,.45); backdrop-filter: blur(3px);
+  align-items: center; justify-content: center; padding: 20px;
+}
+.modal-box {
+  background: var(--surface); border-radius: var(--radius-xl);
+  border: 1px solid var(--border); box-shadow: var(--shadow-lg);
+  width: 100%; max-width: 580px; max-height: 90vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.modal-hdr {
+  padding: 16px 22px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+}
+.modal-hdr-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.modal-close {
+  background: none; border: none; font-size: 18px; color: var(--text3);
+  cursor: pointer; padding: 4px 8px; border-radius: 6px; line-height: 1;
+  transition: background var(--transition), color var(--transition);
+}
+.modal-close:hover { background: var(--surface2); color: var(--text); }
+.modal-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
+.modal-ftr {
+  padding: 12px 22px; border-top: 1px solid var(--border);
+  display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0;
+}
+.modal-field { margin-bottom: 12px; }
+.modal-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 5px; display: block; }
+.modal-input {
+  width: 100%; padding: 8px 11px; font-family: inherit; font-size: 13px;
+  border: 1.5px solid var(--border2); border-radius: var(--radius);
+  color: var(--text); background: var(--surface2); outline: none;
+  transition: border-color var(--transition);
+}
+.modal-input:focus { border-color: var(--accent); background: var(--surface); }
+.modal-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ── DETAIL MODAL ── */
+#projDetailModal .modal-box { max-width: 680px; }
+
+/* ── ALERT BADGE ── */
+.alert-badge {
+  display: none; min-width: 18px; height: 18px; border-radius: 99px;
+  background: #dc2626; color: #fff; font-size: 10px; font-weight: 700;
+  align-items: center; justify-content: center; padding: 0 4px;
+  position: absolute; top: -4px; right: -4px;
+}
+
+/* ── KANBAN ── */
+.kanban-board {
+  display: flex; gap: 12px; overflow-x: auto; padding: 4px 0 16px;
+  align-items: flex-start;
+}
+.kanban-board::-webkit-scrollbar { height: 5px; }
+.kanban-board::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+.kanban-col {
+  min-width: 220px; max-width: 220px; background: var(--surface2);
+  border-radius: 10px; border: 1px solid var(--border); overflow: hidden;
+}
+.kanban-col-hdr {
+  padding: 10px 14px; font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; gap: 7px; border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.kanban-cards { padding: 8px; display: flex; flex-direction: column; gap: 7px; }
+.kanban-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; cursor: pointer;
+  transition: box-shadow var(--transition), transform var(--transition);
+}
+.kanban-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+
+/* ── VIEW TOGGLE ── */
+.view-toggle { display: flex; gap: 4px; background: var(--surface2); border-radius: 8px; padding: 3px; }
+.view-toggle-btn {
+  padding: 5px 12px; border: none; border-radius: 6px; font-family: inherit;
+  font-size: 12px; font-weight: 500; cursor: pointer; color: var(--text2);
+  background: none; transition: all var(--transition);
+}
+.view-toggle-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+
 /* ── FILTER ROW ── */
 .filter-select, .filter-date {
   padding: 7px 10px; font-family: inherit; font-size: 12px;
@@ -1479,6 +1803,12 @@ body {
       </div>
     </div>
     <div class="topbar-right">
+      <div style="position:relative;display:inline-flex">
+        <button onclick="switchTab('dashboard',document.querySelector('[onclick*=dashboard]'))" title="Alertas de prazo" style="background:none;border:none;color:#64748b;cursor:pointer;padding:4px;display:flex;align-items:center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+        </button>
+        <span class="alert-badge" id="alertBadge">0</span>
+      </div>
       <span class="topbar-user" id="topbarUser"></span>
       <div class="topbar-avatar" id="topbarAvatar"></div>
       <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Alternar tema"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button>
@@ -1790,29 +2120,38 @@ body {
               <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Coordenador</div>
               <select id="newProjCoordenador" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;cursor:pointer"><option value="">—</option></select>
             </div>
-            <div>
-              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Descrição <span style="font-weight:400;opacity:.6">(opcional)</span></div>
-              <input id="newProjectDesc" placeholder="Observações..." style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none"/>
+            <div style="grid-column:1/-1">
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Observações <span style="font-weight:400;opacity:.6">(opcional)</span></div>
+              <textarea id="newProjObs" placeholder="Anotações, pendências, decisões..." rows="2" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;resize:vertical"></textarea>
             </div>
           </div>
           <button id="btnCreateProj" onclick="createProject()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius);padding:10px 24px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,.3)">Criar projeto</button>
         </div>
       </div>
 
-      <!-- Lista de projetos -->
+      <!-- Lista / Kanban -->
       <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
-        <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
           <span style="font-size:14px;font-weight:600;color:var(--text)">Projetos</span>
-          <select id="projFilterStatus" onchange="filterProjects()" style="padding:6px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border2);border-radius:6px;color:var(--text);background:var(--surface);outline:none;cursor:pointer">
-            <option value="">Todos os status</option>
-            <option value="a_iniciar">A iniciar</option>
-            <option value="em_andamento">Em andamento</option>
-            <option value="concluido">Concluído</option>
-            <option value="pausado">Pausado</option>
-            <option value="cancelado">Cancelado</option>
-          </select>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <select id="projFilterStatus" onchange="filterProjects()" style="padding:6px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border2);border-radius:6px;color:var(--text);background:var(--surface);outline:none;cursor:pointer">
+              <option value="">Todos os status</option>
+              <option value="a_iniciar">A iniciar</option>
+              <option value="em_andamento">Em andamento</option>
+              <option value="concluido">Concluído</option>
+              <option value="pausado">Pausado</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+            <div class="view-toggle">
+              <button class="view-toggle-btn active" data-view="list" onclick="switchProjectView('list')">☰ Lista</button>
+              <button class="view-toggle-btn" data-view="kanban" onclick="switchProjectView('kanban')">⬛ Kanban</button>
+            </div>
+          </div>
         </div>
-        <div id="projectsList"><div class="empty-msg">Nenhum projeto cadastrado.</div></div>
+        <div id="projListView">
+          <div id="projectsList"><div class="empty-msg">Nenhum projeto cadastrado.</div></div>
+        </div>
+        <div id="kanbanBoard" style="display:none;padding:16px" class="kanban-board"></div>
       </div>
     </div>
   </div>
@@ -2460,6 +2799,82 @@ body {
       </div>
     </div>
   </div>
+
+<!-- ── EDIT PROJECT MODAL ── -->
+<div class="modal-overlay" id="editProjModal" onclick="if(event.target===this)closeEditProject()">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <span class="modal-hdr-title">Editar projeto</span>
+      <button class="modal-close" onclick="closeEditProject()">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="epId"/>
+      <div class="modal-field" style="grid-column:1/-1">
+        <label class="modal-label">Nome do projeto *</label>
+        <input id="epNome" class="modal-input" placeholder="Nome do projeto"/>
+      </div>
+      <div class="modal-grid2">
+        <div class="modal-field">
+          <label class="modal-label">Status</label>
+          <select id="epStatus" class="modal-input" style="cursor:pointer">
+            <option value="a_iniciar">A iniciar</option>
+            <option value="em_andamento">Em andamento</option>
+            <option value="concluido">Concluído</option>
+            <option value="pausado">Pausado</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Previsão de entrega</label>
+          <input id="epEntrega" type="date" class="modal-input"/>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Tipo de relatório</label>
+          <input id="epTipoRel" class="modal-input" placeholder="RT, RG..."/>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Progresso — <span id="epProgressoVal">0%</span></label>
+          <input id="epProgresso" type="range" min="0" max="100" step="5" class="modal-input" style="padding:4px 0;cursor:pointer" oninput="document.getElementById('epProgressoVal').textContent=this.value+'%'"/>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Empresa projetista</label>
+          <select id="epEmpProjetista" class="modal-input" style="cursor:pointer"><option value="">—</option></select>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Cliente</label>
+          <select id="epCliente" class="modal-input" style="cursor:pointer"><option value="">—</option></select>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Projetista</label>
+          <select id="epProjetista" class="modal-input" style="cursor:pointer"><option value="">—</option></select>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Cadista</label>
+          <select id="epCadista" class="modal-input" style="cursor:pointer"><option value="">—</option></select>
+        </div>
+        <div class="modal-field" style="grid-column:1/-1">
+          <label class="modal-label">Coordenador</label>
+          <select id="epCoordenador" class="modal-input" style="cursor:pointer"><option value="">—</option></select>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Observações</label>
+        <textarea id="epObs" class="modal-input" rows="3" style="resize:vertical" placeholder="Anotações, pendências, decisões..."></textarea>
+      </div>
+    </div>
+    <div class="modal-ftr">
+      <button onclick="closeEditProject()" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border2);border-radius:var(--radius);padding:8px 18px;font-family:inherit;font-size:13px;cursor:pointer">Cancelar</button>
+      <button id="btnSaveEditProj" onclick="saveEditProject()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius);padding:8px 20px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── PROJECT DETAIL MODAL ── -->
+<div class="modal-overlay" id="projDetailModal" onclick="if(event.target===this)closeProjectDetail()">
+  <div class="modal-box" style="max-width:680px">
+    <div id="projDetailContent"></div>
+  </div>
+</div>
 
 <script>
 /* ── COMPANIES ──
