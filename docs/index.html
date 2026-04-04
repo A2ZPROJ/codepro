@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard de Projetos — A2Z Projetos</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',-apple-system,sans-serif;font-size:14px;background:#0a0f1e;color:#f1f5f9;min-height:100vh}
+.topbar{background:#060d1a;border-bottom:1px solid rgba(37,99,235,.2);height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:100}
+.brand{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;color:#fff}
+.brand span{color:#60a5fa;font-weight:400}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 10px #4ade80;animation:pulse 2s ease-in-out infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.live-label{font-size:12px;color:#4ade80;font-weight:500}
+.body{max-width:1100px;margin:0 auto;padding:24px 20px 60px}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+.stat-card{background:#111827;border:1px solid #1e293b;border-radius:10px;padding:16px}
+.stat-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;opacity:.7}
+.stat-val{font-size:30px;font-weight:700}
+.grid2{display:grid;grid-template-columns:1fr 280px;gap:14px;align-items:start}
+@media(max-width:700px){.grid2{grid-template-columns:1fr}}
+.card{background:#111827;border:1px solid #1e293b;border-radius:10px;overflow:hidden}
+.card-hdr{padding:12px 20px;border-bottom:1px solid #1e293b;font-size:13px;font-weight:600;color:#f1f5f9;display:flex;align-items:center;justify-content:space-between}
+.proj-row{display:flex;align-items:center;gap:10px;padding:11px 20px;border-bottom:1px solid #1e293b;transition:background .15s}
+.proj-row:hover{background:#1e293b}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.proj-name{font-size:12px;font-weight:600;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{font-size:10px;padding:1px 7px;border-radius:6px;font-weight:600}
+.tag{font-size:10px;color:#64748b}
+.avatar{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;border:1.5px solid #111827;color:#fff}
+.empty{padding:32px;text-align:center;color:#475569;font-size:13px}
+.chart-pad{padding:16px}
+.legend-row{display:flex;align-items:center;gap:7px;margin-top:8px}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.footer{text-align:center;font-size:11px;color:#334155;margin-top:40px}
+.filter-sel{background:#1e293b;border:1px solid #334155;border-radius:6px;color:#f1f5f9;padding:5px 8px;font-family:inherit;font-size:12px;outline:none;cursor:pointer}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#0f172a"/><rect x="4" y="4" width="10" height="24" rx="2.5" fill="#2563eb"/><rect x="16" y="4" width="12" height="5" rx="2" fill="#2563eb"/><rect x="16" y="11" width="12" height="5" rx="2" fill="#2563eb"/><rect x="16" y="18" width="12" height="5" rx="2" fill="#2563eb"/><rect x="16" y="25" width="8" height="3" rx="1.5" fill="#60a5fa"/></svg>
+    Code<span>Pro</span> · A2Z Projetos
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="live-dot"></div>
+    <span class="live-label">Tempo real</span>
+  </div>
+</div>
+
+<div class="body">
+  <div class="stats" id="statsRow">
+    <div class="stat-card"><div class="stat-label" style="color:#94a3b8">Total</div><div class="stat-val" id="sTotal" style="color:#f1f5f9">—</div></div>
+    <div class="stat-card"><div class="stat-label" style="color:#64748b">A iniciar</div><div class="stat-val" id="sAIniciar" style="color:#94a3b8">—</div></div>
+    <div class="stat-card"><div class="stat-label" style="color:#2563eb">Em andamento</div><div class="stat-val" id="sAndamento" style="color:#60a5fa">—</div></div>
+    <div class="stat-card"><div class="stat-label" style="color:#16a34a">Concluídos</div><div class="stat-val" id="sConcluido" style="color:#4ade80">—</div></div>
+    <div class="stat-card"><div class="stat-label" style="color:#dc2626">Atrasados</div><div class="stat-val" id="sAtrasado" style="color:#f87171">—</div></div>
+    <div class="stat-card"><div class="stat-label" style="color:#d97706">Pausados</div><div class="stat-val" id="sPausado" style="color:#fbbf24">—</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-hdr">
+        Acompanhamento de projetos
+        <select class="filter-sel" id="filterSel" onchange="render()">
+          <option value="">Todos</option>
+          <option value="a_iniciar">A iniciar</option>
+          <option value="em_andamento">Em andamento</option>
+          <option value="concluido">Concluído</option>
+          <option value="pausado">Pausado</option>
+          <option value="cancelado">Cancelado</option>
+        </select>
+      </div>
+      <div id="projList" style="max-height:620px;overflow-y:auto"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-hdr">Distribuição</div>
+      <div class="chart-pad">
+        <canvas id="chart" style="max-height:200px"></canvas>
+        <div id="legend" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+  <div class="footer">Dashboard público · CodePro · A2Z Projetos · Atualiza automaticamente</div>
+</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const sb = createClient(
+  'https://xszpzsmdpbgaiodeqcpi.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhzenB6c21kcGJnYWlvZGVxY3BpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzMTI5ODYsImV4cCI6MjA4OTg4ODk4Nn0.Wv_tcovD5nc13tmrfkgsVb6M6tS-CC7q6HVjphpzTrQ'
+);
+
+const STATUS = {
+  a_iniciar:    { label:'A iniciar',    color:'#94a3b8', bg:'rgba(148,163,184,.15)' },
+  em_andamento: { label:'Em andamento', color:'#60a5fa', bg:'rgba(96,165,250,.15)'  },
+  concluido:    { label:'Concluído',    color:'#4ade80', bg:'rgba(74,222,128,.15)'  },
+  pausado:      { label:'Pausado',      color:'#fbbf24', bg:'rgba(251,191,36,.15)'  },
+  cancelado:    { label:'Cancelado',    color:'#f87171', bg:'rgba(248,113,113,.15)' },
+};
+
+let _projs=[], _chart=null;
+
+function entregaTag(dataEntrega, status) {
+  if(!dataEntrega) return '';
+  const today=new Date();today.setHours(0,0,0,0);
+  const dt=new Date(dataEntrega+'T00:00:00');
+  const days=Math.round((dt-today)/86400000);
+  if(status==='concluido'||status==='cancelado') return `<span class="tag">Entrega: ${dt.toLocaleDateString('pt-BR')}</span>`;
+  if(days<0) return `<span class="badge" style="background:rgba(248,113,113,.15);color:#f87171">Atrasado ${Math.abs(days)}d</span>`;
+  if(days===0) return `<span class="badge" style="background:rgba(251,191,36,.15);color:#fbbf24">Entrega hoje</span>`;
+  if(days<=7) return `<span class="badge" style="background:rgba(251,191,36,.15);color:#fbbf24">Em ${days}d</span>`;
+  return `<span class="tag">Entrega: ${dt.toLocaleDateString('pt-BR')}</span>`;
+}
+
+function render() {
+  const today=new Date();today.setHours(0,0,0,0);
+  const counts={a_iniciar:0,em_andamento:0,concluido:0,pausado:0,cancelado:0,atrasado:0};
+  _projs.forEach(p=>{
+    if(counts[p.status]!==undefined) counts[p.status]++;
+    if((p.status==='em_andamento'||p.status==='a_iniciar')&&p.data_entrega&&new Date(p.data_entrega+'T00:00:00')<today) counts.atrasado++;
+  });
+
+  document.getElementById('sTotal').textContent=_projs.length;
+  document.getElementById('sAIniciar').textContent=counts.a_iniciar;
+  document.getElementById('sAndamento').textContent=counts.em_andamento;
+  document.getElementById('sConcluido').textContent=counts.concluido;
+  document.getElementById('sAtrasado').textContent=counts.atrasado;
+  document.getElementById('sPausado').textContent=counts.pausado;
+
+  const ctx=document.getElementById('chart');
+  const labels=Object.entries(STATUS).map(([,v])=>v.label);
+  const data=Object.keys(STATUS).map(k=>counts[k]||0);
+  const colors=Object.values(STATUS).map(v=>v.color);
+  if(_chart)_chart.destroy();
+  _chart=new Chart(ctx,{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:colors.map(c=>c+'33'),borderColor:colors,borderWidth:2}]},options:{responsive:true,cutout:'60%',plugins:{legend:{display:false}}}});
+  document.getElementById('legend').innerHTML=Object.entries(STATUS).map(([k,v])=>
+    `<div class="legend-row"><div class="legend-dot" style="background:${v.color}"></div><span style="font-size:12px;color:#94a3b8;flex:1">${v.label}</span><span style="font-size:13px;font-weight:700;color:${v.color}">${counts[k]||0}</span></div>`
+  ).join('');
+
+  const filterStatus=document.getElementById('filterSel').value;
+  let list=_projs.filter(p=>!filterStatus||p.status===filterStatus);
+  list.sort((a,b)=>{
+    const aA=a.data_entrega&&new Date(a.data_entrega+'T00:00:00')<today&&a.status!=='concluido';
+    const bA=b.data_entrega&&new Date(b.data_entrega+'T00:00:00')<today&&b.status!=='concluido';
+    if(aA!==bA)return aA?-1:1;
+    if(a.data_entrega&&b.data_entrega)return a.data_entrega.localeCompare(b.data_entrega);
+    return 0;
+  });
+
+  const projList=document.getElementById('projList');
+  if(!list.length){projList.innerHTML='<div class="empty">Nenhum projeto.</div>';return;}
+  projList.innerHTML=list.map(p=>{
+    const st=STATUS[p.status]||STATUS.a_iniciar;
+    const isAt=p.data_entrega&&new Date(p.data_entrega+'T00:00:00')<today&&p.status!=='concluido'&&p.status!=='cancelado';
+    const avatarsFn=(arr)=>arr.filter(Boolean).map(r=>{
+      const cor=r.empresa?.cor||'#2563eb';
+      const init=r.nome.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+      return `<span class="avatar" title="${r.nome}" style="background:${cor}">${init}</span>`;
+    }).join('');
+    const avatars=avatarsFn([p.projetista,p.cadista,p.coordenador]);
+    const entrega=entregaTag(p.data_entrega,p.status);
+    return `<div class="proj-row" style="${isAt?'background:rgba(248,113,113,.04)':''}">
+      <div class="dot" style="background:${st.color}"></div>
+      <div style="flex:1;min-width:0">
+        <div class="proj-name">${p.nome}</div>
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:2px">
+          <span class="badge" style="background:${st.bg};color:${st.color}">${st.label}</span>
+          ${p.tipo_relatorio?`<span class="tag">${p.tipo_relatorio}</span>`:''}
+          ${entrega}
+        </div>
+      </div>
+      <div style="display:flex">${avatars}</div>
+    </div>`;
+  }).join('');
+}
+
+async function load() {
+  const {data}=await sb.from('projetos').select(`
+    *,
+    projetista:responsaveis!projetista_id(nome,empresa:empresas_equipe(cor,logo_url)),
+    cadista:responsaveis!cadista_id(nome,empresa:empresas_equipe(cor,logo_url)),
+    coordenador:responsaveis!coordenador_id(nome,empresa:empresas_equipe(cor,logo_url))
+  `).order('criado_em',{ascending:false});
+  _projs=data||[];
+  render();
+}
+
+load();
+
+// Atualização em tempo real
+sb.channel('projetos-pub')
+  .on('postgres_changes',{event:'*',schema:'public',table:'projetos'},load)
+  .subscribe();
+</script>
+</body>
+</html>
