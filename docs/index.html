@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
+:root{--brand-color:#2563eb}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',-apple-system,sans-serif;font-size:14px;background:#0a0f1e;color:#f1f5f9;min-height:100vh}
 .topbar{background:#060d1a;border-bottom:1px solid rgba(37,99,235,.2);height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:100}
@@ -44,7 +45,7 @@ body{font-family:'DM Sans',-apple-system,sans-serif;font-size:14px;background:#0
 <div class="topbar">
   <div class="brand">
     <svg width="30" height="30" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#0f172a"/><rect x="4" y="4" width="10" height="24" rx="2.5" fill="#2563eb"/><rect x="16" y="4" width="12" height="5" rx="2" fill="#2563eb"/><rect x="16" y="11" width="12" height="5" rx="2" fill="#2563eb"/><rect x="16" y="18" width="12" height="5" rx="2" fill="#2563eb"/><rect x="16" y="25" width="8" height="3" rx="1.5" fill="#60a5fa"/></svg>
-    Code<span>Pro</span> · A2Z Projetos
+    <span id="brandName">CodePro</span><span id="brandSub" style="color:#60a5fa;font-weight:400"> · A2Z Projetos</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <div class="live-dot"></div>
@@ -96,6 +97,37 @@ const sb = createClient(
   'https://xszpzsmdpbgaiodeqcpi.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhzenB6c21kcGJnYWlvZGVxY3BpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzMTI5ODYsImV4cCI6MjA4OTg4ODk4Nn0.Wv_tcovD5nc13tmrfkgsVb6M6tS-CC7q6HVjphpzTrQ'
 );
+
+// White-label: ?empresa=NOME filtra projetos e personaliza branding
+const params = new URLSearchParams(location.search);
+const EMPRESA_FILTER = params.get('empresa') || '';
+
+// Mapa de branding por empresa (adicione entradas conforme necessário)
+const EMPRESA_BRAND = {
+  '2S':       { nome: '2S Engenharia',    cor: '#dc2626' },
+  '2SENG':    { nome: '2S Engenharia',    cor: '#dc2626' },
+  'A2Z':      { nome: 'A2Z Projetos',     cor: '#2563eb' },
+  'ACCIONA':  { nome: 'ACCIONA',          cor: '#f97316' },
+  'IGUA':     { nome: 'IGUA',             cor: '#16a34a' },
+  'SANEPAR':  { nome: 'SANEPAR',          cor: '#0891b2' },
+};
+
+function applyBranding() {
+  const brand = EMPRESA_BRAND[EMPRESA_FILTER.toUpperCase()] || null;
+  if (!brand) return;
+  // Topbar brand name
+  const brandEl = document.getElementById('brandName');
+  if (brandEl) brandEl.textContent = brand.nome;
+  // Title
+  document.title = `Dashboard de Projetos — ${brand.nome}`;
+  // Accent color
+  document.documentElement.style.setProperty('--brand-color', brand.cor);
+  // Hide "A2Z Projetos" from brand text if custom
+  const subEl = document.getElementById('brandSub');
+  if (subEl) subEl.textContent = '';
+}
+
+applyBranding();
 
 const STATUS = {
   a_iniciar:    { label:'A iniciar',    color:'#94a3b8', bg:'rgba(148,163,184,.15)' },
@@ -182,12 +214,14 @@ function render() {
 }
 
 async function load() {
-  const {data}=await sb.from('projetos').select(`
+  let q=sb.from('projetos').select(`
     *,
     projetista:responsaveis!projetista_id(nome,empresa:empresas_equipe(cor,logo_url)),
     cadista:responsaveis!cadista_id(nome,empresa:empresas_equipe(cor,logo_url)),
     coordenador:responsaveis!coordenador_id(nome,empresa:empresas_equipe(cor,logo_url))
   `).order('criado_em',{ascending:false});
+  if(EMPRESA_FILTER) q=q.ilike('empresa','%'+EMPRESA_FILTER+'%');
+  const {data}=await q;
   _projs=data||[];
   render();
 }

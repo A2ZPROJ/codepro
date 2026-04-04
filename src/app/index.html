@@ -34,9 +34,19 @@
     visualizador: { label:'Visualizador', color:'#d97706', bg:'#fef3c7', canView:true, canCreate:false, canAdmin:false, canDelete:false },
   };
 
+  const STATUS_INFO = {
+    a_iniciar:    { label:'A iniciar',    color:'#64748b', bg:'#f1f5f9' },
+    em_andamento: { label:'Em andamento', color:'#2563eb', bg:'#eff6ff' },
+    concluido:    { label:'Concluído',    color:'#16a34a', bg:'#dcfce7' },
+    pausado:      { label:'Pausado',      color:'#d97706', bg:'#fef3c7' },
+    cancelado:    { label:'Cancelado',    color:'#dc2626', bg:'#fee2e2' },
+  };
+
   let currentUser = null;
   window._allCodesData = [];
   window._projects = [];
+  window._equipes = [];
+  window._responsaveis = [];
   let realtimeSub = null;
 
   function convertDate(ptDate) {
@@ -91,6 +101,7 @@
     buildApp();
     loadCodes();
     loadProjects();
+    loadEquipes();
   }
 
   window.saveCode = async (code, company, projectId) => {
@@ -143,11 +154,29 @@
       }).subscribe();
   }
 
+  function mapProject(p) {
+    return {
+      id:p.id, name:p.nome, company:p.empresa, description:p.descricao,
+      status:p.status||'a_iniciar', tipoRelatorio:p.tipo_relatorio,
+      dataEntrega:p.data_entrega||null,
+      projetista:p.projetista, cadista:p.cadista, coordenador:p.coordenador,
+      empresaProjetista:p.empresa_projetista, cliente:p.cliente,
+    };
+  }
+
   async function loadProjectsData() {
-    const {data}=await sb.from('projetos').select('*').order('criado_em',{ascending:false});
-    window._projects=(data||[]).map(p=>({id:p.id,name:p.nome,company:p.empresa,description:p.descricao}));
+    const {data}=await sb.from('projetos').select(`
+      *,
+      projetista:responsaveis!projetista_id(id,nome,cargo,empresa:empresas_equipe(nome,cor,logo_url)),
+      cadista:responsaveis!cadista_id(id,nome,cargo,empresa:empresas_equipe(nome,cor,logo_url)),
+      coordenador:responsaveis!coordenador_id(id,nome,cargo,empresa:empresas_equipe(nome,cor,logo_url)),
+      empresa_projetista:empresas_equipe!empresa_projetista_id(id,nome,cor,logo_url),
+      cliente:empresas_equipe!cliente_id(id,nome,cor,logo_url)
+    `).order('criado_em',{ascending:false});
+    window._projects=(data||[]).map(mapProject);
     renderProjectsList();
     populateProjectSelects();
+    updateDashboard(window._allCodesData||[]);
   }
 
   function loadProjects() {
@@ -155,43 +184,240 @@
     loadProjectsData();
   }
 
+  function _renderPerson(person, label) {
+    if (!person) return '';
+    const emp = person.empresa;
+    const cor = emp?.cor || '#2563eb';
+    const initials = person.nome.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    const logoHtml = emp?.logo_url
+      ? `<img src="${emp.logo_url}" style="width:20px;height:20px;border-radius:50%;object-fit:contain;background:#fff;border:1px solid var(--border);flex-shrink:0"/>`
+      : `<span style="width:20px;height:20px;border-radius:50%;background:${cor};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;flex-shrink:0">${initials}</span>`;
+    return `<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)">${logoHtml}<span><span style="font-weight:600;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.3px">${label}</span> ${person.nome}</span></div>`;
+  }
+
+  function _renderEmpresa(empresa, label) {
+    if (!empresa) return '';
+    const cor = empresa.cor || '#2563eb';
+    const logoHtml = empresa.logo_url
+      ? `<img src="${empresa.logo_url}" style="width:20px;height:20px;border-radius:4px;object-fit:contain;background:#fff;border:1px solid var(--border);flex-shrink:0"/>`
+      : `<span style="width:20px;height:20px;border-radius:4px;background:${cor};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;flex-shrink:0">${empresa.nome.slice(0,2).toUpperCase()}</span>`;
+    return `<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)">${logoHtml}<span><span style="font-weight:600;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.3px">${label}</span> ${empresa.nome}</span></div>`;
+  }
+
+  function _entregaTag(dataEntrega, status) {
+    if(!dataEntrega) return '';
+    const today = new Date(); today.setHours(0,0,0,0);
+    const dt = new Date(dataEntrega+'T00:00:00');
+    const days = Math.round((dt-today)/86400000);
+    if(status==='concluido'||status==='cancelado') return `<span style="font-size:10px;color:var(--text3)">Entrega: ${dt.toLocaleDateString('pt-BR')}</span>`;
+    if(days<0) return `<span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;background:#fee2e2;color:#dc2626">Atrasado ${Math.abs(days)}d</span>`;
+    if(days===0) return `<span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;background:#fef3c7;color:#d97706">Entrega hoje</span>`;
+    if(days<=7) return `<span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;background:#fef3c7;color:#d97706">Entrega em ${days}d</span>`;
+    return `<span style="font-size:10px;color:var(--text3)">Entrega: ${dt.toLocaleDateString('pt-BR')} (${days}d)</span>`;
+  }
+
+  function renderProjectsHTML(projects, el) {
+    el.innerHTML = projects.map(p => {
+      const st = STATUS_INFO[p.status] || STATUS_INFO.a_iniciar;
+      const codes = (window._allCodesData||[]).filter(c=>c.projectId===p.id);
+      const team = [_renderPerson(p.projetista,'Projetista:'),_renderPerson(p.cadista,'Cadista:'),_renderPerson(p.coordenador,'Coordenador:')].filter(Boolean).join('');
+      const companies = [_renderEmpresa(p.empresaProjetista,'Projetista:'),_renderEmpresa(p.cliente,'Cliente:')].filter(Boolean).join('');
+      const entregaTag = _entregaTag(p.dataEntrega, p.status);
+      const codesHtml = codes.length ? `<div style="margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:6px;display:flex;flex-wrap:wrap;gap:5px">${codes.map(c=>`<span style="font-family:DM Mono,monospace;font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:2px 8px;color:var(--text2)">${c.code}</span>`).join('')}</div>` : '';
+      return `<div class="admin-row" style="align-items:flex-start;padding:14px 20px;flex-direction:column">
+        <div style="display:flex;align-items:flex-start;gap:12px;width:100%">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:5px">
+              <span style="font-size:13px;font-weight:600;color:var(--text)">${p.name}</span>
+              <span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;background:${st.bg};color:${st.color}">${st.label}</span>
+              ${p.tipoRelatorio?`<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:var(--surface2);color:var(--text2);border:1px solid var(--border)">${p.tipoRelatorio}</span>`:''}
+              ${entregaTag}
+              <span style="font-size:11px;color:var(--text3)">${codes.length} código${codes.length!==1?'s':''}</span>
+            </div>
+            ${p.description?`<div style="font-size:11px;color:var(--text3);margin-bottom:5px">${p.description}</div>`:''}
+            ${(team||companies)?`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">${team}${companies}</div>`:''}
+          </div>
+          <div style="display:flex;gap:5px;flex-shrink:0;margin-top:2px">
+            ${window._canCreate?`<button class="action-btn" onclick="editProjectModal('${p.id}')">Editar</button>`:''}
+            ${window._isMaster?`<button class="action-btn danger" onclick="deleteProject('${p.id}')">Remover</button>`:''}
+          </div>
+        </div>
+        ${codesHtml}
+      </div>`;
+    }).join('');
+  }
+
   function renderProjectsList() {
     const el=document.getElementById('projectsList'); if(!el)return;
-    if(!window._projects.length){el.innerHTML='<div class="empty-msg">Nenhum projeto cadastrado.</div>';return;}
-    el.innerHTML=window._projects.map(p=>`
-      <div class="admin-row">
-        <div class="user-avatar" style="background:#333;border-radius:6px;font-size:12px">${p.name.slice(0,2).toUpperCase()}</div>
-        <div class="user-info"><div class="user-name">${p.name}</div><div class="user-email">${p.company||'—'} · ${p.description||''}</div></div>
-        <div style="display:flex;gap:6px">
-          <span style="font-size:11px;color:var(--text3);align-self:center">${(window._allCodesData||[]).filter(c=>c.projectId===p.id).length} códigos</span>
-          <button class="action-btn danger" onclick="deleteProject('${p.id}')">Remover</button>
-        </div>
-      </div>`).join('');
+    const statusFilter = document.getElementById('projFilterStatus')?.value||'';
+    const list = statusFilter ? window._projects.filter(p=>p.status===statusFilter) : window._projects;
+    if(!list.length){el.innerHTML='<div class="empty-msg">'+(statusFilter?'Nenhum projeto com este status.':'Nenhum projeto cadastrado.')+'</div>';return;}
+    renderProjectsHTML(list, el);
   }
+
+  window.filterProjects = () => renderProjectsList();
 
   function populateProjectSelects() {
     const opts=window._projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-    const empty='<option value="">Nenhum projeto</option>';
-    [document.getElementById('projectSelect'),document.getElementById('filterProject')]
-      .forEach(el=>{if(el)el.innerHTML=empty+opts;});
+    const sel=document.getElementById('projectSelect');
+    if(sel)sel.innerHTML='<option value="">— Sem projeto —</option>'+opts;
+    const flt=document.getElementById('filterProject');
+    if(flt)flt.innerHTML='<option value="">Todos os projetos</option>'+opts;
   }
 
-  window.createProject=async()=>{
-    const name=document.getElementById('newProjectName').value.trim();
-    const company=document.getElementById('newProjectCompany').value;
-    const desc=document.getElementById('newProjectDesc').value.trim();
-    if(!name){alert('Informe o nome do projeto.');return;}
-    await sb.from('projetos').insert({nome:name,empresa:company,descricao:desc,usuario_id:currentUser?.id});
-    document.getElementById('newProjectName').value='';
-    document.getElementById('newProjectDesc').value='';
-    const pa=document.getElementById('projectAlert');
-    if(pa){pa.textContent='✓ Projeto criado!';pa.className='alert-box show success';setTimeout(()=>pa.className='alert-box',3000);}
+  window.deleteProject=async(id)=>{
+    if(!confirm('Remover este projeto? Os códigos vinculados não serão excluídos.'))return;
+    await sb.from('projetos').delete().eq('id',id);
     loadProjectsData();
   };
 
-  window.deleteProject=async(id)=>{
-    if(!confirm('Remover este projeto?'))return;
-    await sb.from('projetos').delete().eq('id',id);
+  window.editProjectModal=async(id)=>{
+    const p=window._projects.find(x=>x.id===id); if(!p)return;
+    const newName=prompt('Nome do projeto:',p.name); if(newName===null)return;
+    if(!newName.trim()){alert('Nome não pode ser vazio.');return;}
+    const newStatus=prompt('Status (a_iniciar / em_andamento / concluido / pausado / cancelado):',p.status||'a_iniciar'); if(newStatus===null)return;
+    const newEntrega=prompt('Previsão de entrega (AAAA-MM-DD) ou deixe vazio:',p.dataEntrega||''); if(newEntrega===null)return;
+    const {error}=await sb.from('projetos').update({
+      nome:newName.trim(), status:newStatus.trim()||'a_iniciar',
+      data_entrega:newEntrega.trim()||null,
+    }).eq('id',id);
+    if(error){alert('Erro: '+error.message);return;}
+    loadProjectsData();
+  };
+
+  async function loadEquipes() {
+    const [resEmp,resResp]=await Promise.all([
+      sb.from('empresas_equipe').select('*').order('nome'),
+      sb.from('responsaveis').select('*, empresa:empresas_equipe(id,nome,cor,logo_url)').order('nome'),
+    ]);
+    if(resEmp.error){console.error('loadEquipes empresas_equipe:',resEmp.error);return;}
+    if(resResp.error){console.error('loadEquipes responsaveis:',resResp.error);return;}
+    window._equipes=resEmp.data||[];
+    window._responsaveis=resResp.data||[];
+    populateTeamSelects();
+    renderEquipesList();
+  }
+  window.loadEquipes=loadEquipes;
+
+  function populateTeamSelects() {
+    const respOpts='<option value="">—</option>'+(window._responsaveis||[]).map(r=>
+      `<option value="${r.id}">${r.nome}${r.empresa?' · '+r.empresa.nome:''}</option>`
+    ).join('');
+    const empOpts='<option value="">—</option>'+(window._equipes||[]).map(e=>
+      `<option value="${e.id}">${e.nome}</option>`
+    ).join('');
+    ['newProjProjetista','newProjCadista','newProjCoordenador'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=respOpts;});
+    ['newProjEmpresaProjetista','newProjCliente','newRespEmpresa'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=empOpts;});
+  }
+
+  function renderEquipesList() {
+    const elEmp=document.getElementById('equipesList');
+    if(elEmp){
+      if(!window._equipes.length){elEmp.innerHTML='<div class="empty-msg">Nenhuma empresa cadastrada.</div>';}
+      else{elEmp.innerHTML=window._equipes.map(e=>{
+        const cor=e.cor||'#2563eb';
+        const logo=e.logo_url
+          ?`<img src="${e.logo_url}" style="width:36px;height:36px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid var(--border)"/>`
+          :`<div style="width:36px;height:36px;border-radius:8px;background:${cor};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0">${e.nome.slice(0,2).toUpperCase()}</div>`;
+        const cnt=(window._responsaveis||[]).filter(r=>r.empresa_id===e.id).length;
+        return `<div class="admin-row">${logo}<div class="user-info"><div class="user-name">${e.nome} <span style="font-size:10px;background:var(--surface2);color:var(--text3);padding:1px 6px;border-radius:6px">${e.tipo}</span></div><div class="user-email">${cnt} responsável(is)</div></div><button class="action-btn danger" onclick="deleteEquipe('${e.id}')">Remover</button></div>`;
+      }).join('');}
+    }
+    const elResp=document.getElementById('responsaveisList');
+    if(elResp){
+      if(!window._responsaveis.length){elResp.innerHTML='<div class="empty-msg">Nenhum responsável cadastrado.</div>';}
+      else{elResp.innerHTML=window._responsaveis.map(r=>{
+        const cor=r.empresa?.cor||'#2563eb';
+        const initials=r.nome.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+        const nomeEsc=r.nome.replace(/'/g,"\\'");const cargoEsc=(r.cargo||'').replace(/'/g,"\\'");
+        return `<div class="admin-row"><div class="user-avatar" style="background:${cor}">${initials}</div><div class="user-info"><div class="user-name">${r.nome}</div><div class="user-email">${r.cargo||'—'} · ${r.empresa?.nome||'Sem empresa'}</div></div><div style="display:flex;gap:5px"><button class="action-btn" onclick="editResponsavel('${r.id}','${nomeEsc}','${cargoEsc}')">Editar</button><button class="action-btn danger" onclick="deleteResponsavel('${r.id}')">Remover</button></div></div>`;
+      }).join('');}
+    }
+  }
+
+  window.createEquipe=async()=>{
+    const nome=document.getElementById('newEquipeNome').value.trim();
+    const tipo=document.getElementById('newEquipeTipo').value;
+    const cor=document.getElementById('newEquipeCor').value;
+    const btn=document.getElementById('btnAddEquipe');
+    if(!nome){alert('Informe o nome da empresa.');return;}
+    if(btn){btn.disabled=true;btn.textContent='Salvando...';}
+    const {error}=await sb.from('empresas_equipe').insert({nome,tipo,cor});
+    if(btn){btn.disabled=false;btn.textContent='Adicionar';}
+    if(error){alert('Erro: '+error.message);return;}
+    document.getElementById('newEquipeNome').value='';
+    await loadEquipes();
+  };
+
+  window.deleteEquipe=async(id)=>{
+    if(!confirm('Remover esta empresa? Os responsáveis associados perderão o vínculo.'))return;
+    await sb.from('empresas_equipe').delete().eq('id',id);
+    await loadEquipes();
+  };
+
+  window.createResponsavel=async()=>{
+    const nome=document.getElementById('newRespNome').value.trim();
+    const cargo=document.getElementById('newRespCargo').value.trim();
+    const empId=document.getElementById('newRespEmpresa')?.value||null;
+    const btn=document.getElementById('btnAddResp');
+    if(!nome){alert('Informe o nome do responsável.');return;}
+    if(btn){btn.disabled=true;btn.textContent='Salvando...';}
+    const {error}=await sb.from('responsaveis').insert({nome,cargo:cargo||null,empresa_id:empId||null});
+    if(btn){btn.disabled=false;btn.textContent='Adicionar';}
+    if(error){alert('Erro: '+error.message);return;}
+    document.getElementById('newRespNome').value='';
+    document.getElementById('newRespCargo').value='';
+    await loadEquipes();
+  };
+
+  window.deleteResponsavel=async(id)=>{
+    if(!confirm('Remover este responsável?'))return;
+    await sb.from('responsaveis').delete().eq('id',id);
+    await loadEquipes();
+  };
+
+  window.editResponsavel=async(id,nomeAtual,cargoAtual)=>{
+    const nome=prompt('Nome:',nomeAtual);
+    if(nome===null)return;
+    if(!nome.trim()){alert('Nome não pode ser vazio.');return;}
+    const cargo=prompt('Cargo:',cargoAtual);
+    if(cargo===null)return;
+    const {error}=await sb.from('responsaveis').update({nome:nome.trim(),cargo:cargo.trim()||null}).eq('id',id);
+    if(error){alert('Erro: '+error.message);return;}
+    await loadEquipes();
+  };
+
+  window.createProject=async()=>{
+    const name=document.getElementById('newProjectName')?.value.trim();
+    const desc=document.getElementById('newProjectDesc')?.value.trim()||'';
+    const status=document.getElementById('newProjStatus')?.value||'a_iniciar';
+    const tipoRel=document.getElementById('newProjTipoRelatorio')?.value.trim()||null;
+    const projetistaId=document.getElementById('newProjProjetista')?.value||null;
+    const cadistaId=document.getElementById('newProjCadista')?.value||null;
+    const coordenadorId=document.getElementById('newProjCoordenador')?.value||null;
+    const empProjetistaId=document.getElementById('newProjEmpresaProjetista')?.value||null;
+    const clienteId=document.getElementById('newProjCliente')?.value||null;
+    const dataEntrega=document.getElementById('newProjDataEntrega')?.value||null;
+    if(!name){alert('Informe o nome do projeto.');return;}
+    const btn=document.getElementById('btnCreateProj');
+    if(btn){btn.disabled=true;btn.textContent='Criando...';}
+    const {error}=await sb.from('projetos').insert({
+      nome:name, descricao:desc||null, status, tipo_relatorio:tipoRel,
+      projetista_id:projetistaId||null, cadista_id:cadistaId||null,
+      coordenador_id:coordenadorId||null, empresa_projetista_id:empProjetistaId||null,
+      cliente_id:clienteId||null, usuario_id:currentUser?.id,
+      data_entrega:dataEntrega||null,
+    });
+    if(btn){btn.disabled=false;btn.textContent='Criar projeto';}
+    if(error){alert('Erro ao criar: '+error.message);return;}
+    document.getElementById('newProjectName').value='';
+    if(document.getElementById('newProjectDesc'))document.getElementById('newProjectDesc').value='';
+    if(document.getElementById('newProjTipoRelatorio'))document.getElementById('newProjTipoRelatorio').value='';
+    if(document.getElementById('newProjDataEntrega'))document.getElementById('newProjDataEntrega').value='';
+    ['newProjProjetista','newProjCadista','newProjCoordenador','newProjEmpresaProjetista','newProjCliente'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    if(document.getElementById('newProjStatus'))document.getElementById('newProjStatus').value='a_iniciar';
+    const pa=document.getElementById('projectAlert');
+    if(pa){pa.textContent='✓ Projeto criado!';pa.className='alert-box show success';setTimeout(()=>pa.className='alert-box',3000);}
     loadProjectsData();
   };
 
@@ -282,22 +508,85 @@
     w.document.close();
   };
 
-  let chartByCompany=null,chartByMonth=null;
+  let _chartProjStatus=null;
   function updateDashboard(codes){
-    const sT=document.getElementById('statTotal'),sC=document.getElementById('statCompanies'),sU=document.getElementById('statUsers'),sTd=document.getElementById('statToday');
-    if(!sT)return;
-    sT.textContent=codes.length;
-    sC.textContent=[...new Set(codes.map(c=>c.company||'N/A'))].length;
-    sU.textContent=[...new Set(codes.map(c=>c.uid))].length;
+    const projs=window._projects||[];
     const today=new Date();today.setHours(0,0,0,0);
-    sTd.textContent=codes.filter(c=>{const dt=c.at?.toDate?c.at.toDate():new Date();const d2=new Date(dt);d2.setHours(0,0,0,0);return d2.getTime()===today.getTime();}).length;
-    const cc={};codes.forEach(c=>{const k=c.company||'N/A';cc[k]=(cc[k]||0)+1;});
-    const ctx1=document.getElementById('chartCompany');
-    if(ctx1){if(chartByCompany)chartByCompany.destroy();chartByCompany=new Chart(ctx1,{type:'doughnut',data:{labels:Object.keys(cc),datasets:[{data:Object.values(cc),backgroundColor:['#0f172a','#2563eb','#059669','#d97706','#7c3aed','#dc2626']}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{family:'DM Sans',size:11},boxWidth:12}}}}});}
-    const mc={};for(let i=5;i>=0;i--){const d=new Date();d.setMonth(d.getMonth()-i);mc[d.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'})]=0;}
-    codes.forEach(c=>{const dt=c.at&&c.at.toDate?c.at.toDate():new Date();const k=dt.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'});if(mc[k]!==undefined)mc[k]++;});
-    const ctx2=document.getElementById('chartMonth');
-    if(ctx2){if(chartByMonth)chartByMonth.destroy();chartByMonth=new Chart(ctx2,{type:'bar',data:{labels:Object.keys(mc),datasets:[{data:Object.values(mc),backgroundColor:'#2563eb',borderRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{family:'DM Sans',size:11}}},x:{ticks:{font:{family:'DM Sans',size:11}}}}}});}
+
+    // Contar status
+    const counts={a_iniciar:0,em_andamento:0,concluido:0,pausado:0,cancelado:0,atrasado:0};
+    projs.forEach(p=>{
+      if(counts[p.status]!==undefined) counts[p.status]++;
+      if((p.status==='em_andamento'||p.status==='a_iniciar')&&p.dataEntrega){
+        const dt=new Date(p.dataEntrega+'T00:00:00');
+        if(dt<today) counts.atrasado++;
+      }
+    });
+
+    const _s=id=>{const el=document.getElementById(id);if(el)el.textContent=counts[id.replace('dStat','').toLowerCase()]??'—';};
+    const dTotal=document.getElementById('dStatTotal');if(dTotal)dTotal.textContent=projs.length;
+    const dAI=document.getElementById('dStatAIniciar');if(dAI)dAI.textContent=counts.a_iniciar;
+    const dAnd=document.getElementById('dStatAndamento');if(dAnd)dAnd.textContent=counts.em_andamento;
+    const dCon=document.getElementById('dStatConcluido');if(dCon)dCon.textContent=counts.concluido;
+    const dAt=document.getElementById('dStatAtrasado');if(dAt)dAt.textContent=counts.atrasado;
+    const dPa=document.getElementById('dStatPausado');if(dPa)dPa.textContent=counts.pausado;
+
+    // Gráfico de pizza
+    const ctx=document.getElementById('chartProjectStatus');
+    if(ctx){
+      const labels=Object.entries(STATUS_INFO).map(([,v])=>v.label);
+      const data=Object.keys(STATUS_INFO).map(k=>counts[k]||0);
+      const colors=Object.values(STATUS_INFO).map(v=>v.color);
+      if(_chartProjStatus)_chartProjStatus.destroy();
+      _chartProjStatus=new Chart(ctx,{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:colors,borderWidth:0}]},options:{responsive:true,cutout:'65%',plugins:{legend:{display:false}}}});
+    }
+
+    // Legend lateral
+    const dps=document.getElementById('dashProjStatus');
+    if(dps) dps.innerHTML=Object.entries(STATUS_INFO).map(([k,v])=>
+      `<div style="display:flex;align-items:center;gap:7px"><span style="width:10px;height:10px;border-radius:50%;background:${v.color};flex-shrink:0"></span><span style="font-size:12px;color:var(--text2);flex:1">${v.label}</span><span style="font-size:13px;font-weight:700;color:${v.color}">${counts[k]||0}</span></div>`
+    ).join('');
+
+    // Lista de projetos no dash
+    const listEl=document.getElementById('dashProjectList');
+    if(listEl){
+      const filterStatus=document.getElementById('dashFilterStatus')?.value||'';
+      let filtered=projs.filter(p=>!filterStatus||p.status===filterStatus);
+      // Ordenar: atrasados primeiro, depois por data de entrega
+      filtered.sort((a,b)=>{
+        const aAtras=a.dataEntrega&&new Date(a.dataEntrega+'T00:00:00')<today&&a.status!=='concluido'&&a.status!=='cancelado';
+        const bAtras=b.dataEntrega&&new Date(b.dataEntrega+'T00:00:00')<today&&b.status!=='concluido'&&b.status!=='cancelado';
+        if(aAtras!==bAtras)return aAtras?-1:1;
+        if(a.dataEntrega&&b.dataEntrega)return a.dataEntrega.localeCompare(b.dataEntrega);
+        if(a.dataEntrega)return -1;if(b.dataEntrega)return 1;
+        return 0;
+      });
+      if(!filtered.length){listEl.innerHTML='<div class="empty-msg">Nenhum projeto encontrado.</div>';return;}
+      listEl.innerHTML=filtered.map(p=>{
+        const st=STATUS_INFO[p.status]||STATUS_INFO.a_iniciar;
+        const isAtrasado=p.dataEntrega&&new Date(p.dataEntrega+'T00:00:00')<today&&p.status!=='concluido'&&p.status!=='cancelado';
+        const entregaTag=_entregaTag(p.dataEntrega,p.status);
+        const avatars=[p.projetista,p.cadista,p.coordenador].filter(Boolean).map(r=>{
+          const cor=r.empresa?.cor||'#2563eb';
+          const init=r.nome.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+          return r.empresa?.logo_url
+            ?`<img src="${r.empresa.logo_url}" title="${r.nome}" style="width:22px;height:22px;border-radius:50%;border:1.5px solid var(--surface);object-fit:contain;background:#fff"/>`
+            :`<span title="${r.nome}" style="width:22px;height:22px;border-radius:50%;background:${cor};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;border:1.5px solid var(--surface)">${init}</span>`;
+        }).join('');
+        return `<div style="display:flex;align-items:center;gap:10px;padding:11px 20px;border-bottom:1px solid var(--border);transition:background .15s;${isAtrasado?'background:rgba(220,38,38,.03)':''}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='${isAtrasado?'rgba(220,38,38,.03)':''}'"  >
+          <div style="width:8px;height:8px;border-radius:50%;background:${st.color};flex-shrink:0"></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px">
+              <span style="font-size:10px;padding:1px 6px;border-radius:6px;font-weight:600;background:${st.bg};color:${st.color}">${st.label}</span>
+              ${p.tipoRelatorio?`<span style="font-size:10px;color:var(--text3)">${p.tipoRelatorio}</span>`:''}
+              ${entregaTag}
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:-4px">${avatars}</div>
+        </div>`;
+      }).join('');
+    }
   }
 
   window.verifyCode=()=>{
@@ -605,9 +894,11 @@
   --text3: #94a3b8;
   --topbar-bg: #0f172a;
   --topbar-text: #f1f5f9;
+  --gray-900: #1e293b;
   --shadow: 0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
   --shadow-md: 0 4px 16px rgba(0,0,0,.08),0 2px 6px rgba(0,0,0,.04);
   --shadow-lg: 0 10px 40px rgba(0,0,0,.1),0 4px 12px rgba(0,0,0,.06);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
 }
 
 /* ── DARK THEME ── */
@@ -623,9 +914,11 @@
   --text3: #475569;
   --topbar-bg: #060d1a;
   --topbar-text: #f1f5f9;
+  --gray-900: #334155;
   --shadow: 0 1px 3px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.3);
   --shadow-md: 0 4px 16px rgba(0,0,0,.4),0 2px 6px rgba(0,0,0,.3);
   --shadow-lg: 0 10px 40px rgba(0,0,0,.5),0 4px 12px rgba(0,0,0,.3);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.2);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -770,6 +1063,7 @@ body {
 }
 .tab-btn:hover { color: var(--text); background: var(--surface2); }
 .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tab-btn.drag-over { border-bottom-color: var(--accent); background: var(--surface2); opacity: 0.8; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
@@ -1233,17 +1527,61 @@ body {
   </div>
 
   <div class="tab-bar">
-    <div class="tab-bar-inner">
-      <button class="tab-btn active" onclick="switchTab('generator',this)">Gerador</button>
-      <button class="tab-btn" onclick="switchTab('history',this)">Histórico</button>
-      <button class="tab-btn" onclick="switchTab('dashboard',this)">Dashboard</button>
-      <button class="tab-btn" onclick="switchTab('projects',this)">Projetos</button>
-      <button class="tab-btn" onclick="switchTab('verificar',this)">Verificar</button>
-      <button class="tab-btn" onclick="switchTab('perfil',this)">Perfil</button>
-      <button class="tab-btn" id="auditTabBtn" style="display:none" onclick="switchTab('audit',this)">Auditoria</button>
-      <button class="tab-btn" id="adminTabBtn" style="display:none" onclick="switchTab('admin',this);setTimeout(()=>window.loadInvites&&window.loadInvites(),300);">Admin <span id="pendingCount" style="display:none;background:#c0392b;color:white;font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;margin-left:4px">0</span></button>
+    <div class="tab-bar-inner" id="tabBarInner">
+      <button class="tab-btn active" draggable="true" onclick="switchTab('generator',this)">Cadastrar Novo Projeto</button>
+      <button class="tab-btn" draggable="true" onclick="switchTab('history',this)">Histórico</button>
+      <button class="tab-btn" draggable="true" onclick="switchTab('dashboard',this)">Dashboard</button>
+      <button class="tab-btn" draggable="true" onclick="switchTab('projects',this)">Projetos</button>
+      <button class="tab-btn" draggable="true" onclick="switchTab('verificar',this)">Verificar</button>
+      <button class="tab-btn" draggable="true" onclick="switchTab('conferencia',this)">Conferência</button>
+      <button class="tab-btn" draggable="true" onclick="switchTab('renomear',this)">Renomear</button>
+      <button class="tab-btn" draggable="true" onclick="switchTab('perfil',this)">Perfil</button>
+      <button class="tab-btn" draggable="true" id="auditTabBtn" style="display:none" onclick="switchTab('audit',this)">Auditoria</button>
+      <button class="tab-btn" draggable="true" id="adminTabBtn" style="display:none" onclick="switchTab('admin',this);setTimeout(()=>window.loadInvites&&window.loadInvites(),300);">Admin <span id="pendingCount" style="display:none;background:#c0392b;color:white;font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;margin-left:4px">0</span></button>
     </div>
   </div>
+  <script>
+  (function(){
+    let _dragSrc = null;
+    const bar = document.getElementById('tabBarInner');
+    bar.addEventListener('dragstart', function(e) {
+      _dragSrc = e.target.closest('.tab-btn');
+      if (!_dragSrc) return;
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(function() { _dragSrc.style.opacity = '0.4'; }, 0);
+    });
+    bar.addEventListener('dragend', function(e) {
+      if (_dragSrc) _dragSrc.style.opacity = '';
+      bar.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('drag-over'); });
+      _dragSrc = null;
+    });
+    bar.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const target = e.target.closest('.tab-btn');
+      if (!target || target === _dragSrc) return;
+      bar.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('drag-over'); });
+      target.classList.add('drag-over');
+    });
+    bar.addEventListener('dragleave', function(e) {
+      const target = e.target.closest('.tab-btn');
+      if (target) target.classList.remove('drag-over');
+    });
+    bar.addEventListener('drop', function(e) {
+      e.preventDefault();
+      const target = e.target.closest('.tab-btn');
+      if (!target || !_dragSrc || target === _dragSrc) return;
+      target.classList.remove('drag-over');
+      const rect = target.getBoundingClientRect();
+      const after = e.clientX > rect.left + rect.width / 2;
+      if (after) {
+        bar.insertBefore(_dragSrc, target.nextSibling);
+      } else {
+        bar.insertBefore(_dragSrc, target);
+      }
+    });
+  })();
+  </script>
 
   <!-- GENERATOR TAB -->
   <div class="tab-content active" id="tab-generator">
@@ -1275,7 +1613,16 @@ body {
           <div class="company-grid" id="companyGrid"></div>
           <div class="company-hint" id="companyHint">← Selecione uma concessionária para ver os campos disponíveis</div>
         </div>
-        <div id="projectSelectWrap" style="display:none;padding:12px 24px;border-bottom:1px solid var(--border);align-items:center;gap:12px"><label style="font-size:12px;font-weight:500;color:var(--text2);white-space:nowrap">Vincular ao projeto</label><select id="projectSelect" style="flex:1;padding:7px 10px;font-family:inherit;font-size:13px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);background:var(--surface);outline:none"><option value="">Nenhum projeto</option></select></div>
+        <div id="projectInfoSection" style="display:none;padding:12px 24px 14px;border-bottom:1px solid var(--border);background:var(--surface2)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+            <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:1px">Vincular a projeto</span>
+          </div>
+          <select id="projectSelect" style="width:100%;padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;cursor:pointer">
+            <option value="">— Sem projeto —</option>
+          </select>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px">Crie e gerencie projetos na aba <button onclick="switchTab('projects',document.querySelector('[onclick*=projects]'))" style="background:none;border:none;color:var(--accent);cursor:pointer;font-family:inherit;font-size:11px;padding:0;text-decoration:underline">Projetos</button></div>
+        </div>
         <div id="secs"></div>
       </div>
 
@@ -1314,38 +1661,156 @@ body {
 
   <!-- DASHBOARD -->
   <div class="tab-content" id="tab-dashboard">
-    <div style="max-width:980px;margin:0 auto;padding:20px 20px 60px">
-      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;padding:20px">
-          <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border)"><div style="font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Total de códigos</div><div style="font-size:28px;font-weight:600;color:var(--text)" id="statTotal">—</div></div>
-          <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border)"><div style="font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Empresas</div><div style="font-size:28px;font-weight:600;color:var(--text)" id="statCompanies">—</div></div>
-          <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border)"><div style="font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Usuários ativos</div><div style="font-size:28px;font-weight:600;color:var(--text)" id="statUsers">—</div></div>
-          <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border)"><div style="font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Hoje</div><div style="font-size:28px;font-weight:600;color:var(--text)" id="statToday">—</div></div>
+    <div style="max-width:1100px;margin:0 auto;padding:20px 20px 60px">
+
+      <!-- Stats cards -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:14px">
+        <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);padding:16px;box-shadow:var(--shadow-sm)">
+          <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Total</div>
+          <div id="dStatTotal" style="font-size:30px;font-weight:700;color:var(--text)">—</div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 20px 20px">
-          <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border)"><div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.8px">Por concessionária</div><canvas id="chartCompany"></canvas></div>
-          <div style="background:var(--surface2);border-radius:8px;padding:16px;border:1px solid var(--border)"><div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.8px">Últimos 6 meses</div><canvas id="chartMonth"></canvas></div>
+        <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);padding:16px;box-shadow:var(--shadow-sm)">
+          <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">A iniciar</div>
+          <div id="dStatAIniciar" style="font-size:30px;font-weight:700;color:#64748b">—</div>
+        </div>
+        <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);padding:16px;box-shadow:var(--shadow-sm)">
+          <div style="font-size:11px;color:#2563eb;font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Em andamento</div>
+          <div id="dStatAndamento" style="font-size:30px;font-weight:700;color:#2563eb">—</div>
+        </div>
+        <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);padding:16px;box-shadow:var(--shadow-sm)">
+          <div style="font-size:11px;color:#16a34a;font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Concluídos</div>
+          <div id="dStatConcluido" style="font-size:30px;font-weight:700;color:#16a34a">—</div>
+        </div>
+        <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);padding:16px;box-shadow:var(--shadow-sm)">
+          <div style="font-size:11px;color:#dc2626;font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Atrasados</div>
+          <div id="dStatAtrasado" style="font-size:30px;font-weight:700;color:#dc2626">—</div>
+        </div>
+        <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);padding:16px;box-shadow:var(--shadow-sm)">
+          <div style="font-size:11px;color:#d97706;font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Pausados</div>
+          <div id="dStatPausado" style="font-size:30px;font-weight:700;color:#d97706">—</div>
         </div>
       </div>
+
+      <!-- Link público -->
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:14px 20px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px">Link público para diretores</div>
+          <div style="font-size:11px;color:var(--text3)">Acesso em tempo real · sem login necessário</div>
+        </div>
+        <input id="publicLinkInput" readonly value="https://a2zproj.github.io/codepro/" style="flex:1;min-width:200px;max-width:360px;padding:7px 10px;font-family:DM Mono,monospace;font-size:12px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface2);outline:none"/>
+        <button onclick="copyPublicLink()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius);padding:8px 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">Copiar link</button>
+      </div>
+
+      <!-- Projeto list + chart -->
+      <div style="display:grid;grid-template-columns:1fr 260px;gap:14px;align-items:start">
+        <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+          <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <span style="font-size:13px;font-weight:600;color:var(--text)">Acompanhamento de projetos</span>
+            <select id="dashFilterStatus" onchange="updateDashboard(window._allCodesData||[])" style="padding:5px 8px;font-family:inherit;font-size:12px;border:1.5px solid var(--border2);border-radius:6px;color:var(--text);background:var(--surface);outline:none;cursor:pointer">
+              <option value="">Todos</option>
+              <option value="a_iniciar">A iniciar</option>
+              <option value="em_andamento">Em andamento</option>
+              <option value="concluido">Concluído</option>
+              <option value="pausado">Pausado</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+          </div>
+          <div id="dashProjectList" style="max-height:600px;overflow-y:auto"></div>
+        </div>
+        <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:16px">
+          <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.8px">Distribuição</div>
+          <canvas id="chartProjectStatus" style="max-height:220px"></canvas>
+          <div id="dashProjStatus" style="display:flex;flex-direction:column;gap:6px;margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- Hidden canvases kept for compatibility -->
+      <canvas id="chartCompany" style="display:none"></canvas>
+      <canvas id="chartMonth" style="display:none"></canvas>
+      <!-- Hidden stat IDs for compatibility -->
+      <span id="statTotal" style="display:none"></span>
+      <span id="statCompanies" style="display:none"></span>
+      <span id="statUsers" style="display:none"></span>
+      <span id="statToday" style="display:none"></span>
     </div>
   </div>
 
   <!-- PROJECTS -->
   <div class="tab-content" id="tab-projects">
     <div style="max-width:980px;margin:0 auto;padding:20px 20px 60px">
-      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
-        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center"><span style="font-size:14px;font-weight:600;color:var(--text)">Projetos</span></div>
-        <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface2)">
-          <div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px">Novo projeto</div>
+
+      <!-- Criar novo projeto -->
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:14px">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          <span style="font-size:14px;font-weight:600;color:var(--text)">Novo projeto</span>
+        </div>
+        <div style="padding:16px 20px;background:var(--surface2)">
           <div class="alert-box" id="projectAlert"></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <input id="newProjectName" placeholder="Nome do projeto" style="flex:1;min-width:140px;padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);outline:none"/>
-            <select id="newProjectCompany" style="padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);background:var(--surface);outline:none">
-              <option value="">Concessionária</option><option>ACCIONA</option><option>IGUA</option><option>SANEPAR</option><option>SABESP</option><option>A2Z</option><option>2S ENG</option>
-            </select>
-            <input id="newProjectDesc" placeholder="Descrição (opcional)" style="flex:2;min-width:140px;padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);outline:none"/>
-            <button onclick="createProject()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 18px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap">Criar projeto</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div style="grid-column:1/-1">
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Nome do projeto <span style="color:var(--red)">*</span></div>
+              <input id="newProjectName" placeholder="Ex: Rede Coletora de Esgoto de Ubiratã" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Status</div>
+              <select id="newProjStatus" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;cursor:pointer">
+                <option value="a_iniciar">A iniciar</option>
+                <option value="em_andamento">Em andamento</option>
+                <option value="concluido">Concluído</option>
+                <option value="pausado">Pausado</option>
+                <option value="cancelado">Cancelado</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Previsão de entrega</div>
+              <input id="newProjDataEntrega" type="date" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Tipo de relatório</div>
+              <input id="newProjTipoRelatorio" placeholder="Ex: RT, RG, Memorial..." style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Empresa projetista</div>
+              <select id="newProjEmpresaProjetista" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;cursor:pointer"><option value="">—</option></select>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Cliente</div>
+              <select id="newProjCliente" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;cursor:pointer"><option value="">—</option></select>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Projetista</div>
+              <select id="newProjProjetista" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;cursor:pointer"><option value="">—</option></select>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Cadista</div>
+              <select id="newProjCadista" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;cursor:pointer"><option value="">—</option></select>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Coordenador</div>
+              <select id="newProjCoordenador" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;cursor:pointer"><option value="">—</option></select>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Descrição <span style="font-weight:400;opacity:.6">(opcional)</span></div>
+              <input id="newProjectDesc" placeholder="Observações..." style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none"/>
+            </div>
           </div>
+          <button id="btnCreateProj" onclick="createProject()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius);padding:10px 24px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,.3)">Criar projeto</button>
+        </div>
+      </div>
+
+      <!-- Lista de projetos -->
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <span style="font-size:14px;font-weight:600;color:var(--text)">Projetos</span>
+          <select id="projFilterStatus" onchange="filterProjects()" style="padding:6px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border2);border-radius:6px;color:var(--text);background:var(--surface);outline:none;cursor:pointer">
+            <option value="">Todos os status</option>
+            <option value="a_iniciar">A iniciar</option>
+            <option value="em_andamento">Em andamento</option>
+            <option value="concluido">Concluído</option>
+            <option value="pausado">Pausado</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
         </div>
         <div id="projectsList"><div class="empty-msg">Nenhum projeto cadastrado.</div></div>
       </div>
@@ -1448,6 +1913,66 @@ body {
           </div>
         </div>
       </div>
+      <!-- EMPRESAS DA EQUIPE -->
+      <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow);overflow:hidden;margin-top:12px">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+          <span style="font-size:14px;font-weight:700;color:var(--text)">Empresas da equipe</span>
+          <span style="font-size:11px;color:var(--text3);margin-left:8px">(projetistas, clientes)</span>
+        </div>
+        <div id="equipesList"><div class="empty-msg">Carregando...</div></div>
+        <div style="padding:14px 20px;border-top:1px solid var(--border);background:var(--surface2)">
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Adicionar empresa</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Nome</div>
+              <input id="newEquipeNome" placeholder="Ex: A2Z Projetos" style="padding:8px 10px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;width:180px"/>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Tipo</div>
+              <select id="newEquipeTipo" style="padding:8px 10px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;cursor:pointer">
+                <option value="ambos">Ambos</option>
+                <option value="projetista">Projetista</option>
+                <option value="cliente">Cliente</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Cor</div>
+              <input id="newEquipeCor" type="color" value="#2563eb" style="width:40px;height:36px;padding:2px;border:1.5px solid var(--border2);border-radius:var(--radius);cursor:pointer;background:var(--surface)"/>
+            </div>
+            <button id="btnAddEquipe" onclick="createEquipe()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius);padding:9px 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Adicionar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RESPONSÁVEIS -->
+      <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow);overflow:hidden;margin-top:12px">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+          <span style="font-size:14px;font-weight:700;color:var(--text)">Responsáveis</span>
+          <span style="font-size:11px;color:var(--text3);margin-left:8px">(projetistas, cadistas, coordenadores)</span>
+        </div>
+        <div id="responsaveisList"><div class="empty-msg">Carregando...</div></div>
+        <div style="padding:14px 20px;border-top:1px solid var(--border);background:var(--surface2)">
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Adicionar responsável</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Nome</div>
+              <input id="newRespNome" placeholder="Ex: Lucas Abdala" style="padding:8px 10px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;width:170px"/>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Cargo</div>
+              <input id="newRespCargo" placeholder="Ex: Engenheiro Civil" style="padding:8px 10px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;width:170px"/>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Empresa</div>
+              <select id="newRespEmpresa" style="padding:8px 10px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;cursor:pointer;min-width:140px">
+                <option value="">Sem empresa</option>
+              </select>
+            </div>
+            <button id="btnAddResp" onclick="createResponsavel()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius);padding:9px 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Adicionar</button>
+          </div>
+        </div>
+      </div>
+
       <!-- IMPORT IN ADMIN TAB -->
       <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-top:12px">
         <div style="padding:14px 20px;border-bottom:1px solid var(--border)"><span style="font-size:14px;font-weight:600;color:var(--text)">Importação em massa</span></div>
@@ -1498,6 +2023,400 @@ body {
       </div>
     </div>
   </div>
+
+  <!-- CONFERÊNCIA TAB -->
+  <div class="tab-content" id="tab-conferencia">
+    <div style="padding:20px;max-width:1200px;margin:0 auto">
+
+      <!-- Folders input section -->
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:16px">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">Pastas para conferência</div>
+          <button onclick="confAddFolder()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:7px 14px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer">+ Adicionar pasta</button>
+        </div>
+        <div id="conf-folders" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px"></div>
+        <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center">
+          <button id="conf-run-btn" onclick="confRun()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:9px 22px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Verificar</button>
+          <span id="conf-status" style="font-size:12px;color:var(--text3)"></span>
+        </div>
+      </div>
+
+      <!-- Results section -->
+      <div id="conf-results-wrap" style="display:none;background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">Resultado</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input id="conf-filter" oninput="confFilter()" placeholder="Filtrar arquivo..." style="padding:6px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);background:var(--surface);outline:none;width:200px"/>
+            <button onclick="confExportCSV()" style="background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:6px 12px;font-family:inherit;font-size:12px;cursor:pointer">Exportar CSV</button>
+          </div>
+        </div>
+        <div id="conf-stats" style="padding:10px 20px;border-bottom:1px solid var(--border);display:flex;gap:20px;font-size:12px;color:var(--text2)"></div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead id="conf-thead" style="background:var(--surface2)"></thead>
+            <tbody id="conf-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ── CONFERÊNCIA ──
+  window._conf = { folders: [], nextId: 0, data: null };
+
+  window.confAddFolder = function() {
+    const id = window._conf.nextId++;
+    const entry = { id: id, label: '', path: '' };
+    window._conf.folders.push(entry);
+
+    const wrap = document.getElementById('conf-folders');
+
+    // Row container
+    const row = document.createElement('div');
+    row.id = 'conf-row-' + id;
+    row.style.cssText = 'display:flex;gap:8px;align-items:center';
+
+    // Label input
+    const labelIn = document.createElement('input');
+    labelIn.placeholder = 'Nome (ex: Pasta A)';
+    labelIn.style.cssText = 'padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);background:var(--surface);outline:none;width:150px;flex-shrink:0';
+    labelIn.addEventListener('input', function() { entry.label = labelIn.value; });
+
+    // Path input (editable — aceita digitação e colagem)
+    const pathIn = document.createElement('input');
+    pathIn.id = 'conf-path-' + id;
+    pathIn.placeholder = 'Cole ou digite o caminho, ou clique em Procurar';
+    pathIn.style.cssText = 'flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);background:var(--surface);outline:none;min-width:0';
+    pathIn.addEventListener('input', function() { entry.path = pathIn.value; });
+
+    // Folder picker button
+    const pickBtn = document.createElement('button');
+    pickBtn.title = 'Procurar pasta';
+    pickBtn.style.cssText = 'background:var(--gray-900);color:white;border:none;border-radius:6px;padding:7px 11px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0;white-space:nowrap';
+    pickBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg> Procurar';
+    pickBtn.addEventListener('click', async function() {
+      var p = await window.electronAPI.selectFolder();
+      if (!p) return;
+      entry.path = p;
+      pathIn.value = p;
+      if (!labelIn.value) {
+        var name = p.replace(/\\/g, '/').split('/').pop();
+        labelIn.value = name;
+        entry.label = name;
+      }
+    });
+
+    // Remove button
+    const removeBtn = document.createElement('button');
+    removeBtn.title = 'Remover';
+    removeBtn.style.cssText = 'background:transparent;color:var(--text3);border:1.5px solid var(--border);border-radius:6px;padding:7px 10px;cursor:pointer;font-size:13px;line-height:1;flex-shrink:0';
+    removeBtn.textContent = '✕';
+    removeBtn.addEventListener('click', function() {
+      row.remove();
+      window._conf.folders = window._conf.folders.filter(function(f) { return f.id !== id; });
+    });
+
+    row.appendChild(labelIn);
+    row.appendChild(pathIn);
+    row.appendChild(pickBtn);
+    row.appendChild(removeBtn);
+    wrap.appendChild(row);
+  };
+
+  window.confRun = async function() {
+    const active = window._conf.folders.filter(f => f.path);
+    if (active.length < 1) {
+      document.getElementById('conf-status').textContent = 'Adicione ao menos uma pasta.';
+      return;
+    }
+    const btn = document.getElementById('conf-run-btn');
+    btn.disabled = true;
+    btn.textContent = 'Aguarde...';
+    document.getElementById('conf-status').textContent = '';
+
+    const reads = await Promise.all(active.map(f => window.electronAPI.readDir(f.path)));
+
+    const fileSet = new Set();
+    reads.forEach(files => files.forEach(f => fileSet.add(f)));
+    const allFiles = Array.from(fileSet).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+    const matrix = {};
+    allFiles.forEach(f => { matrix[f] = reads.map(files => files.includes(f)); });
+
+    window._conf.data = { files: allFiles, folders: active, matrix };
+    confRenderTable(allFiles);
+
+    btn.disabled = false;
+    btn.textContent = 'Verificar';
+    document.getElementById('conf-status').textContent = allFiles.length + ' arquivo(s) encontrado(s).';
+  };
+
+  window.confRenderTable = function(files) {
+    const { folders, matrix } = window._conf.data;
+    document.getElementById('conf-results-wrap').style.display = '';
+
+    document.getElementById('conf-thead').innerHTML = '<tr>'
+      + '<th style="padding:8px 12px;text-align:left;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);white-space:nowrap">Arquivo</th>'
+      + folders.map(f => '<th style="padding:8px 12px;text-align:center;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);white-space:nowrap">' + (f.label || f.path) + '</th>').join('')
+      + '</tr>';
+
+    document.getElementById('conf-tbody').innerHTML = files.map(function(file) {
+      const row = matrix[file];
+      const missing = row.some(function(v) { return !v; });
+      return '<tr style="' + (missing ? 'background:rgba(220,38,38,0.05)' : '') + '">'
+        + '<td style="padding:7px 12px;border-bottom:1px solid var(--border);color:var(--text);font-family:\'DM Mono\',monospace;font-size:11px">' + file + '</td>'
+        + row.map(function(v) { return '<td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:center">' + (v ? '✅' : '❌') + '</td>'; }).join('')
+        + '</tr>';
+    }).join('');
+
+    const total = files.length;
+    const complete = files.filter(function(f) { return matrix[f].every(function(v) { return v; }); }).length;
+    const missing = total - complete;
+    document.getElementById('conf-stats').innerHTML =
+      '<span>Total: <strong>' + total + '</strong></span>'
+      + '<span style="color:#16a34a">Presentes em todas: <strong>' + complete + '</strong></span>'
+      + (missing ? '<span style="color:#dc2626">Com ausências: <strong>' + missing + '</strong></span>' : '');
+  };
+
+  window.confFilter = function() {
+    if (!window._conf.data) return;
+    const q = document.getElementById('conf-filter').value.toLowerCase();
+    confRenderTable(window._conf.data.files.filter(function(f) { return f.toLowerCase().includes(q); }));
+  };
+
+  window.confExportCSV = function() {
+    if (!window._conf.data) return;
+    const { files, folders, matrix } = window._conf.data;
+    const header = ['Arquivo'].concat(folders.map(function(f) { return f.label || f.path; })).join(',');
+    const rows = files.map(function(f) { return [f].concat(matrix[f].map(function(v) { return v ? 'Sim' : 'Não'; })).join(','); });
+    const csv = [header].concat(rows).join('\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'conferencia.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Init with 2 slots
+  confAddFolder(); confAddFolder();
+  </script>
+
+  <!-- RENOMEAR TAB -->
+  <div class="tab-content" id="tab-renomear">
+    <div style="padding:20px;max-width:960px;margin:0 auto">
+
+      <!-- Pasta -->
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:12px">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">Renomear arquivos em lote</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px">Aplica múltiplas substituições em sequência — igual ao PowerShell <code style="font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:4px">-replace</code> encadeado</div>
+        </div>
+        <div style="padding:14px 20px;display:flex;align-items:center;gap:8px">
+          <input id="ren-folder" placeholder="Selecione ou cole o caminho da pasta..." style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;min-width:0"/>
+          <button id="ren-folder-btn" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:7px 12px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+            Procurar
+          </button>
+        </div>
+      </div>
+
+      <!-- Regras -->
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:12px">
+        <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">Regras de substituição</div>
+          <button id="ren-add-rule" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:6px 12px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer">+ Adicionar regra</button>
+        </div>
+        <!-- cabeçalho das colunas -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 36px;gap:8px;padding:8px 20px 4px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">
+          <span>Localizar no nome</span><span>Substituir por</span><span></span>
+        </div>
+        <div id="ren-rules" style="padding:4px 20px 12px;display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+
+      <!-- Action bar -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <button id="ren-preview-btn" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:9px 20px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;box-shadow:var(--shadow-sm)">Visualizar alterações</button>
+        <button id="ren-exec-btn" disabled style="background:var(--accent);color:white;border:none;border-radius:6px;padding:9px 20px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;opacity:0.4">Renomear arquivos</button>
+        <span id="ren-status" style="font-size:12px;color:var(--text3)"></span>
+      </div>
+
+      <!-- Preview table -->
+      <div id="ren-table-wrap" style="display:none;background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead style="background:var(--surface2)">
+              <tr>
+                <th style="padding:9px 14px;text-align:left;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border)">Nome atual</th>
+                <th style="padding:9px 14px;text-align:left;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border)">Nome novo</th>
+                <th style="padding:9px 14px;text-align:center;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);white-space:nowrap">Situação</th>
+              </tr>
+            </thead>
+            <tbody id="ren-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    var _renPending = [];
+    var _renRules   = []; // [{id, find, replace}]
+    var _renNextId  = 0;
+
+    // ── Pasta ──
+    document.getElementById('ren-folder-btn').addEventListener('click', async function() {
+      var p = await window.electronAPI.selectFolder();
+      if (p) document.getElementById('ren-folder').value = p;
+    });
+
+    // ── Adicionar regra ──
+    function addRule(findVal, replVal) {
+      var id = _renNextId++;
+      var entry = { id: id, find: findVal || '', replace: replVal !== undefined ? replVal : '' };
+      _renRules.push(entry);
+
+      var wrap = document.getElementById('ren-rules');
+      var row  = document.createElement('div');
+      row.id   = 'ren-rule-' + id;
+      row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 36px;gap:8px;align-items:center';
+
+      var inpFind = document.createElement('input');
+      inpFind.value       = entry.find;
+      inpFind.placeholder = 'ex:  " - "';
+      inpFind.style.cssText = 'padding:7px 10px;font-family:\'DM Mono\',monospace;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;width:100%';
+      inpFind.addEventListener('input', function() { entry.find = inpFind.value; });
+
+      var inpRepl = document.createElement('input');
+      inpRepl.value       = entry.replace;
+      inpRepl.placeholder = 'ex:  "-"   (vazio = remover)';
+      inpRepl.style.cssText = 'padding:7px 10px;font-family:\'DM Mono\',monospace;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;width:100%';
+      inpRepl.addEventListener('input', function() { entry.replace = inpRepl.value; });
+
+      var btnRm = document.createElement('button');
+      btnRm.textContent  = '✕';
+      btnRm.title        = 'Remover regra';
+      btnRm.style.cssText = 'background:transparent;color:var(--text3);border:1.5px solid var(--border);border-radius:6px;padding:6px;cursor:pointer;font-size:13px;line-height:1;width:36px';
+      btnRm.addEventListener('click', function() {
+        row.remove();
+        _renRules = _renRules.filter(function(r){ return r.id !== id; });
+      });
+
+      row.appendChild(inpFind);
+      row.appendChild(inpRepl);
+      row.appendChild(btnRm);
+      wrap.appendChild(row);
+    }
+
+    document.getElementById('ren-add-rule').addEventListener('click', function() { addRule('',''); });
+
+    // Regra inicial igual ao script PowerShell do usuário: " - " → "-"
+    addRule(' - ', '-');
+
+    // ── Preview ──
+    document.getElementById('ren-preview-btn').addEventListener('click', async function() {
+      var folder = document.getElementById('ren-folder').value.trim();
+      var status = document.getElementById('ren-status');
+
+      if (!folder) { status.textContent = 'Selecione uma pasta.'; status.style.color = 'var(--amber)'; return; }
+
+      var activeRules = _renRules.filter(function(r){ return r.find !== ''; });
+      if (activeRules.length === 0) {
+        status.textContent = 'Adicione ao menos uma regra com "Localizar no nome" preenchido.';
+        status.style.color = 'var(--amber)';
+        return;
+      }
+
+      status.textContent = 'Lendo arquivos...';
+      status.style.color = 'var(--text3)';
+
+      var files = await window.electronAPI.readDir(folder);
+      if (!files || files.length === 0) {
+        status.textContent = 'Nenhum arquivo encontrado na pasta.';
+        status.style.color = 'var(--amber)';
+        document.getElementById('ren-exec-btn').disabled = true;
+        document.getElementById('ren-exec-btn').style.opacity = '0.4';
+        return;
+      }
+      files = files.slice().sort(function(a,b){ return a.localeCompare(b,'pt-BR'); });
+
+      _renPending = [];
+      var existingNames = new Set(files);
+      var rows = [];
+
+      files.forEach(function(name) {
+        var dot     = name.lastIndexOf('.');
+        var base    = dot > 0 ? name.slice(0, dot) : name;
+        var ext     = dot > 0 ? name.slice(dot) : '';
+
+        // Aplica regras em sequência (como PowerShell encadeado)
+        var newBase = base;
+        activeRules.forEach(function(r) {
+          newBase = newBase.split(r.find).join(r.replace);
+        });
+        var newName = newBase + ext;
+
+        if (name === newName) {
+          rows.push({ cur: name, nxt: '—', st: '✅  Já correto', cls: 'neu' });
+        } else if (existingNames.has(newName)) {
+          rows.push({ cur: name, nxt: newName, st: '⚠️  Conflito (já existe)', cls: 'err' });
+        } else {
+          rows.push({ cur: name, nxt: newName, st: '🔄  Será renomeado', cls: 'ok' });
+          _renPending.push({ from: name, to: newName });
+          existingNames.add(newName);
+        }
+      });
+
+      document.getElementById('ren-tbody').innerHTML = rows.map(function(r) {
+        var bg = r.cls==='ok' ? 'background:rgba(22,163,74,0.06)' : r.cls==='err' ? 'background:rgba(220,38,38,0.06)' : '';
+        var sc = r.cls==='ok' ? 'color:#16a34a' : r.cls==='err' ? 'color:#dc2626' : 'color:var(--text3)';
+        var td = 'padding:7px 14px;border-bottom:1px solid var(--border);';
+        return '<tr style="'+bg+'">'
+          +'<td style="'+td+'color:var(--text);font-family:\'DM Mono\',monospace;font-size:11px">'+r.cur+'</td>'
+          +'<td style="'+td+'color:var(--text);font-family:\'DM Mono\',monospace;font-size:11px">'+r.nxt+'</td>'
+          +'<td style="'+td+'text-align:center;font-size:11px;'+sc+'">'+r.st+'</td>'
+          +'</tr>';
+      }).join('');
+      document.getElementById('ren-table-wrap').style.display = '';
+
+      var execBtn = document.getElementById('ren-exec-btn');
+      if (_renPending.length > 0) {
+        status.textContent = _renPending.length + ' arquivo(s) serão renomeados.';
+        status.style.color = '#16a34a';
+        execBtn.disabled = false; execBtn.style.opacity = '1';
+      } else {
+        status.textContent = 'Nenhum arquivo para renomear.';
+        status.style.color = 'var(--amber)';
+        execBtn.disabled = true; execBtn.style.opacity = '0.4';
+      }
+    });
+
+    // ── Executar ──
+    document.getElementById('ren-exec-btn').addEventListener('click', async function() {
+      if (_renPending.length === 0) return;
+      var folder  = document.getElementById('ren-folder').value.trim();
+      var status  = document.getElementById('ren-status');
+      var execBtn = document.getElementById('ren-exec-btn');
+
+      execBtn.disabled = true; execBtn.textContent = 'Renomeando...'; execBtn.style.opacity = '0.6';
+
+      var results = await window.electronAPI.renameFiles({ folder: folder, items: _renPending });
+      _renPending = [];
+
+      var ok    = results.filter(function(r){ return r.ok; }).length;
+      var erros = results.filter(function(r){ return !r.ok; }).length;
+
+      execBtn.textContent = 'Renomear arquivos'; execBtn.style.opacity = '0.4';
+
+      status.textContent = erros > 0
+        ? ok + ' renomeado(s), ' + erros + ' erro(s).'
+        : '✅  ' + ok + ' arquivo(s) renomeado(s) com sucesso!';
+      status.style.color = erros > 0 ? 'var(--amber)' : '#16a34a';
+
+      document.getElementById('ren-preview-btn').click();
+    });
+  })();
+  </script>
 
   <!-- PROFILE TAB -->
   <div class="tab-content" id="tab-perfil">
@@ -1643,7 +2562,7 @@ window.switchTab=(tab,btn)=>{
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   btn.classList.add('active');
-  if(tab==='admin'){window.loadAdminPanel();window.loadAudit();if(window.loadInvites)window.loadInvites();}
+  if(tab==='admin'){window.loadAdminPanel();window.loadAudit();if(window.loadInvites)window.loadInvites();window.loadEquipes&&window.loadEquipes();}
 };
 
 function buildApp(){
@@ -1664,7 +2583,7 @@ window.selectCompany=(key)=>{
   document.querySelectorAll('.company-btn').forEach(b=>b.classList.remove('sel'));
   event.target.closest('.company-btn').classList.add('sel');
   document.getElementById('companyHint').style.display='none';
-  const pw=document.getElementById('projectSelectWrap');if(pw)pw.style.display='flex';
+  const pw=document.getElementById('projectInfoSection');if(pw)pw.style.display='';
   buildSections(co.fields);
   updatePre(); upProg();
 };
@@ -1783,7 +2702,7 @@ async function doCopy(){
   const dup=window.checkDup(code,currentCompany);
   if(dup){alert('Código já registrado por '+dup.name+'. Não é possível duplicar dentro da mesma empresa.');return;}
   const projectId=document.getElementById('projectSelect')?.value||null;
-  const saved=await window.saveCode(code,currentCompany,projectId);
+  const saved=await window.saveCode(code,currentCompany,projectId||null);
   if(!saved){alert('Código já existente para esta empresa.');return;}
   logAudit('code_created','Código '+code+' ('+currentCompany+')');
   await navigator.clipboard.writeText(code);
@@ -1797,9 +2716,21 @@ function resetAll(){
   document.querySelectorAll('.section').forEach((s,i)=>{s.classList.remove('is-done','is-open');if(i===0)s.classList.add('is-open');});
   document.querySelectorAll('[id^="sc"]').forEach(v=>v.textContent='');
   const mq=document.getElementById('munQ');if(mq)mq.value='';
+  // Reset project fields
+  const pi=document.getElementById('projTipoRelGen');if(pi)pi.value='';
+  const ps=document.getElementById('projStatusGen');if(ps)ps.value='a_iniciar';
+  const pd=document.getElementById('projDataEntregaGen');if(pd)pd.value='';
+  ['projProjetistaGen','projCadistaGen','projCoordenadorGen','projEmpProjetistaGen','projClienteGen'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   filterMuns(); updatePre(); upProg();
 }
 window.cpyH=(c,btn)=>navigator.clipboard.writeText(c).then(()=>{btn.textContent='✓';setTimeout(()=>btn.textContent='Copiar',1500);});
+window.copyPublicLink=()=>{
+  const url=document.getElementById('publicLinkInput')?.value||'https://a2zproj.github.io/codepro/';
+  navigator.clipboard.writeText(url).then(()=>{
+    const btn=document.querySelector('[onclick="copyPublicLink()"]');
+    if(btn){btn.textContent='✓ Copiado!';setTimeout(()=>btn.textContent='Copiar link',1500);}
+  });
+};
 // ── THEME ──
 function initTheme(){
   const saved=localStorage.getItem('codepro_theme')||'light';
