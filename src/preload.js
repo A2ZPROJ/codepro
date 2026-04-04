@@ -30,10 +30,14 @@ if (!licenseData || !licenseData.id) {
 
 contextBridge.exposeInMainWorld('electronAPI', {
   getLicense:        () => licenseData,
+  getUpdateState:    () => ipcRenderer.sendSync('get-update-state'),
   signOut:           () => ipcRenderer.send('sign-out'),
-  downloadUpdate:    () => ipcRenderer.send('download-update'),
   installUpdate:     () => ipcRenderer.send('install-update'),
   onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_, v)   => cb(v)),
   onUpdateProgress:  (cb) => ipcRenderer.on('update-progress',  (_, pct) => cb(pct)),
   onUpdateDownloaded:(cb) => ipcRenderer.on('update-downloaded', (_, v)   => cb(v)),
+  onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', () => cb()),
+  selectFolder: ()           => ipcRenderer.invoke('select-folder'),
+  readDir:      (p)          => ipcRenderer.invoke('read-dir', p),
+  renameFiles:  (opts)       => ipcRenderer.invoke('rename-files', opts),
 });

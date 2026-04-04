@@ -3,110 +3,343 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CodePro</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>Nexus</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'DM Sans',sans-serif;background:#0a0f1e;color:#f1f5f9;min-height:100vh;display:flex;flex-direction:column;user-select:none;-webkit-app-region:drag}
-button,input,select{-webkit-app-region:no-drag}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
-.header{background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);padding:20px 28px;display:flex;align-items:center;gap:14px;border-bottom:1px solid rgba(37,99,235,.25)}
-.logo-icon{width:48px;height:48px;border-radius:12px;background:#0f172a;border:2px solid rgba(37,99,235,.4);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.logo-icon svg{width:28px;height:28px}
-.logo-text{flex:1}
-.logo-name{font-size:22px;font-weight:700;letter-spacing:-.5px;color:#fff}
-.logo-name span{color:#2563eb}
-.logo-sub{font-size:11px;font-weight:500;color:#2563eb;text-transform:uppercase;letter-spacing:2px;margin-top:2px}
-.version-badge{font-size:11px;font-weight:600;background:rgba(37,99,235,.15);color:#60a5fa;border:1px solid rgba(37,99,235,.3);padding:4px 10px;border-radius:20px;white-space:nowrap}
+body{
+  font-family:'Inter',sans-serif;
+  background:#060d1b;
+  color:#f0f4ff;
+  height:100vh;
+  display:flex;
+  flex-direction:column;
+  user-select:none;
+  -webkit-app-region:drag;
+  overflow:hidden;
+}
+button,input{-webkit-app-region:no-drag}
 
-/* ACTIVATED STATE */
-#activatedView{display:none;flex:1;padding:24px 28px;flex-direction:column;gap:0}
+/* Subtle background glow */
+body::before{
+  content:'';
+  position:fixed;
+  top:-120px;right:-80px;
+  width:380px;height:380px;
+  background:radial-gradient(circle,rgba(37,99,235,.1) 0%,transparent 65%);
+  pointer-events:none;z-index:0;
+}
+body::after{
+  content:'';
+  position:fixed;
+  bottom:-80px;left:-60px;
+  width:280px;height:280px;
+  background:radial-gradient(circle,rgba(37,99,235,.06) 0%,transparent 65%);
+  pointer-events:none;z-index:0;
+}
+
+/* ── BRAND HEADER ── */
+.brand-header{
+  display:flex;align-items:center;gap:14px;
+  padding:16px 18px 15px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  background:linear-gradient(180deg,rgba(37,99,235,.07) 0%,rgba(255,255,255,.01) 100%);
+  flex-shrink:0;position:relative;z-index:1;
+}
+.brand-logo{height:40px;width:auto;opacity:.95}
+.brand-text{flex:1}
+.brand-name{
+  font-size:14px;font-weight:700;
+  color:#cbd5e1;letter-spacing:1.5px;text-transform:uppercase;
+  line-height:1.1;
+}
+.brand-tag{
+  font-size:11px;font-weight:400;
+  color:#475569;letter-spacing:.3px;margin-top:2px;
+}
+.close-btn{
+  width:28px;height:28px;border-radius:7px;
+  background:transparent;
+  border:1px solid rgba(255,255,255,.1);
+  color:#475569;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;
+}
+.close-btn:hover{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.3);color:#f87171}
+
+/* ── PRODUCT HERO ── */
+.product-hero{
+  display:flex;align-items:center;gap:14px;
+  padding:14px 18px 13px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  flex-shrink:0;position:relative;z-index:1;
+}
+.product-icon{
+  width:46px;height:46px;flex-shrink:0;
+  background:linear-gradient(135deg,#1a3358 0%,#0d1829 100%);
+  border:1.5px solid rgba(37,99,235,.45);
+  border-radius:13px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 22px rgba(37,99,235,.22),inset 0 1px 0 rgba(255,255,255,.06);
+}
+.product-info{flex:1;min-width:0}
+.product-name{
+  font-size:21px;font-weight:800;
+  letter-spacing:-.5px;color:#fff;line-height:1;
+}
+.product-name span{color:#3b82f6}
+.product-sub{
+  font-size:11px;font-weight:500;
+  color:#60a5fa;text-transform:uppercase;letter-spacing:1.5px;margin-top:4px;
+}
+.version-pill{
+  font-size:11px;font-weight:600;
+  background:rgba(37,99,235,.12);color:#60a5fa;
+  border:1px solid rgba(37,99,235,.22);
+  padding:3px 10px;border-radius:20px;
+  font-family:'JetBrains Mono',monospace;
+  white-space:nowrap;align-self:flex-start;margin-top:3px;flex-shrink:0;
+}
+
+/* ── CONTENT AREA ── */
+.content{flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative;z-index:1}
+
+/* ── ACTIVATED VIEW ── */
+#activatedView{
+  display:none;flex-direction:column;flex:1;
+  padding:16px 18px 12px;overflow:hidden;
+}
 #activatedView.show{display:flex}
 
-.greeting{font-size:20px;font-weight:700;color:#fff;margin-bottom:4px}
-.greeting-sub{font-size:13px;color:#64748b;margin-bottom:20px}
+.greeting{font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:2px}
+.greeting-sub{font-size:12px;color:#64748b;margin-bottom:12px}
 
-.info-table{width:100%;border-collapse:collapse;margin-bottom:20px}
-.info-table tr{border-bottom:1px solid rgba(255,255,255,.06)}
-.info-table tr:last-child{border-bottom:none}
-.info-table td{padding:11px 0;font-size:13px}
-.info-table td:first-child{color:#64748b;font-weight:500;width:130px}
-.info-table td:last-child{color:#f1f5f9;font-weight:500}
+.info-card{
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:11px;overflow:hidden;margin-bottom:10px;
+}
+.info-row{
+  display:flex;align-items:center;
+  padding:8px 14px;
+  border-bottom:1px solid rgba(255,255,255,.05);gap:10px;
+}
+.info-row:last-child{border-bottom:none}
+.info-label{font-size:12px;color:#64748b;font-weight:500;width:112px;flex-shrink:0}
+.info-value{font-size:13px;color:#e2e8f0;font-weight:600;flex:1}
+.badge{
+  display:inline-flex;align-items:center;
+  padding:2px 10px;border-radius:20px;
+  font-size:12px;font-weight:700;
+}
+.days-ok  {background:rgba(22,163,74,.1);color:#4ade80;border:1px solid rgba(22,163,74,.22)}
+.days-warn{background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.22)}
+.days-danger{background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.22)}
 
-.role-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700}
-.days-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:rgba(22,163,74,.15);color:#4ade80;border:1px solid rgba(22,163,74,.3)}
-.days-badge.warn{background:rgba(245,158,11,.15);color:#fbbf24;border-color:rgba(245,158,11,.3)}
-.days-badge.danger{background:rgba(239,68,68,.15);color:#f87171;border-color:rgba(239,68,68,.3)}
+/* Update card */
+.update-card{
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:10px;padding:10px 14px;margin-bottom:11px;
+}
+.update-header{display:flex;align-items:center;gap:8px}
+.upd-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:#334155;flex-shrink:0;
+  transition:background .3s,box-shadow .3s;
+}
+.upd-dot.checking{background:#f59e0b;animation:dotPulse 1s ease-in-out infinite}
+.upd-dot.ok{background:#22c55e;box-shadow:0 0 7px rgba(34,197,94,.55)}
+.upd-dot.avail{background:#3b82f6;box-shadow:0 0 7px rgba(59,130,246,.55)}
+.upd-dot.dl{background:#8b5cf6;animation:dotPulse .8s ease-in-out infinite}
+@keyframes dotPulse{0%,100%{opacity:.4}50%{opacity:1}}
+.upd-lbl{
+  font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.8px;color:#475569;margin-right:auto;
+}
+.upd-txt{font-size:12px;color:#64748b}
 
-.update-section{background:rgba(255,255,255,.04);border-radius:10px;padding:14px 16px;margin-bottom:16px;border:1px solid rgba(255,255,255,.08)}
-.update-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#475569;margin-bottom:8px}
-.update-status{font-size:13px;color:#64748b;display:flex;align-items:center;gap:8px}
-.dot{width:6px;height:6px;border-radius:50%;background:#64748b}
-.dot.ok{background:#22c55e;box-shadow:0 0 6px rgba(34,197,94,.5)}
+.upd-progress{margin-top:9px;display:none}
+.upd-bar{height:3px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;margin-bottom:4px}
+.upd-fill{height:100%;background:linear-gradient(90deg,#2563eb,#60a5fa);border-radius:3px;transition:width .3s;width:0%}
+.upd-pct{font-size:11px;color:#475569;text-align:right;font-family:'JetBrains Mono',monospace}
 
-.btn-primary{width:100%;padding:14px;background:#2563eb;color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s;box-shadow:0 4px 20px rgba(37,99,235,.4);margin-top:auto}
-.btn-primary:hover{background:#1d4ed8;transform:translateY(-1px);box-shadow:0 6px 24px rgba(37,99,235,.5)}
+.btn-dl-update{
+  display:none;margin-top:8px;width:100%;
+  padding:7px 12px;
+  background:rgba(37,99,235,.12);
+  border:1px solid rgba(37,99,235,.3);
+  border-radius:7px;color:#60a5fa;
+  font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
+  cursor:pointer;transition:all .15s;text-align:center;
+}
+.btn-dl-update:hover{background:rgba(37,99,235,.22)}
+.btn-restart-update{
+  display:none;margin-top:8px;width:100%;
+  padding:7px 12px;
+  background:rgba(22,163,74,.1);
+  border:1px solid rgba(22,163,74,.28);
+  border-radius:7px;color:#4ade80;
+  font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
+  cursor:pointer;transition:all .15s;text-align:center;
+}
+.btn-restart-update:hover{background:rgba(22,163,74,.2)}
+
+/* Buttons */
+.btn-primary{
+  width:100%;padding:13px;
+  background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);
+  color:#fff;border:none;border-radius:10px;
+  font-family:'Inter',sans-serif;font-size:14px;font-weight:700;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
+  transition:all .2s;
+  box-shadow:0 4px 18px rgba(37,99,235,.35),inset 0 1px 0 rgba(255,255,255,.1);
+  margin-top:auto;
+}
+.btn-primary:hover{background:linear-gradient(135deg,#1d4ed8 0%,#1e40af 100%);transform:translateY(-1px);box-shadow:0 7px 24px rgba(37,99,235,.5)}
 .btn-primary:active{transform:translateY(0)}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
 
-.btn-secondary{width:100%;padding:10px;background:rgba(255,255,255,.06);color:#94a3b8;border:1px solid rgba(255,255,255,.1);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;margin-top:8px}
-.btn-secondary:hover{background:rgba(255,255,255,.1);color:#cbd5e1}
+.btn-secondary{
+  width:100%;padding:9px;
+  background:transparent;
+  color:#475569;border:1px solid rgba(255,255,255,.09);
+  border-radius:8px;
+  font-family:'Inter',sans-serif;font-size:13px;font-weight:500;
+  cursor:pointer;transition:all .15s;margin-top:8px;
+}
+.btn-secondary:hover{background:rgba(255,255,255,.05);color:#64748b}
 
-/* LOGIN FORM */
-#loginView{flex:1;padding:28px;display:flex;flex-direction:column;justify-content:center}
+/* ── LOGIN VIEW ── */
+#loginView{flex:1;padding:18px 18px;display:flex;flex-direction:column}
 #loginView.hide{display:none}
-
-.form-title{font-size:18px;font-weight:700;color:#fff;margin-bottom:6px}
-.form-sub{font-size:13px;color:#64748b;margin-bottom:24px;line-height:1.6}
-
-.field{margin-bottom:14px}
-.field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#64748b;margin-bottom:6px}
-.field input{width:100%;padding:10px 14px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:8px;color:#f1f5f9;font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color .15s}
+.form-title{font-size:16px;font-weight:700;color:#f1f5f9;margin-bottom:5px}
+.form-sub{font-size:12px;color:#64748b;margin-bottom:18px;line-height:1.6}
+.field{margin-bottom:13px}
+.field label{
+  display:block;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.8px;color:#64748b;margin-bottom:6px;
+}
+.field input{
+  width:100%;padding:11px 14px;
+  background:rgba(255,255,255,.05);
+  border:1.5px solid rgba(255,255,255,.1);
+  border-radius:8px;color:#f1f5f9;
+  font-family:'Inter',sans-serif;font-size:14px;outline:none;
+  transition:border-color .15s,background .15s;
+}
 .field input:focus{border-color:#2563eb;background:rgba(37,99,235,.08)}
-.field input.code-input{font-family:'DM Mono',monospace;font-size:16px;font-weight:500;letter-spacing:3px;text-transform:uppercase;text-align:center}
-.field input::placeholder{color:#475569;letter-spacing:0;font-family:'DM Sans',sans-serif;font-size:13px}
+.code-input{
+  font-family:'JetBrains Mono',monospace !important;
+  font-size:18px !important;font-weight:500 !important;
+  letter-spacing:5px !important;text-transform:uppercase !important;text-align:center !important;
+}
+.field input::placeholder{color:#475569 !important;letter-spacing:0 !important;font-family:'Inter',sans-serif !important;font-size:13px !important}
 
-.error-msg{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px 14px;font-size:12px;color:#f87171;margin-bottom:14px;display:none}
-.error-msg.show{display:block}
+.error-box{
+  background:rgba(239,68,68,.08);
+  border:1px solid rgba(239,68,68,.25);
+  border-radius:8px;padding:10px 13px;
+  font-size:13px;color:#fca5a5;margin-bottom:12px;display:none;
+}
+.error-box.show{display:block}
 
-.footer-brand{display:flex;align-items:center;justify-content:center;gap:10px;padding:16px;border-top:1px solid rgba(255,255,255,.06);margin-top:auto}
+/* ── FOOTER ── */
+.app-footer{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 18px;
+  border-top:1px solid rgba(255,255,255,.06);
+  background:rgba(0,0,0,.2);
+  flex-shrink:0;position:relative;z-index:1;
+}
+.footer-brand{display:flex;align-items:center;gap:8px}
+.footer-logo{height:18px;opacity:.55}
+.footer-company{font-size:11px;color:#475569;font-weight:600;letter-spacing:.8px;text-transform:uppercase}
+.footer-ver{font-size:11px;color:#334155;font-family:'JetBrains Mono',monospace}
 
-/* ── LOADING SPLASH ── */
-#loadingView{position:fixed;top:0;left:0;right:0;bottom:0;background:#0a0f1e;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;animation:lvFadeIn .35s ease forwards;transition:opacity .35s ease,-webkit-app-region .1s}
+/* ── LOADING OVERLAY ── */
+#loadingView{
+  position:fixed;inset:0;
+  background:#060d1b;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  z-index:999;
+  animation:lvFadeIn .3s ease forwards;
+  transition:opacity .35s ease;
+}
 #loadingView.out{opacity:0;pointer-events:none}
-.lv-content{display:flex;flex-direction:column;align-items:center;gap:14px}
-.lv-logo-wrap{position:relative;width:88px;height:88px;display:flex;align-items:center;justify-content:center}
-.lv-ring{position:absolute;inset:-14px;border-radius:50%;border:2px solid rgba(37,99,235,.35);animation:lvRing 2s ease-in-out infinite}
-.lv-ring2{position:absolute;inset:-26px;border-radius:50%;border:1.5px solid rgba(37,99,235,.15);animation:lvRing 2s ease-in-out .5s infinite}
-.lv-icon{width:72px;height:72px;background:#0f172a;border:2px solid rgba(37,99,235,.4);border-radius:18px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 40px rgba(37,99,235,.35);animation:lvIconIn .5s cubic-bezier(.34,1.56,.64,1) .1s both}
-.lv-name{font-size:26px;font-weight:700;letter-spacing:-.5px;color:#fff;animation:lvUp .4s ease .15s both}
-.lv-name span{color:#2563eb}
-.lv-sub{font-size:11px;font-weight:500;color:#2563eb;text-transform:uppercase;letter-spacing:2px;animation:lvUp .4s ease .25s both}
-.lv-dots{display:flex;gap:7px;margin-top:6px;animation:lvUp .4s ease .35s both}
-.lv-dots span{width:7px;height:7px;border-radius:50%;background:#2563eb}
+
+.lv-wrap{display:flex;flex-direction:column;align-items:center;gap:10px}
+/* A2Z brand within loading */
+.lv-brand-top{
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:10px;
+  animation:lvUp .4s ease .05s both;
+}
+.lv-brand-top-logo{height:32px;opacity:.85}
+.lv-brand-top-name{font-size:13px;font-weight:700;color:#64748b;letter-spacing:1.5px;text-transform:uppercase}
+.lv-divider{
+  width:1px;height:22px;background:rgba(255,255,255,.12);
+}
+.lv-icon-wrap{position:relative;width:76px;height:76px;display:flex;align-items:center;justify-content:center}
+.lv-ring{
+  position:absolute;inset:-15px;border-radius:50%;
+  border:1.5px solid rgba(37,99,235,.3);
+  animation:lvRing 2.2s ease-in-out infinite;
+}
+.lv-ring2{
+  position:absolute;inset:-28px;border-radius:50%;
+  border:1px solid rgba(37,99,235,.11);
+  animation:lvRing 2.2s ease-in-out .65s infinite;
+}
+.lv-icon{
+  width:64px;height:64px;
+  background:linear-gradient(135deg,#1a3358 0%,#0d1829 100%);
+  border:1.5px solid rgba(37,99,235,.42);
+  border-radius:16px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 32px rgba(37,99,235,.28),inset 0 1px 0 rgba(255,255,255,.06);
+  animation:lvIconIn .6s cubic-bezier(.34,1.56,.64,1) .1s both;
+}
+.lv-name{font-size:26px;font-weight:800;letter-spacing:-.5px;color:#fff;animation:lvUp .4s ease .18s both}
+.lv-name span{color:#3b82f6}
+.lv-sub{font-size:11px;font-weight:500;color:#60a5fa;text-transform:uppercase;letter-spacing:1.8px;animation:lvUp .4s ease .28s both}
+.lv-dots{display:flex;gap:6px;margin-top:4px;animation:lvUp .4s ease .38s both}
+.lv-dots span{width:6px;height:6px;border-radius:50%;background:rgba(37,99,235,.85)}
 .lv-dots span:nth-child(1){animation:lvDot 1.3s ease-in-out 0s infinite}
 .lv-dots span:nth-child(2){animation:lvDot 1.3s ease-in-out .22s infinite}
 .lv-dots span:nth-child(3){animation:lvDot 1.3s ease-in-out .44s infinite}
-.lv-footer{position:absolute;bottom:14px;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:0 22px}
-.lv-brand{font-size:10px;color:#334155;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
-.lv-ver{font-size:10px;color:#334155;font-family:'DM Mono',monospace}
+
+.lv-footer{
+  position:absolute;bottom:14px;left:0;right:0;
+  display:flex;justify-content:center;align-items:center;
+}
+.lv-ver{font-size:11px;color:#334155;font-family:'JetBrains Mono',monospace}
+
 @keyframes lvFadeIn{from{opacity:0}to{opacity:1}}
-@keyframes lvIconIn{from{transform:scale(.65);opacity:0}to{transform:scale(1);opacity:1}}
-@keyframes lvUp{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
-@keyframes lvRing{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.12);opacity:1}}
-@keyframes lvDot{0%,80%,100%{transform:scale(1);opacity:.3}40%{transform:scale(1.4);opacity:1}}
+@keyframes lvIconIn{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes lvUp{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes lvRing{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.1);opacity:1}}
+@keyframes lvDot{0%,80%,100%{transform:scale(1);opacity:.3}40%{transform:scale(1.5);opacity:1}}
 </style>
 </head>
 <body>
 
-<!-- LOADING SPLASH OVERLAY -->
+<!-- ── LOADING OVERLAY ── -->
 <div id="loadingView">
-  <div class="lv-content">
-    <div class="lv-logo-wrap">
+  <div class="lv-wrap">
+    <!-- A2Z brand prominent no topo da animação -->
+    <div class="lv-brand-top">
+      <img class="lv-brand-top-logo" src="data:image/png;base64,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" alt="A2Z Projetos"/>
+      <div class="lv-divider"></div>
+      <span class="lv-brand-top-name">A2Z Projetos</span>
+    </div>
+    <div class="lv-icon-wrap">
       <div class="lv-ring"></div>
       <div class="lv-ring2"></div>
       <div class="lv-icon">
-        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="40" height="40">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="34" height="34">
           <rect x="4" y="4" width="11" height="24" rx="3" fill="#2563eb"/>
           <rect x="17" y="4" width="11" height="4" rx="2" fill="#2563eb"/>
           <rect x="17" y="10" width="11" height="4" rx="2" fill="#2563eb"/>
@@ -115,19 +348,33 @@ button,input,select{-webkit-app-region:no-drag}
         </svg>
       </div>
     </div>
-    <div class="lv-name">Code<span>Pro</span></div>
-    <div class="lv-sub">Gestão de Documentos</div>
+    <div class="lv-name">Nexus</div>
+    <div class="lv-sub">Gestão de Projetos</div>
     <div class="lv-dots"><span></span><span></span><span></span></div>
   </div>
   <div class="lv-footer">
-    <span class="lv-brand">A2Z Projetos</span>
     <span class="lv-ver" id="loadingVersion">v...</span>
   </div>
 </div>
 
-<div class="header">
-  <div class="logo-icon">
-    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- ── BRAND HEADER ── -->
+<div class="brand-header">
+  <img class="brand-logo" src="data:image/png;base64,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" alt="A2Z Projetos"/>
+  <div class="brand-text">
+    <div class="brand-name">A2Z Projetos</div>
+    <div class="brand-tag">Engenharia & Projetos</div>
+  </div>
+  <button class="close-btn" onclick="window.close()" title="Fechar">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  </button>
+</div>
+
+<!-- ── PRODUCT HERO ── -->
+<div class="product-hero">
+  <div class="product-icon">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="28" height="28">
       <rect x="4" y="4" width="11" height="24" rx="3" fill="#2563eb"/>
       <rect x="17" y="4" width="11" height="4" rx="2" fill="#2563eb"/>
       <rect x="17" y="10" width="11" height="4" rx="2" fill="#2563eb"/>
@@ -135,71 +382,101 @@ button,input,select{-webkit-app-region:no-drag}
       <rect x="17" y="22" width="7" height="4" rx="2" fill="#60a5fa"/>
     </svg>
   </div>
-  <div class="logo-text">
-    <div class="logo-name">Code<span>Pro</span></div>
-    <div class="logo-sub">Gestão de Documentos</div>
+  <div class="product-info">
+    <div class="product-name">Nexus</div>
+    <div class="product-sub">Gestão de Projetos</div>
   </div>
-  <div class="version-badge" id="versionBadge">v1.0.0</div>
-  <button id="closeBtn" onclick="window.close()" style="-webkit-app-region:no-drag;width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#64748b;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0" onmouseover="this.style.background='rgba(239,68,68,.2)';this.style.color='#f87171'" onmouseout="this.style.background='rgba(255,255,255,.08)';this.style.color='#64748b'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  <div class="version-pill" id="versionBadge">v...</div>
 </div>
 
-<!-- ACTIVATED -->
-<div id="activatedView">
-  <div class="greeting" id="greetingText">Bom dia!</div>
-  <div class="greeting-sub">Seu sistema está ativo e pronto para uso.</div>
+<!-- ── CONTENT ── -->
+<div class="content">
 
-  <table class="info-table">
-    <tr><td>Usuário</td><td id="infoName">—</td></tr>
-    <tr><td>Empresa</td><td id="infoCompany">—</td></tr>
-    <tr><td>Nível de acesso</td><td><span class="role-badge" id="infoRole">—</span></td></tr>
-    <tr><td>Licença válida até</td><td id="infoExpire">—</td></tr>
-    <tr><td>Dias restantes</td><td><span class="days-badge" id="infoDays">—</span></td></tr>
-    <tr><td>Versão</td><td id="infoVersion">—</td></tr>
-  </table>
+  <!-- ACTIVATED -->
+  <div id="activatedView">
+    <div class="greeting" id="greetingText">Olá!</div>
+    <div class="greeting-sub">Seu sistema está ativo e pronto para uso.</div>
 
-  <div class="update-section">
-    <div class="update-label">Atualizações</div>
-    <div class="update-status" id="updateStatus">
-      <span class="dot" id="updateDot"></span>
-      <span id="updateText">Verificando...</span>
+    <div class="info-card">
+      <div class="info-row">
+        <span class="info-label">Usuário</span>
+        <span class="info-value" id="infoName">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Empresa</span>
+        <span class="info-value" id="infoCompany">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Nível de acesso</span>
+        <span class="info-value"><span class="badge" id="infoRole">—</span></span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Válida até</span>
+        <span class="info-value" id="infoExpire">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Dias restantes</span>
+        <span class="info-value"><span class="badge days-ok" id="infoDays">—</span></span>
+      </div>
     </div>
+
+    <div class="update-card">
+      <div class="update-header">
+        <div class="upd-dot checking" id="updDot"></div>
+        <span class="upd-lbl">Atualizações</span>
+        <span class="upd-txt" id="updTxt">Verificando...</span>
+      </div>
+      <div class="upd-progress" id="updProgress">
+        <div class="upd-bar"><div class="upd-fill" id="updFill"></div></div>
+        <div class="upd-pct" id="updPct">0%</div>
+      </div>
+      <button class="btn-dl-update" id="btnDlUpdate" onclick="startDownload()">
+        Baixar atualização agora →
+      </button>
+      <button class="btn-restart-update" id="btnRestart" onclick="restartNow()">
+        Reiniciar e instalar agora →
+      </button>
+    </div>
+
+    <button class="btn-primary" id="startBtn">
+      Começar a usar
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M5 12h14M12 5l7 7-7 7"/>
+      </svg>
+    </button>
+    <button class="btn-secondary" id="changeLicenseBtn">Alterar acesso</button>
   </div>
 
-  <button class="btn-primary" id="startBtn">
-    Começar a usar
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-  </button>
-  <button class="btn-secondary" id="changeLicenseBtn">Alterar acesso</button>
-</div>
-
-<!-- LOGIN FORM -->
-<div id="loginView">
-  <div class="form-title">Acessar CodePro</div>
-  <div class="form-sub">Digite seu nome e o código de acesso fornecido pelo administrador.</div>
-
-  <div class="error-msg" id="errorMsg"></div>
-
-  <div class="field">
-    <label>Seu nome completo</label>
-    <input type="text" id="inputName" placeholder="Ex: Lucas Abdala"/>
-  </div>
-  <div class="field">
-    <label>Código de acesso</label>
-    <input type="text" id="inputKey" class="code-input" placeholder="XXXX-XXXX" maxlength="9" oninput="formatKey(this)"/>
+  <!-- LOGIN -->
+  <div id="loginView">
+    <div class="form-title">Acessar o sistema</div>
+    <div class="form-sub">Informe seu nome e o código de acesso fornecido pelo administrador da sua empresa.</div>
+    <div class="error-box" id="errorMsg"></div>
+    <div class="field">
+      <label>Nome completo</label>
+      <input type="text" id="inputName" placeholder="Ex: Lucas Abdala" autocomplete="off"/>
+    </div>
+    <div class="field">
+      <label>Código de acesso</label>
+      <input type="text" id="inputKey" class="code-input" placeholder="XXXX-XXXX" maxlength="9" oninput="formatKey(this)" autocomplete="off"/>
+    </div>
+    <button class="btn-primary" id="loginBtn" onclick="doLogin()" style="margin-top:auto">
+      Entrar
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+    </button>
   </div>
 
-  <button class="btn-primary" id="loginBtn" onclick="doLogin()">
-    Entrar
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-  </button>
-</div>
+</div><!-- /content -->
 
-<div class="footer-brand" style="display:flex;align-items:center;justify-content:center;gap:12px;padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.2)">
-  <img src="data:image/png;base64,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" style="height:32px;width:auto;opacity:.9" alt="A2Z Projetos"/>
-  <div style="font-size:11px;color:#334155;line-height:1.6">
-    <span style="color:#475569;display:block;font-size:10px">CodePro é um produto de</span>
-    <strong style="color:#64748b;font-size:12px;letter-spacing:.5px">A2Z PROJETOS LTDA</strong>
+<!-- ── FOOTER ── -->
+<div class="app-footer">
+  <div class="footer-brand">
+    <img class="footer-logo" src="data:image/png;base64,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" alt="A2Z"/>
+    <span class="footer-company">A2Z Projetos</span>
   </div>
+  <span class="footer-ver" id="footerVer">v...</span>
 </div>
 
 <script>
@@ -243,20 +520,12 @@ async function queryUser(code) {
   try {
     const resp = await fetch(
       `${SUPA_URL}/rest/v1/usuarios?access_code=eq.${encodeURIComponent(code)}&limit=1&select=*`,
-      {
-        headers: {
-          'apikey': SUPA_KEY,
-          'Authorization': `Bearer ${SUPA_KEY}`,
-          'Content-Type': 'application/json',
-        }
-      }
+      { headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` } }
     );
     if (!resp.ok) return null;
     const users = await resp.json();
     return users && users.length ? users[0] : null;
-  } catch (e) {
-    return null;
-  }
+  } catch(e) { return null; }
 }
 
 async function doLogin() {
@@ -268,7 +537,6 @@ async function doLogin() {
   if (rawKey.length < 8) { showError('Informe o código de acesso completo (XXXX-XXXX).'); return; }
 
   const code = rawKey.slice(0, 4) + '-' + rawKey.slice(4, 8);
-
   const btn = document.getElementById('loginBtn');
   btn.disabled = true;
   btn.textContent = 'Verificando...';
@@ -276,17 +544,10 @@ async function doLogin() {
   const user = await queryUser(code);
 
   btn.disabled = false;
-  btn.innerHTML = 'Entrar <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+  btn.innerHTML = 'Entrar <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
 
-  if (!user) {
-    showError('Código de acesso inválido. Verifique e tente novamente.');
-    return;
-  }
-
-  if (user.ativo === false) {
-    showError('Acesso desativado. Contate o administrador.');
-    return;
-  }
+  if (!user) { showError('Código de acesso inválido. Verifique e tente novamente.'); return; }
+  if (user.ativo === false) { showError('Acesso desativado. Contate o administrador.'); return; }
 
   if (user.license_expires) {
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -305,6 +566,16 @@ function showActivated(user) {
   document.getElementById('loginView').classList.add('hide');
   const av = document.getElementById('activatedView');
   av.classList.add('show');
+
+  // Consulta estado atual (caso update já tenha sido encontrado antes desta view abrir)
+  try {
+    const st = ipcRenderer.sendSync('get-update-state');
+    if (st && st.status !== 'idle') {
+      applyUpdateState(st.status, st.version);
+    } else {
+      resetUpdTimer(); // inicia countdown do fallback
+    }
+  } catch(e) { resetUpdTimer(); }
 
   const firstName = (user.nome || 'Usuário').split(' ')[0].toUpperCase();
   document.getElementById('greetingText').textContent = `${getGreeting()}, ${firstName}!`;
@@ -325,28 +596,80 @@ function showActivated(user) {
     const daysLeft = Math.ceil((expires - today) / 86400000);
     const daysEl = document.getElementById('infoDays');
     daysEl.textContent = `${daysLeft} dias`;
-    daysEl.classList.remove('warn', 'danger');
-    if (daysLeft < 15) daysEl.classList.add('danger');
-    else if (daysLeft < 45) daysEl.classList.add('warn');
+    daysEl.className = 'badge ' + (daysLeft < 15 ? 'days-danger' : daysLeft < 45 ? 'days-warn' : 'days-ok');
   } else {
     document.getElementById('infoExpire').textContent = 'Sem expiração';
-    document.getElementById('infoDays').textContent = '∞';
+    const daysEl = document.getElementById('infoDays');
+    daysEl.textContent = '∞';
+    daysEl.className = 'badge days-ok';
   }
-
-  document.getElementById('infoVersion').textContent = `CodePro v${require('../package.json').version} · ${new Date().getFullYear()}`;
-
-  setTimeout(() => {
-    document.getElementById('updateDot').classList.add('ok');
-    document.getElementById('updateText').textContent = 'Sistema atualizado';
-  }, 1200);
 }
 
+// ── UPDATE UI ──
+let updRestartTimer = null;
+
+function applyUpdateState(status, version) {
+  if (status === 'up-to-date') {
+    document.getElementById('updDot').className = 'upd-dot ok';
+    document.getElementById('updTxt').textContent = 'Você está atualizado';
+  } else if (status === 'available' || status === 'downloading') {
+    // Download inicia automaticamente — mostra barra de progresso
+    document.getElementById('updDot').className = 'upd-dot dl';
+    document.getElementById('updTxt').textContent = version ? `Baixando v${version}...` : 'Baixando atualização...';
+    document.getElementById('updProgress').style.display = 'block';
+    document.getElementById('btnDlUpdate').style.display = 'none';
+    document.getElementById('btnRestart').style.display = 'none';
+  } else if (status === 'downloaded') {
+    document.getElementById('updDot').className = 'upd-dot ok';
+    document.getElementById('updProgress').style.display = 'none';
+    document.getElementById('btnDlUpdate').style.display = 'none';
+    document.getElementById('btnRestart').style.display = 'none';
+    // Contagem regressiva e reinício automático
+    let secs = 1;
+    document.getElementById('updTxt').textContent = `Reiniciando em ${secs}s...`;
+    clearInterval(updRestartTimer);
+    updRestartTimer = setInterval(() => {
+      secs--;
+      if (secs <= 0) {
+        clearInterval(updRestartTimer);
+        document.getElementById('updTxt').textContent = 'Reiniciando...';
+        ipcRenderer.send('install-update');
+      } else {
+        document.getElementById('updTxt').textContent = `Reiniciando em ${secs}s...`;
+      }
+    }, 1000);
+  }
+}
+
+// Fallback: se nenhum evento chegar em 10s, assume atualizado
+let updTimer = null;
+function resetUpdTimer() {
+  clearTimeout(updTimer);
+  updTimer = setTimeout(() => {
+    if (document.getElementById('updTxt').textContent === 'Verificando...') {
+      document.getElementById('updDot').className = 'upd-dot ok';
+      document.getElementById('updTxt').textContent = 'Você está atualizado';
+    }
+  }, 10000);
+}
+
+// ── IPC: UPDATE EVENTS ──
+ipcRenderer.on('update-not-available', () => applyUpdateState('up-to-date'));
+ipcRenderer.on('update-available', (_, v) => { clearTimeout(updTimer); applyUpdateState('available', v); });
+ipcRenderer.on('update-progress', (_, pct) => {
+  document.getElementById('updProgress').style.display = 'block';
+  document.getElementById('updFill').style.width = pct + '%';
+  document.getElementById('updPct').textContent = pct + '%';
+});
+ipcRenderer.on('update-downloaded', (_, v) => { clearTimeout(updTimer); applyUpdateState('downloaded', v); });
+
+// ── INIT ──
 async function init() {
   const ver = require('../package.json').version;
   document.getElementById('versionBadge').textContent = `v${ver}`;
   document.getElementById('loadingVersion').textContent = `v${ver}`;
+  document.getElementById('footerVer').textContent = `v${ver}`;
 
-  // Decide o que mostrar após a animação
   const saved = store.get('license');
   let afterLoad = null;
 
@@ -364,21 +687,18 @@ async function init() {
     }
   }
 
-  // Exibe a animação por pelo menos 1.6s
-  await new Promise(resolve => setTimeout(resolve, 1600));
+  await new Promise(r => setTimeout(r, 1600));
 
-  // Fade-out do loading
   const lv = document.getElementById('loadingView');
   lv.classList.add('out');
-  await new Promise(resolve => setTimeout(resolve, 350));
+  await new Promise(r => setTimeout(r, 350));
   lv.style.display = 'none';
 
   if (afterLoad) afterLoad();
 }
 
 document.getElementById('startBtn').addEventListener('click', () => {
-  const saved = store.get('license');
-  ipcRenderer.send('splash-done', saved || {});
+  ipcRenderer.send('splash-done', store.get('license') || {});
 });
 
 document.getElementById('changeLicenseBtn').addEventListener('click', () => {
@@ -390,9 +710,7 @@ document.getElementById('changeLicenseBtn').addEventListener('click', () => {
   document.getElementById('inputKey').value = '';
 });
 
-document.addEventListener('keydown', e => {
-  if (e.key === 'Enter') doLogin();
-});
+document.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
 init();
 </script>
