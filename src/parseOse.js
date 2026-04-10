@@ -281,12 +281,20 @@ function parsePerfisDxf(filePath) {
           }
         }
       }
-      // canonical cf = saida || chegada
-      rec.cf = rec.cf_saida != null ? rec.cf_saida : rec.cf_chegada;
+      // canonical cf = fundo real do PV = menor entre saída e chegada
+      if (rec.cf_saida != null && rec.cf_chegada != null) {
+        rec.cf = Math.min(rec.cf_saida, rec.cf_chegada);
+      } else {
+        rec.cf = rec.cf_saida != null ? rec.cf_saida : rec.cf_chegada;
+      }
 
       const id_norm = normalizeId(name);
-      // Bloco-local: guarda ext_acum/decl deste PV neste bloco da OSE
-      blockPvs[id_norm] = { ext_acum: rec.ext_acum, decl: rec.decl };
+      // Bloco-local: guarda dados deste PV neste bloco da OSE
+      blockPvs[id_norm] = {
+        ext_acum: rec.ext_acum, decl: rec.decl,
+        cf: rec.cf, cf_chegada: rec.cf_chegada, cf_saida: rec.cf_saida,
+        ct: rec.ct, h: rec.h,
+      };
 
       // só armazena no global se houver algum dado
       if (rec.ct != null || rec.cf != null || rec.h != null || rec.ext_acum != null || rec.decl != null) {
@@ -306,6 +314,17 @@ function parsePerfisDxf(filePath) {
         } else {
           for (const k of Object.keys(stable)) {
             if (stable[k] != null && prev[k] == null) prev[k] = stable[k];
+          }
+          // cf canônico = menor entre todos os blocos (fundo real do PV)
+          if (stable.cf != null && prev.cf != null) {
+            prev.cf = Math.min(prev.cf, stable.cf);
+          }
+          // Acumula cf_chegada (maior) e cf_saida (menor) de todos os blocos
+          if (stable.cf_chegada != null) {
+            prev.cf_chegada = prev.cf_chegada != null ? Math.max(prev.cf_chegada, stable.cf_chegada) : stable.cf_chegada;
+          }
+          if (stable.cf_saida != null) {
+            prev.cf_saida = prev.cf_saida != null ? Math.min(prev.cf_saida, stable.cf_saida) : stable.cf_saida;
           }
         }
       }
@@ -500,6 +519,31 @@ function buildComparison(mapa, perfis, excel) {
       const blockPv = (perOse[num] && perOse[num].pvs && perOse[num].pvs[pid]) || {};
       const pv_ext_local  = blockPv.ext_acum != null ? blockPv.ext_acum : ppv.ext_acum;
       const pv_decl_local = blockPv.decl     != null ? blockPv.decl     : ppv.decl;
+
+      // CF do perfil: usa dados do bloco desta OSE se disponível, senão global.
+      // Para cf_chegada e cf_saida: bloco tem prioridade.
+      // Para cf canônico: se o bloco tem cf_saida, usa ele (fundo real);
+      // senão fallback para global cf (que é o min de todos os blocos).
+      const blk_cf_chegada  = blockPv.cf_chegada  != null ? blockPv.cf_chegada  : ppv.cf_chegada;
+      const blk_cf_saida    = blockPv.cf_saida    != null ? blockPv.cf_saida    : ppv.cf_saida;
+      // cf canônico para comparação com excel_cf_pv:
+      // Escolhe o cf do perfil que melhor corresponde ao cf_pv da planilha.
+      // Se o bloco tem ambos (cf_chegada e cf_saida), pega o mais próximo do excel_cf_pv.
+      // Senão, pega o que existir (bloco ou global).
+      let blk_cf;
+      if (blk_cf_saida != null && blk_cf_chegada != null && ep.cf_pv != null) {
+        // Escolhe o mais próximo do valor da planilha
+        const dSaida   = Math.abs(ep.cf_pv - blk_cf_saida);
+        const dChegada = Math.abs(ep.cf_pv - blk_cf_chegada);
+        blk_cf = dSaida <= dChegada ? blk_cf_saida : blk_cf_chegada;
+      } else {
+        blk_cf = blk_cf_saida != null ? blk_cf_saida
+               : blk_cf_chegada != null ? blk_cf_chegada
+               : (blockPv.cf != null ? blockPv.cf : ppv.cf);
+      }
+      const blk_ct          = blockPv.ct          != null ? blockPv.ct          : ppv.ct;
+      const blk_h           = blockPv.h           != null ? blockPv.h           : ppv.h;
+
       pvComps.push({
         id:           ep.id,
         excel_dist:   ep.dist_acum,
@@ -524,16 +568,16 @@ function buildComparison(mapa, perfis, excel) {
         diff_cf:      diff(ep.cf_pv, mpv.cf),
         diff_h:       diff(ep.prof_pv, mpv.h),
 
-        perf_ct:           ppv.ct       != null ? ppv.ct       : null,
-        perf_cf:           ppv.cf       != null ? ppv.cf       : null,
-        perf_cf_chegada:   ppv.cf_chegada != null ? ppv.cf_chegada : null,
-        perf_cf_saida:     ppv.cf_saida != null ? ppv.cf_saida : null,
-        perf_h:            ppv.h        != null ? ppv.h        : null,
+        perf_ct:           blk_ct          != null ? blk_ct          : null,
+        perf_cf:           blk_cf          != null ? blk_cf          : null,
+        perf_cf_chegada:   blk_cf_chegada  != null ? blk_cf_chegada  : null,
+        perf_cf_saida:     blk_cf_saida    != null ? blk_cf_saida    : null,
+        perf_h:            blk_h           != null ? blk_h           : null,
         perf_decl:         pv_decl_local != null ? pv_decl_local : null,
         perf_ext:          pv_ext_local  != null ? pv_ext_local  : null,
-        diff_ct_perf:      diff(ep.ct,        ppv.ct, 3),
-        diff_cf_perf:      diff(ep.cf_pv,     ppv.cf, 3),
-        diff_h_perf:       diff(ep.prof_pv,   ppv.h,  3),
+        diff_ct_perf:      diff(ep.ct,        blk_ct, 3),
+        diff_cf_perf:      diff(ep.cf_pv,     blk_cf, 3),
+        diff_h_perf:       diff(ep.prof_pv,   blk_h,  3),
         diff_decl_perf:    diff(ep.decl,      pv_decl_local, 6),
         diff_ext_perf:     diff(ep.dist_acum, pv_ext_local, 3),
       });
