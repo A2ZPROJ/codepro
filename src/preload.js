@@ -1,7 +1,8 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { ipcRenderer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { classifyOse, crossCheckPVs } = require('./oseStatus');
 
 let licenseData = null;
 
@@ -28,7 +29,8 @@ if (!licenseData || !licenseData.id) {
   } catch(e) {}
 }
 
-contextBridge.exposeInMainWorld('electronAPI', {
+// Com contextIsolation: false, podemos expor diretamente no window do renderer
+window.electronAPI = {
   getLicense:        () => licenseData,
   getUpdateState:    () => ipcRenderer.sendSync('get-update-state'),
   signOut:           () => ipcRenderer.send('sign-out'),
@@ -40,4 +42,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: ()           => ipcRenderer.invoke('select-folder'),
   readDir:      (p)          => ipcRenderer.invoke('read-dir', p),
   renameFiles:  (opts)       => ipcRenderer.invoke('rename-files', opts),
-});
+  selectFile:   (filters)    => ipcRenderer.invoke('select-file', filters),
+  parseOse:       (opts)       => ipcRenderer.invoke('parse-ose', opts),
+  exportOseXlsx:  (opts)       => ipcRenderer.invoke('export-ose-xlsx', opts),
+  classifyOse:    (r)          => classifyOse(r),
+  crossCheckPVs:  (data)       => crossCheckPVs(data),
+  dashboard: {
+    getData:        ()    => ipcRenderer.invoke('dashboard:get-data'),
+    getHistory:     ()    => ipcRenderer.invoke('dashboard:get-history'),
+    pickFile:       ()    => ipcRenderer.invoke('dashboard:pick-file'),
+    getPublicLink:  ()    => ipcRenderer.invoke('dashboard:get-public-link'),
+    onDataUpdated:  (cb)  => ipcRenderer.on('dashboard:data-updated', (_, data) => cb(data)),
+  },
+};
