@@ -234,7 +234,12 @@ autoUpdater.on('update-downloaded', info=>{
 
 autoUpdater.on('error', (err)=>{ logUpdate('autoUpdater error: ' + err); });
 
-ipcMain.on('install-update', ()=> autoUpdater.quitAndInstall(true, true)); // silencioso + reabre
+ipcMain.on('install-update', ()=> {
+  logUpdate('install-update requested — calling quitAndInstall');
+  // isSilent=false para que o NSIS rode visível e faça o relaunch corretamente
+  // isForceRunAfter=true para garantir que o app reabra após a instalação
+  autoUpdater.quitAndInstall(false, true);
+});
 
 // ── CONFERÊNCIA DE ARQUIVOS ──
 ipcMain.handle('select-folder', async () => {

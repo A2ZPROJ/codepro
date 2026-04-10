@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "1.9.18",
+  "version": "1.9.19",
   "description": "Nexus — Gestão de Projetos A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
@@ -28,6 +28,7 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false,
+      "allowElevation": true,
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
       "createDesktopShortcut": true,
