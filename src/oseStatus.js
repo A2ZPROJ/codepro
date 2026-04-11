@@ -8,7 +8,7 @@
 //   CT_TOL = 0.05 m
 //   CF_TOL = 0.05 m
 //   H_TOL  = 0.05 m
-//   L_TOL  = 0.0001 m (0,01 cm — praticamente zero, por pedido do usuário)
+//   L_TOL  = 0.01 m (1 cm — tolerância na segunda casa decimal)
 //   I_TOL  = 0.005 (m/m)
 //
 // Regras adicionais (além das tolerâncias):
@@ -22,7 +22,7 @@ const TOL = {
   CT: 0.05,
   CF: 0.05,
   H:  0.05,
-  L:  0.0001,
+  L:  0.01,
   I:  0.005,
   TQ: 0.02,  // degrau / tubo de queda (2 cm)
 };
@@ -74,13 +74,14 @@ function classifyOse(r) {
   if (!r.in_perfil) errors.push('ausente no Perfil');
   if (!r.in_excel)  errors.push('ausente na Planilha');
 
-  // Extensão L — tolerância de 0,01 cm (0.0001 m), mensagem com 4 decimais.
+  // Extensão L — tolerância de 1 cm (0.01 m), com pequeno epsilon para absorver arredondamento.
   const Lm = r.mapa_L, Lp = r.excel_L, Lf = r.perfil_L;
-  if (Lm != null && Lp != null && Math.abs(Lm - Lp) > TOL.L) {
-    errors.push('L: ' + fmt(Lm, 4) + ' vs ' + fmt(Lp, 4) + ' (Mapa-Plan, Δ=' + fmt(Math.abs(Lm - Lp), 4) + 'm)');
+  const L_EPS = 5e-5;
+  if (Lm != null && Lp != null && Math.abs(Lm - Lp) > TOL.L + L_EPS) {
+    errors.push('L: ' + fmt(Lm, 3) + ' vs ' + fmt(Lp, 3) + ' (Mapa-Plan, Δ=' + fmt(Math.abs(Lm - Lp), 3) + 'm)');
   }
-  if (Lm != null && Lf != null && Math.abs(Lm - Lf) > TOL.L) {
-    errors.push('L: ' + fmt(Lm, 4) + ' vs ' + fmt(Lf, 4) + ' (Mapa-Perfil, Δ=' + fmt(Math.abs(Lm - Lf), 4) + 'm)');
+  if (Lm != null && Lf != null && Math.abs(Lm - Lf) > TOL.L + L_EPS) {
+    errors.push('L: ' + fmt(Lm, 3) + ' vs ' + fmt(Lf, 3) + ' (Mapa-Perfil, Δ=' + fmt(Math.abs(Lm - Lf), 3) + 'm)');
   }
 
   // Declividade i

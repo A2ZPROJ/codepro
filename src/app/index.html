@@ -3271,7 +3271,7 @@ body {
 
     // Tolerâncias para coloração de células de DIFF (UI granular).
     // A classificação de status/erro vem de classifyOse (oseStatus.js).
-    const L_TOL  = 0.0001;  // 0,01 cm
+    const L_TOL  = 0.01;  // 1 cm (segunda casa decimal)
     const I_TOL  = 0.005;
     const CT_TOL = 0.05;
     const CF_TOL = 0.05;
@@ -3467,7 +3467,7 @@ body {
             + lbl('L Mapa',     Lm != null ? Lm.toFixed(2) + ' m' : '—')
             + lbl('L Plan.',    Lp != null ? Lp.toFixed(2) + ' m' : '—')
             + lbl('L Perf.',    Lf != null ? Lf.toFixed(2) + ' m' : '—')
-            + '<div title="Diferença absoluta entre L Mapa e L Planilha (tolerância 0,01 cm)" style="display:flex;flex-direction:column;gap:2px;cursor:help"><span style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:600">Δ L</span><span style="font-size:12px;' + mono + ';' + dLclass + '">' + (dL != null ? dL.toFixed(4) + ' m' : '—') + '</span></div>'
+            + '<div title="Diferença absoluta entre L Mapa e L Planilha (tolerância 1 cm)" style="display:flex;flex-direction:column;gap:2px;cursor:help"><span style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:600">Δ L</span><span style="font-size:12px;' + mono + ';' + dLclass + '">' + (dL != null ? dL.toFixed(3) + ' m' : '—') + '</span></div>'
             + lbl('i Mapa',     Im != null ? (Im*100).toFixed(3) + '%' : '—', declColor)
             + lbl('i Plan.',    Ip != null ? (Ip*100).toFixed(3) + '%' : '—', declColor)
             + lbl('i Perf.',    If != null ? (If*100).toFixed(3) + '%' : '—', declColor)
