@@ -3323,7 +3323,7 @@ body {
     // Colunas da tabela de PVs — compactas e sempre visíveis.
     // 1 linha por PV. Cada célula de CT/CF/h mostra valor + Δ sobreposto.
     const thS = 'padding:6px 8px;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid var(--border);white-space:nowrap;text-align:right;background:var(--surface2)';
-    function buildPvTable(r) {
+    function buildPvTable(r, declFails) {
       if (!r.pvs.length) return '<div style="padding:12px;color:var(--text3);font-size:11px;text-align:center">Sem PVs</div>';
       const hdr = '<tr>'
         + '<th style="' + thS + ';text-align:left;padding-left:16px">PV/TL</th>'
@@ -3363,7 +3363,7 @@ body {
         return '<tr style="' + bg + '">'
           + '<td style="' + td + ';text-align:left;padding-left:16px;font-weight:600;color:var(--text)">' + pv.id + '</td>'
           + '<td style="' + td + '">' + cellVal(pv.excel_dist, 2, ' m') + '</td>'
-          + '<td style="' + td + '">' + (pv.excel_decl != null ? (pv.excel_decl * 100).toFixed(2) + '%' : '<span style="color:var(--text3)">—</span>') + '</td>'
+          + '<td style="' + td + (declFails ? ';color:#dc2626;font-weight:800' : '') + '">' + (pv.excel_decl != null ? (pv.excel_decl * 100).toFixed(2) + '%' : '<span style="color:var(--text3)">—</span>') + '</td>'
           + '<td style="' + td + '">' + cellVal(pv.excel_ct, 3) + '</td>'
           + '<td style="' + td + '">' + cellCompare(pv.excel_ct, pv.mapa_ct, pv.diff_ct,      CT_TOL, 3) + '</td>'
           + '<td style="' + td + '">' + cellCompare(pv.excel_ct, pv.perf_ct, pv.diff_ct_perf, CT_TOL, 3) + '</td>'
@@ -3408,12 +3408,39 @@ body {
       const dLclass = dL != null && dL > L_TOL ? 'color:#dc2626;font-weight:700' : 'color:var(--text2)';
       const dIclass = dI != null && dI > I_TOL ? 'color:#dc2626;font-weight:700' : 'color:var(--text2)';
 
-      function lbl(t, v) {
+      function lbl(t, v, color) {
+        const c = color || 'var(--text)';
+        const weight = color ? 800 : 500;
         return '<div style="display:flex;flex-direction:column;gap:2px">'
           + '<span style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:600">' + t + '</span>'
-          + '<span style="font-size:12px;' + mono + ';color:var(--text)">' + v + '</span>'
+          + '<span style="font-size:12px;' + mono + ';color:' + c + ';font-weight:' + weight + '">' + v + '</span>'
           + '</div>';
       }
+
+      // Regra de declividade mínima: apura se esta OSE falha
+      // (mesma lógica de oseStatus.js — repetida aqui só para colorir a UI).
+      const DECL_MIN_SHALLOW = 0.01;    // 1%
+      const DECL_MIN_DEEP    = 0.0055;  // 0,55%
+      const DECL_DEPTH_LIMIT = 3.0;
+      const DECL_EPS         = 5e-5;
+      let maxHose = null;
+      for (const pv of (r.pvs || [])) {
+        const vals = [pv.excel_prof_pv, pv.excel_prof_chegada, pv.mapa_h, pv.perf_h].filter(v => v != null);
+        if (vals.length) {
+          const h = Math.max.apply(null, vals);
+          if (maxHose == null || h > maxHose) maxHose = h;
+        }
+      }
+      const iCheck = Ip != null ? Ip : Im;
+      let declFails = false;
+      if (iCheck != null && maxHose != null) {
+        if (maxHose <= DECL_DEPTH_LIMIT) {
+          declFails = iCheck < DECL_MIN_SHALLOW - DECL_EPS;
+        } else {
+          declFails = iCheck < DECL_MIN_DEEP - DECL_EPS;
+        }
+      }
+      const declColor = declFails ? '#dc2626' : null;
 
       // Avisos
       const erHtml = c.errors && c.errors.length
@@ -3437,15 +3464,15 @@ body {
             + lbl('L Mapa',     Lm != null ? Lm.toFixed(2) + ' m' : '—')
             + lbl('L Plan.',    Lp != null ? Lp.toFixed(2) + ' m' : '—')
             + lbl('L Perf.',    Lf != null ? Lf.toFixed(2) + ' m' : '—')
-            + '<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:600">Δ L</span><span style="font-size:12px;' + mono + ';' + dLclass + '">' + (dL != null ? dL.toFixed(3) + ' m' : '—') + '</span></div>'
-            + lbl('i Mapa',     Im != null ? (Im*100).toFixed(3) + '%' : '—')
-            + lbl('i Plan.',    Ip != null ? (Ip*100).toFixed(3) + '%' : '—')
-            + lbl('i Perf.',    If != null ? (If*100).toFixed(3) + '%' : '—')
-            + '<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:600">Δ i</span><span style="font-size:12px;' + mono + ';' + dIclass + '">' + (dI != null ? (dI*100).toFixed(3) + '%' : '—') + '</span></div>'
+            + '<div title="Diferença absoluta entre L Mapa e L Planilha (tolerância 0,10 m)" style="display:flex;flex-direction:column;gap:2px;cursor:help"><span style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:600">Δ L</span><span style="font-size:12px;' + mono + ';' + dLclass + '">' + (dL != null ? dL.toFixed(3) + ' m' : '—') + '</span></div>'
+            + lbl('i Mapa',     Im != null ? (Im*100).toFixed(3) + '%' : '—', declColor)
+            + lbl('i Plan.',    Ip != null ? (Ip*100).toFixed(3) + '%' : '—', declColor)
+            + lbl('i Perf.',    If != null ? (If*100).toFixed(3) + '%' : '—', declColor)
+            + '<div title="Diferença absoluta entre i Mapa e i Planilha (tolerância 0,5%)" style="display:flex;flex-direction:column;gap:2px;cursor:help"><span style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:600">Δ i</span><span style="font-size:12px;' + mono + ';' + dIclass + '">' + (dI != null ? (dI*100).toFixed(3) + '%' : '—') + '</span></div>'
           + '</div>'
         + '</div>'
         // TABELA DE PVs
-        + '<div style="overflow-x:auto">' + buildPvTable(r) + '</div>'
+        + '<div style="overflow-x:auto">' + buildPvTable(r, declFails) + '</div>'
         + erHtml + wnHtml
         + '</div>';
     }).join('');
