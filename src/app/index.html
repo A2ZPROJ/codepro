@@ -3271,25 +3271,27 @@ body {
 
     // Tolerâncias para coloração de células de DIFF (UI granular).
     // A classificação de status/erro vem de classifyOse (oseStatus.js).
-    const L_TOL = 0.5;
-    const I_TOL = 0.005;
+    const L_TOL  = 0.10;
+    const I_TOL  = 0.005;
     const CT_TOL = 0.05;
     const CF_TOL = 0.05;
     const H_TOL  = 0.05;
+    const H_MIN     = 1.10;
+    const TL_MAX_H  = 1.30;
 
     // Anexa classificação a cada OSE
     const cls = data.map(r => window.electronAPI.classifyOse(r));
 
     const filtered = data.filter((r, i) => {
       if (filterQ && !r.ose.includes(filterQ)) return false;
-      if (onlyErrs) return cls[i].hasErr || cls[i].hasTLbad || cls[i].hasTQ;
+      if (onlyErrs) return cls[i].hasErr || cls[i].hasTQ;
       return true;
     });
 
     let ok = 0, errCount = 0, warnCount = 0;
     cls.forEach(c => {
       if (c.hasErr) errCount++;
-      else if (c.hasTLbad || c.hasTQ) warnCount++;
+      else if (c.hasTQ) warnCount++;
       else ok++;
     });
 
@@ -3299,100 +3301,153 @@ body {
       (errCount ? '<span style="color:#dc2626">Erros: <strong>' + errCount + '</strong></span>' : '') +
       (warnCount ? '<span style="color:#b45309">Avisos: <strong>' + warnCount + '</strong></span>' : '');
 
-    document.getElementById('ose-tbody').innerHTML = filtered.map(function(r) {
+    // Helpers de formatação de célula comparativa (valor + diff colorido).
+    function cellCompare(valPlan, valRef, diff, tol, dec) {
+      if (valRef == null) return '<span style="color:var(--text3)">—</span>';
+      const over = diff != null && diff > tol;
+      const color = over ? '#dc2626' : '#16a34a';
+      const weight = over ? 700 : 500;
+      const d = diff != null ? diff.toFixed(dec) : '—';
+      return '<span style="color:' + color + ';font-weight:' + weight + '">' + Number(valRef).toFixed(dec) + '</span>'
+           + '<span style="font-size:9px;color:' + color + ';margin-left:4px">Δ' + d + '</span>';
+    }
+    function cellVal(v, dec, suffix) {
+      if (v == null) return '<span style="color:var(--text3)">—</span>';
+      return Number(v).toFixed(dec) + (suffix || '');
+    }
+    function pvMaxProf(pv) {
+      const vals = [pv.excel_prof_pv, pv.excel_prof_chegada, pv.mapa_h, pv.perf_h].filter(v => v != null);
+      return vals.length ? Math.max.apply(null, vals) : null;
+    }
+
+    // Colunas da tabela de PVs — compactas e sempre visíveis.
+    // 1 linha por PV. Cada célula de CT/CF/h mostra valor + Δ sobreposto.
+    const thS = 'padding:6px 8px;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid var(--border);white-space:nowrap;text-align:right;background:var(--surface2)';
+    function buildPvTable(r) {
+      if (!r.pvs.length) return '<div style="padding:12px;color:var(--text3);font-size:11px;text-align:center">Sem PVs</div>';
+      const hdr = '<tr>'
+        + '<th style="' + thS + ';text-align:left;padding-left:16px">PV/TL</th>'
+        + '<th style="' + thS + '" title="Distância acumulada — planilha">Dist.</th>'
+        + '<th style="' + thS + '" title="Declividade do trecho — planilha">Decl. Plan.</th>'
+        + '<th style="' + thS + '" title="Cota de Topo — planilha">CT Plan.</th>'
+        + '<th style="' + thS + '" title="Cota de Topo — DXF Mapa (valor + Δ p/ planilha)">CT Mapa</th>'
+        + '<th style="' + thS + '" title="Cota de Topo — DXF Perfil (valor + Δ p/ planilha)">CT Perfil</th>'
+        + '<th style="' + thS + '" title="Cota de Fundo chegada — planilha (degrau)">CF Cheg.</th>'
+        + '<th style="' + thS + '" title="Cota de Fundo do PV — planilha">CF Fundo</th>'
+        + '<th style="' + thS + '" title="Cota de Fundo — DXF Mapa (valor + Δ p/ fundo)">CF Mapa</th>'
+        + '<th style="' + thS + '" title="Cota de Fundo saída — DXF Perfil (valor + Δ p/ fundo)">CF Perfil</th>'
+        + '<th style="' + thS + '" title="Tubo de queda (degrau em m)">T.Q.</th>'
+        + '<th style="' + thS + '" title="Profundidade de vala — planilha">h Plan.</th>'
+        + '<th style="' + thS + '" title="Profundidade — DXF Mapa (valor + Δ p/ planilha)">h Mapa</th>'
+        + '<th style="' + thS + ';text-align:center" title="Alertas do PV">Obs.</th>'
+        + '</tr>';
+
+      const td = 'padding:6px 8px;border-bottom:1px solid var(--border);font-size:11px;text-align:right;font-family:\'DM Mono\',monospace';
+      const rows = r.pvs.map(function(pv) {
+        const bg = pv.excel_has_tq ? 'background:#FEF9E7' : '';
+        const hMax = pvMaxProf(pv);
+        // Badges do PV
+        const badges = [];
+        if (pv.excel_has_tq) {
+          badges.push('<span style="display:inline-block;padding:2px 6px;border-radius:4px;background:#FDE68A;color:#92400E;font-size:9px;font-weight:700">T.Q.</span>');
+        }
+        const isTL = /^TL/i.test(pv.id);
+        if (isTL && hMax != null && hMax > TL_MAX_H) {
+          badges.push('<span style="display:inline-block;padding:2px 6px;border-radius:4px;background:#FECACA;color:#7F1D1D;font-size:9px;font-weight:700" title="TL com h>1,30m — deve ser PV">TL→PV</span>');
+        }
+        if (hMax != null && hMax < H_MIN) {
+          badges.push('<span style="display:inline-block;padding:2px 6px;border-radius:4px;background:#FECACA;color:#7F1D1D;font-size:9px;font-weight:700" title="Profundidade abaixo do mínimo 1,10m">RASO</span>');
+        }
+        const obsHtml = badges.length ? badges.join(' ') : '<span style="color:var(--text3)">—</span>';
+
+        return '<tr style="' + bg + '">'
+          + '<td style="' + td + ';text-align:left;padding-left:16px;font-weight:600;color:var(--text)">' + pv.id + '</td>'
+          + '<td style="' + td + '">' + cellVal(pv.excel_dist, 2, ' m') + '</td>'
+          + '<td style="' + td + '">' + (pv.excel_decl != null ? (pv.excel_decl * 100).toFixed(2) + '%' : '<span style="color:var(--text3)">—</span>') + '</td>'
+          + '<td style="' + td + '">' + cellVal(pv.excel_ct, 3) + '</td>'
+          + '<td style="' + td + '">' + cellCompare(pv.excel_ct, pv.mapa_ct, pv.diff_ct,      CT_TOL, 3) + '</td>'
+          + '<td style="' + td + '">' + cellCompare(pv.excel_ct, pv.perf_ct, pv.diff_ct_perf, CT_TOL, 3) + '</td>'
+          + '<td style="' + td + '">' + cellVal(pv.excel_cf_chegada, 3) + '</td>'
+          + '<td style="' + td + ';font-weight:600">' + cellVal(pv.excel_cf_pv, 3) + '</td>'
+          + '<td style="' + td + '">' + cellCompare(pv.excel_cf_pv, pv.mapa_cf, pv.diff_cf,      CF_TOL, 3) + '</td>'
+          + '<td style="' + td + '">' + cellCompare(pv.excel_cf_pv, pv.perf_cf, pv.diff_cf_perf, CF_TOL, 3) + '</td>'
+          + '<td style="' + td + '">' + (pv.excel_tq != null && pv.excel_tq > 0 ? pv.excel_tq.toFixed(3) + ' m' : '<span style="color:var(--text3)">—</span>') + '</td>'
+          + '<td style="' + td + ';font-weight:600">' + cellVal(pv.excel_prof_pv, 3) + '</td>'
+          + '<td style="' + td + '">' + cellCompare(pv.excel_prof_pv, pv.mapa_h, pv.diff_h, H_TOL, 3) + '</td>'
+          + '<td style="' + td + ';text-align:center">' + obsHtml + '</td>'
+          + '</tr>';
+      }).join('');
+      return '<table style="width:100%;border-collapse:collapse">' + hdr + rows + '</table>';
+    }
+
+    // Render como lista de cards (1 card por OSE) — sempre expandido.
+    document.getElementById('ose-tbody').innerHTML = ''; // libera o tbody da tabela antiga
+    document.getElementById('ose-table').style.display = 'none';
+
+    const container = document.getElementById('ose-cards') || (function(){
+      const d = document.createElement('div');
+      d.id = 'ose-cards';
+      d.style.cssText = 'display:flex;flex-direction:column;gap:14px;padding:14px 16px';
+      document.getElementById('ose-results').insertBefore(d, document.getElementById('ose-cross'));
+      return d;
+    })();
+
+    const mono = 'font-family:\'DM Mono\',monospace';
+    container.innerHTML = filtered.map(function(r) {
       const cIdx = data.indexOf(r);
       const c = cls[cIdx];
-      const rowErr = c.hasErr;
-      const rowWarn = !c.hasErr && (c.hasTLbad || c.hasTQ);
+      const borderCol = c.hasErr ? '#FCA5A5' : (c.hasTQ ? '#FCD34D' : 'var(--border)');
+      const bgHdr     = c.hasErr ? 'rgba(220,38,38,0.05)' : (c.hasTQ ? 'rgba(245,158,11,0.05)' : 'var(--surface2)');
+      const statusColor = c.hasErr ? '#dc2626' : (c.hasTQ ? '#b45309' : '#16a34a');
+      const statusBg    = c.hasErr ? '#FEE2E2' : (c.hasTQ ? '#FEF3C7' : '#D1FAE5');
 
-      const detailId = 'ose-detail-' + r.ose;
-      const thS  = 'padding:5px 8px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);white-space:nowrap;text-align:right';
-      const pvHeader = '<tr style="background:var(--surface2)">'
-        + '<th style="' + thS + ';text-align:left;padding-left:28px">PV</th>'
-        + '<th style="' + thS + '" title="Distância acumulada (coluna G da planilha)">Dist. Acum.</th>'
-        + '<th style="' + thS + '" title="Declividade do trecho (coluna O da planilha)">Decl. Plan.</th>'
-        + '<th style="' + thS + '" title="Cota de Tampa — da planilha">CT Plan.</th>'
-        + '<th style="' + thS + '" title="Cota de Tampa — anotação no DXF Mapa">CT Mapa</th>'
-        + '<th style="' + thS + '" title="Diferença absoluta entre CT Planilha e CT Mapa">ΔCT Mapa</th>'
-        + '<th style="' + thS + '" title="Cota de Tampa — lida do DXF Perfis (COTA TOPO)">CT Perfil</th>'
-        + '<th style="' + thS + '" title="Diferença absoluta entre CT Planilha e CT Perfil">ΔCT Perf.</th>'
-        + '<th style="' + thS + '" title="Cota de Fundo de chegada — planilha (linha do degrau)">CF Cheg. Plan.</th>'
-        + '<th style="' + thS + '" title="Cota de Fundo do PV (fundo real) — planilha">CF Fundo PV</th>'
-        + '<th style="' + thS + '" title="Tubo de Queda (degrau em metros)">T.Q. (m)</th>'
-        + '<th style="' + thS + '" title="Cota de Fundo — anotação no DXF Mapa">CF Mapa</th>'
-        + '<th style="' + thS + '" title="Diferença absoluta entre CF Fundo PV e CF Mapa">ΔCF Mapa</th>'
-        + '<th style="' + thS + '" title="Cota de Fundo (chegada) — GI do tubo, perfil">CF Cheg. Perf.</th>'
-        + '<th style="' + thS + '" title="Cota de Fundo (saída) — GI do tubo, perfil">CF Saída Perf.</th>'
-        + '<th style="' + thS + '" title="Diferença absoluta entre CF Fundo PV e CF Perfil">ΔCF Perf.</th>'
-        + '<th style="' + thS + '" title="Profundidade de vala — planilha (coluna S)">h Plan.</th>'
-        + '<th style="' + thS + '" title="Profundidade de vala (chegada do degrau)">h Cheg.</th>'
-        + '<th style="' + thS + '" title="Profundidade de vala — DXF Perfis">h Perfil</th>'
-        + '<th style="' + thS + '" title="Declividade — lida do DXF Perfis (m/m)">Decl. Perfil</th>'
-        + '<th style="' + thS + '" title="Diferença absoluta entre Decl. Planilha e Decl. Perfil">ΔDecl. Perf.</th>'
-        + '<th style="' + thS + '" title="Extensão acumulada — lida do DXF Perfis (m)">Ext.Acum. Perf.</th>'
-        + '<th style="' + thS + '" title="Diferença absoluta entre Dist.Acum. Planilha e Ext.Acum. Perfil">ΔExt. Perf.</th>'
-        + '</tr>';
-      const DECL_TOL = 0.005, EXT_TOL = 0.5;
-      const pvRows = r.pvs.length ? pvHeader + r.pvs.map(function(pv) {
-        const ctOkM   = pv.diff_ct        === null || pv.diff_ct        <= CT_TOL;
-        const cfOkM   = pv.diff_cf        === null || pv.diff_cf        <= CF_TOL;
-        const ctOkP   = pv.diff_ct_perf   === null || pv.diff_ct_perf   <= CT_TOL;
-        const cfOkP   = pv.diff_cf_perf   === null || pv.diff_cf_perf   <= CF_TOL;
-        const declOkP = pv.diff_decl_perf === null || pv.diff_decl_perf <= DECL_TOL;
-        const extOkP  = pv.diff_ext_perf  === null || pv.diff_ext_perf  <= EXT_TOL;
-        const td   = 'padding:5px 8px;border-bottom:1px solid var(--border);font-size:11px;text-align:right;font-family:\'DM Mono\',monospace';
-        const err  = 'color:#dc2626;font-weight:700';
-        const ok   = 'color:#16a34a';
-        const tqBg = pv.excel_has_tq ? 'background:#FEF3C7;' : 'background:var(--surface2);';
-        return '<tr style="' + tqBg + '">'
-          + '<td style="' + td + ';text-align:left;padding-left:28px;color:var(--text3)">' + pv.id + (pv.excel_has_tq ? ' <span style="color:#b45309;font-weight:700" title="Tubo de Queda">[T.Q.]</span>' : '') + '</td>'
-          + '<td style="' + td + '">' + (pv.excel_dist != null ? fmtN(pv.excel_dist,2) + ' m' : '—') + '</td>'
-          + '<td style="' + td + '">' + (pv.excel_decl != null ? pv.excel_decl.toFixed(4) : '—') + '</td>'
-          + '<td style="' + td + '">' + fmtN(pv.excel_ct,3) + '</td>'
-          + '<td style="' + td + '">' + (pv.mapa_ct != null ? fmtN(pv.mapa_ct,3) : '—') + '</td>'
-          + '<td style="' + td + ';' + (ctOkM ? ok : err) + '">' + (pv.diff_ct != null ? fmtN(pv.diff_ct,3) : '—') + '</td>'
-          + '<td style="' + td + '">' + (pv.perf_ct != null ? fmtN(pv.perf_ct,3) : '—') + '</td>'
-          + '<td style="' + td + ';' + (ctOkP ? ok : err) + '">' + (pv.diff_ct_perf != null ? fmtN(pv.diff_ct_perf,3) : '—') + '</td>'
-          + '<td style="' + td + '">' + fmtN(pv.excel_cf_chegada,3) + '</td>'
-          + '<td style="' + td + '">' + fmtN(pv.excel_cf_pv,3) + '</td>'
-          + '<td style="' + td + '">' + (pv.excel_tq != null && pv.excel_tq > 0 ? fmtN(pv.excel_tq,3) : '—') + '</td>'
-          + '<td style="' + td + '">' + (pv.mapa_cf != null ? fmtN(pv.mapa_cf,3) : '—') + '</td>'
-          + '<td style="' + td + ';' + (cfOkM ? ok : err) + '">' + (pv.diff_cf != null ? fmtN(pv.diff_cf,3) : '—') + '</td>'
-          + '<td style="' + td + '">' + (pv.perf_cf_chegada != null ? fmtN(pv.perf_cf_chegada,3) : '—') + '</td>'
-          + '<td style="' + td + '">' + (pv.perf_cf_saida != null ? fmtN(pv.perf_cf_saida,3) : '—') + '</td>'
-          + '<td style="' + td + ';' + (cfOkP ? ok : err) + '">' + (pv.diff_cf_perf != null ? fmtN(pv.diff_cf_perf,3) : '—') + '</td>'
-          + '<td style="' + td + '">' + fmtN(pv.excel_prof_pv,3) + '</td>'
-          + '<td style="' + td + '">' + (pv.excel_has_tq && pv.excel_prof_chegada != null ? fmtN(pv.excel_prof_chegada,3) : '—') + '</td>'
-          + '<td style="' + td + '">' + (pv.perf_h != null ? fmtN(pv.perf_h,3) : '—') + '</td>'
-          + '<td style="' + td + '">' + (pv.perf_decl != null ? pv.perf_decl.toFixed(4) : '—') + '</td>'
-          + '<td style="' + td + ';' + (declOkP ? ok : err) + '">' + (pv.diff_decl_perf != null ? pv.diff_decl_perf.toFixed(4) : '—') + '</td>'
-          + '<td style="' + td + '">' + (pv.perf_ext != null ? fmtN(pv.perf_ext,2) + ' m' : '—') + '</td>'
-          + '<td style="' + td + ';' + (extOkP ? ok : err) + '">' + (pv.diff_ext_perf != null ? fmtN(pv.diff_ext_perf,2) : '—') + '</td>'
-          + '</tr>';
-      }).join('') : '';
+      // Linha de métricas L e i
+      const Lm = r.mapa_L, Lp = r.excel_L, Lf = r.perfil_L;
+      const Im = r.mapa_i, Ip = r.excel_i, If = r.perfil_i;
+      const dL = r.diff_L, dI = r.diff_i;
+      const dLclass = dL != null && dL > L_TOL ? 'color:#dc2626;font-weight:700' : 'color:var(--text2)';
+      const dIclass = dI != null && dI > I_TOL ? 'color:#dc2626;font-weight:700' : 'color:var(--text2)';
 
-      const bdr = 'border-bottom:1px solid var(--border)';
-      const bl2 = 'border-left:2px solid var(--border)';
-      const mono = 'font-family:\'DM Mono\',monospace';
-      const rowBg = rowErr ? 'background:rgba(220,38,38,0.06)' : (rowWarn ? 'background:rgba(245,158,11,0.08)' : '');
-      const statusColor = rowErr ? '#dc2626' : (rowWarn ? '#b45309' : '#16a34a');
-      const avisosHtml = c.avisos ? c.avisos.replace(/</g,'&lt;') : '';
-      return '<tr style="cursor:pointer;' + rowBg + '" onclick="oseToggleDetail(\'' + r.ose + '\')">'
-        + '<td style="padding:8px 12px;' + bdr + ';font-weight:600;' + mono + '">' + 'OSE-' + r.ose + '</td>'
-        + '<td style="padding:8px 8px;' + bdr + ';' + bl2 + ';text-align:center">' + (r.in_mapa   ? '<span style="color:#16a34a">✓</span>' : '<span style="color:#dc2626">✗</span>') + '</td>'
-        + '<td style="padding:8px 8px;' + bdr + ';text-align:center">'              + (r.in_perfil ? '<span style="color:#16a34a">✓</span>' : '<span style="color:#dc2626">✗</span>') + '</td>'
-        + '<td style="padding:8px 8px;' + bdr + ';text-align:center">'              + (r.in_excel  ? '<span style="color:#16a34a">✓</span>' : '<span style="color:#dc2626">✗</span>') + '</td>'
-        + '<td style="padding:8px 10px;' + bdr + ';' + bl2 + ';text-align:right;' + mono + '">' + fmtN(r.mapa_L,2) + '</td>'
-        + '<td style="padding:8px 10px;' + bdr + ';text-align:right;' + mono + '">' + fmtN(r.excel_L,2) + '</td>'
-        + '<td style="padding:8px 10px;' + bdr + ';text-align:right;' + mono + ';' + oseDiffClass(r.diff_L, L_TOL) + '">' + (r.diff_L !== null ? r.diff_L.toFixed(3) : '—') + '</td>'
-        + '<td style="padding:8px 10px;' + bdr + ';' + bl2 + ';text-align:right;' + mono + '">' + fmtN(r.mapa_i,4) + '</td>'
-        + '<td style="padding:8px 10px;' + bdr + ';text-align:right;' + mono + '">' + fmtN(r.excel_i,4) + '</td>'
-        + '<td style="padding:8px 10px;' + bdr + ';text-align:right;' + mono + ';' + oseDiffClass(r.diff_i, I_TOL) + '">' + (r.diff_i !== null ? r.diff_i.toFixed(5) : '—') + '</td>'
-        + '<td style="padding:8px 10px;' + bdr + ';' + bl2 + ';text-align:center;font-weight:700;font-size:10px;color:' + statusColor + '">' + c.status + '</td>'
-        + '<td style="padding:8px 10px;' + bdr + ';' + bl2 + ';text-align:left;font-size:11px;color:var(--text2);max-width:360px;white-space:normal;line-height:1.4">' + avisosHtml + '</td>'
-        + '<td style="padding:8px 8px;' + bdr + ';text-align:center;color:var(--text3);font-size:11px">' + (r.pvs.length ? r.pvs.length + ' ▾' : '—') + '</td>'
-        + '</tr>'
-        + (r.pvs.length ? '<tr id="' + detailId + '" style="display:none"><td colspan="24" style="padding:0;border-bottom:2px solid var(--border)"><table style="width:100%;border-collapse:collapse">' + pvRows + '</table></td></tr>' : '');
+      function lbl(t, v) {
+        return '<div style="display:flex;flex-direction:column;gap:2px">'
+          + '<span style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:600">' + t + '</span>'
+          + '<span style="font-size:12px;' + mono + ';color:var(--text)">' + v + '</span>'
+          + '</div>';
+      }
+
+      // Avisos
+      const erHtml = c.errors && c.errors.length
+        ? '<div style="padding:8px 14px;background:#FEF2F2;border-top:1px solid #FECACA;font-size:11px;color:#7F1D1D"><strong>Erros:</strong> ' + c.errors.map(e => e.replace(/</g,'&lt;')).join(' · ') + '</div>'
+        : '';
+      const wnHtml = c.warnings && c.warnings.length
+        ? '<div style="padding:6px 14px;background:#FFFBEB;border-top:1px solid #FDE68A;font-size:11px;color:#92400E"><strong>Avisos:</strong> ' + c.warnings.map(w => w.replace(/</g,'&lt;')).join(' · ') + '</div>'
+        : '';
+
+      return '<div class="ose-card" data-ose="' + r.ose + '" style="border:1.5px solid ' + borderCol + ';border-radius:10px;overflow:hidden;background:var(--surface)">'
+        // HEADER
+        + '<div style="padding:10px 16px;background:' + bgHdr + ';display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:1px solid var(--border)">'
+          + '<div style="font-size:14px;font-weight:800;' + mono + ';color:var(--text)">OSE-' + r.ose + '</div>'
+          + '<div style="padding:3px 10px;border-radius:12px;background:' + statusBg + ';color:' + statusColor + ';font-size:10px;font-weight:800;letter-spacing:.5px">' + c.status + '</div>'
+          + '<div style="display:flex;gap:6px;font-size:10px">'
+            + '<span title="DXF Mapas"   style="padding:2px 7px;border-radius:4px;background:' + (r.in_mapa   ? '#D1FAE5' : '#FEE2E2') + ';color:' + (r.in_mapa   ? '#065F46' : '#7F1D1D') + ';font-weight:700">Mapa '   + (r.in_mapa   ? '✓' : '✗') + '</span>'
+            + '<span title="DXF Perfis"  style="padding:2px 7px;border-radius:4px;background:' + (r.in_perfil ? '#D1FAE5' : '#FEE2E2') + ';color:' + (r.in_perfil ? '#065F46' : '#7F1D1D') + ';font-weight:700">Perfil ' + (r.in_perfil ? '✓' : '✗') + '</span>'
+            + '<span title="Planilha"    style="padding:2px 7px;border-radius:4px;background:' + (r.in_excel  ? '#D1FAE5' : '#FEE2E2') + ';color:' + (r.in_excel  ? '#065F46' : '#7F1D1D') + ';font-weight:700">Plan '   + (r.in_excel  ? '✓' : '✗') + '</span>'
+          + '</div>'
+          + '<div style="margin-left:auto;display:flex;gap:18px;align-items:center">'
+            + lbl('L Mapa',     Lm != null ? Lm.toFixed(2) + ' m' : '—')
+            + lbl('L Plan.',    Lp != null ? Lp.toFixed(2) + ' m' : '—')
+            + lbl('L Perf.',    Lf != null ? Lf.toFixed(2) + ' m' : '—')
+            + '<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:600">Δ L</span><span style="font-size:12px;' + mono + ';' + dLclass + '">' + (dL != null ? dL.toFixed(3) + ' m' : '—') + '</span></div>'
+            + lbl('i Mapa',     Im != null ? (Im*100).toFixed(3) + '%' : '—')
+            + lbl('i Plan.',    Ip != null ? (Ip*100).toFixed(3) + '%' : '—')
+            + lbl('i Perf.',    If != null ? (If*100).toFixed(3) + '%' : '—')
+            + '<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:600">Δ i</span><span style="font-size:12px;' + mono + ';' + dIclass + '">' + (dI != null ? (dI*100).toFixed(3) + '%' : '—') + '</span></div>'
+          + '</div>'
+        + '</div>'
+        // TABELA DE PVs
+        + '<div style="overflow-x:auto">' + buildPvTable(r) + '</div>'
+        + erHtml + wnHtml
+        + '</div>';
     }).join('');
 
     // ── Cruzamento entre OSEs — PVs compartilhados ──
@@ -3455,12 +3510,6 @@ body {
     }
 
     document.getElementById('ose-results').style.display = '';
-  };
-
-  window.oseToggleDetail = function(ose) {
-    const row = document.getElementById('ose-detail-' + ose);
-    if (!row) return;
-    row.style.display = row.style.display === 'none' ? '' : 'none';
   };
 
   window.oseFilter = function() {

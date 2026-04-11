@@ -8,17 +8,29 @@
 //   CT_TOL = 0.05 m
 //   CF_TOL = 0.05 m
 //   H_TOL  = 0.05 m
-//   L_TOL  = 0.5  m
+//   L_TOL  = 0.10 m   (apertado — antes 0.5m mascarava divergências tipo 49,31 vs 49,21)
 //   I_TOL  = 0.005 (m/m)
+//
+// Regras adicionais (além das tolerâncias):
+//   H_MIN      = 1.10 m   — qualquer PV/TL com profundidade menor é ERRO
+//   TL_MAX_H   = 1.30 m   — TL acima disso deve ser PV (ERRO, antes era aviso)
+//   DECL_MIN_SHALLOW = 0.01   (1%)    — OSE com max h ≤ 3m exige i ≥ 1%
+//   DECL_MIN_DEEP    = 0.0055 (0,55%) — OSE com max h > 3m pode ter i < 1%, mas ≥ 0,55%
 'use strict';
 
 const TOL = {
   CT: 0.05,
   CF: 0.05,
   H:  0.05,
-  L:  0.5,
+  L:  0.10,
   I:  0.005,
 };
+
+const H_MIN            = 1.10;
+const TL_MAX_H         = 1.30;
+const DECL_MIN_SHALLOW = 0.01;    // h ≤ 3m
+const DECL_MIN_DEEP    = 0.0055;  // h > 3m
+const DECL_DEPTH_LIMIT = 3.0;
 
 function isTL(id) {
   return typeof id === 'string' && id.trim().toUpperCase().startsWith('TL');
@@ -33,8 +45,18 @@ function maxProf(pv) {
 function tlShouldBePv(pv) {
   if (!isTL(pv.id)) return null;
   const h = maxProf(pv);
-  if (h != null && h > 1.300) return h;
+  if (h != null && h > TL_MAX_H) return h;
   return null;
+}
+
+// Profundidade máxima observada entre todos os PVs/TLs da OSE.
+function maxProfOse(r) {
+  let m = null;
+  for (const pv of (r.pvs || [])) {
+    const h = maxProf(pv);
+    if (h != null && (m == null || h > m)) m = h;
+  }
+  return m;
 }
 
 function fmt(v, d) {
@@ -70,7 +92,7 @@ function classifyOse(r) {
   }
 
   // Por PV
-  let hasTQ = false, hasTLbad = false;
+  let hasTQ = false, hasTLbad = false, hasShallow = false, hasDeepTL = false;
   for (const pv of (r.pvs || [])) {
     // CT
     if (pv.diff_ct != null && pv.diff_ct > TOL.CT) {
@@ -90,16 +112,43 @@ function classifyOse(r) {
     if (pv.diff_h != null && pv.diff_h > TOL.H) {
       errors.push('h divergente em ' + pv.id + ' (' + fmt(pv.excel_prof_pv, 3) + ' vs ' + fmt(pv.mapa_h, 3) + ' Mapa)');
     }
+
+    // Profundidade mínima (qualquer PV/TL) — regra nova
+    const hPv = maxProf(pv);
+    if (hPv != null && hPv < H_MIN) {
+      hasShallow = true;
+      errors.push(pv.id + ' raso (h=' + hPv.toFixed(3) + 'm < ' + H_MIN.toFixed(2) + 'm mínimo)');
+    }
+
     // T.Q.
     if (pv.excel_has_tq) {
       hasTQ = true;
       warnings.push('T.Q. ' + pv.id + ' (' + (pv.excel_tq != null ? pv.excel_tq.toFixed(3) : '?') + 'm)');
     }
-    // TL deve ser PV
+    // TL deve ser PV (h > 1,30) → agora é ERRO
     const tlH = tlShouldBePv(pv);
     if (tlH != null) {
       hasTLbad = true;
-      warnings.push(pv.id + ' deve ser PV (h=' + tlH.toFixed(3) + ')');
+      hasDeepTL = true;
+      errors.push(pv.id + ' deve ser PV (h=' + tlH.toFixed(3) + 'm > ' + TL_MAX_H.toFixed(2) + 'm)');
+    }
+  }
+
+  // Declividade mínima por profundidade da OSE (regra nova)
+  // Usa a declividade da planilha (canônica); se ausente, cai para mapa.
+  // Epsilon de 5e-5 absorve ruído de arredondamento (1,000% arredonda para 1,00%).
+  const iCheck = r.excel_i != null ? r.excel_i : r.mapa_i;
+  const maxH   = maxProfOse(r);
+  const DECL_EPS = 5e-5;
+  if (iCheck != null && maxH != null) {
+    if (maxH <= DECL_DEPTH_LIMIT) {
+      if (iCheck < DECL_MIN_SHALLOW - DECL_EPS) {
+        errors.push('i=' + (iCheck * 100).toFixed(2) + '% < 1,00% (h máx=' + maxH.toFixed(2) + 'm ≤ 3m)');
+      }
+    } else {
+      if (iCheck < DECL_MIN_DEEP - DECL_EPS) {
+        errors.push('i=' + (iCheck * 100).toFixed(2) + '% < 0,55% (h máx=' + maxH.toFixed(2) + 'm > 3m)');
+      }
     }
   }
 
@@ -108,8 +157,7 @@ function classifyOse(r) {
   // Status final
   const flags = [];
   if (hasErr)   flags.push('ERRO');
-  if (hasTLbad) flags.push('TL->PV');
-  if (!hasErr && !hasTLbad && hasTQ) flags.push('T.Q.');
+  if (!hasErr && hasTQ) flags.push('T.Q.');
   if (!flags.length) flags.push('OK');
   const status = flags.join('/');
 
@@ -196,4 +244,8 @@ function crossCheckPVs(data) {
   return alertas;
 }
 
-module.exports = { classifyOse, crossCheckPVs, TOL, isTL, tlShouldBePv, maxProf };
+module.exports = {
+  classifyOse, crossCheckPVs, TOL,
+  isTL, tlShouldBePv, maxProf, maxProfOse,
+  H_MIN, TL_MAX_H, DECL_MIN_SHALLOW, DECL_MIN_DEEP, DECL_DEPTH_LIMIT,
+};
