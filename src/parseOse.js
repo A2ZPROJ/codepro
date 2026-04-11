@@ -547,11 +547,19 @@ function buildComparison(mapa, perfis, excel) {
       // T.Q. calculado pelo perfil + planilha:
       //   CF PV (calc)    = CT planilha − profundidade planilha
       //   T.Q. calculado  = GI tubo de chegada (perfil) − CF PV (calc)
-      // Compara com excel_tq para validar o degrau declarado na planilha.
+      //
+      // Só calcula quando a PLANILHA declara que existe degrau neste PV
+      // (cf_chegada > cf_pv). Em PVs de junção (início do trecho desta OSE
+      // mas ponto de chegada de outra OSE), o perfil mostra o GI do tubo
+      // da OUTRA OSE, o que faria o cálculo virar falso positivo. Quando
+      // a planilha diz "sem degrau", confiamos na planilha e não validamos.
       let tq_calc   = null;
       let diff_tq   = null;
       const gi_cheg = blk_cf_chegada != null ? blk_cf_chegada : null;
-      if (ep.ct != null && ep.prof_pv != null && gi_cheg != null) {
+      const planilhaDeclaraStep = ep.cf_chegada != null
+                               && ep.cf_pv      != null
+                               && (ep.cf_chegada - ep.cf_pv) > 1e-4;
+      if (planilhaDeclaraStep && ep.ct != null && ep.prof_pv != null && gi_cheg != null) {
         const cfCalc = ep.ct - ep.prof_pv;
         tq_calc = rnd(gi_cheg - cfCalc, 4);
         // Arredonda T.Q. negativos muito pequenos pra zero (ruído numérico).
