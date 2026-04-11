@@ -56,6 +56,8 @@
   import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
   const sb = createClient('https://xszpzsmdpbgaiodeqcpi.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhzenB6c21kcGJnYWlvZGVxY3BpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzMTI5ODYsImV4cCI6MjA4OTg4ODk4Nn0.Wv_tcovD5nc13tmrfkgsVb6M6tS-CC7q6HVjphpzTrQ');
+  // Expose sb globally para scripts não-módulo (ex: aba Orçamento)
+  window.sb = sb;
 
   const ROLES = {
     master:       { label:'Master',       color:'#7c3aed', bg:'#ede9fe', canView:true, canCreate:true,  canAdmin:true,  canDelete:true  },
@@ -2414,6 +2416,7 @@ body {
       <button class="tab-btn" draggable="true" onclick="switchTab('grd',this)">GRD</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('verificar',this)">Verificar projeto existente</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('conferencia',this)">Conferência</button>
+      <button class="tab-btn" draggable="true" onclick="switchTab('orcamento',this);setTimeout(()=>window.orcInit&&window.orcInit(),60);">Orçamento</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('renomear',this)">Renomear</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('perfil',this)">Perfil</button>
       <button class="tab-btn" draggable="true" id="auditTabBtn" style="display:none" onclick="switchTab('audit',this)">Auditoria</button>
@@ -3573,6 +3576,588 @@ body {
       if (btn) { btn.disabled = false; btn.textContent = 'Exportar XLSX'; }
     }
   };
+  </script>
+
+  <!-- ORÇAMENTO TAB ─────────────────────────────────────────────── -->
+  <div class="tab-content" id="tab-orcamento">
+    <div style="padding:20px;max-width:1280px;margin:0 auto">
+
+      <!-- Sub-tabs -->
+      <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border)">
+        <button class="orc-subtab active" data-sub="tabelas" style="background:none;border:none;border-bottom:2.5px solid var(--gray-900);color:var(--text);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:-1px">Tabelas de Preço</button>
+        <button class="orc-subtab" data-sub="bdi" style="background:none;border:none;border-bottom:2.5px solid transparent;color:var(--text3);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;margin-bottom:-1px">BDI</button>
+        <button class="orc-subtab" data-sub="orcamentos" style="background:none;border:none;border-bottom:2.5px solid transparent;color:var(--text3);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;margin-bottom:-1px">Orçamentos</button>
+      </div>
+
+      <!-- ─── SUB: TABELAS DE PREÇO ─────────────────────────────── -->
+      <div class="orc-sub" id="orc-sub-tabelas">
+        <!-- Toolbar -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">Tabelas de Preço</div>
+          <div style="display:flex;gap:6px;margin-left:14px;background:var(--surface2);border-radius:6px;padding:3px">
+            <button class="orc-filter active" data-filter="all"     style="background:var(--surface);color:var(--text);border:none;border-radius:4px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer">Todas</button>
+            <button class="orc-filter"        data-filter="SANEPAR" style="background:none;color:var(--text3);border:none;border-radius:4px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer">SANEPAR</button>
+            <button class="orc-filter"        data-filter="SINAPI"  style="background:none;color:var(--text3);border:none;border-radius:4px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer">SINAPI</button>
+            <button class="orc-filter"        data-filter="EMOP"    style="background:none;color:var(--text3);border:none;border-radius:4px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer">EMOP</button>
+            <button class="orc-filter"        data-filter="CUSTOM"  style="background:none;color:var(--text3);border:none;border-radius:4px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer">Custom</button>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button id="orc-tab-import-btn" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Importar XLSX</button>
+            <button id="orc-tab-nova-btn" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">+ Nova tabela</button>
+          </div>
+        </div>
+
+        <!-- Lista de tabelas -->
+        <div id="orc-tab-list" style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+          <div style="padding:40px;text-align:center;color:var(--text3);font-size:12px">Carregando...</div>
+        </div>
+      </div>
+
+      <!-- ─── SUB: BDI ──────────────────────────────────────────── -->
+      <div class="orc-sub" id="orc-sub-bdi" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">Templates de BDI</div>
+          <div style="font-size:11px;color:var(--text3)">Fórmula Acórdão 2622/2013 TCU — alíquotas por faixa de custo direto</div>
+          <button id="orc-bdi-novo-btn" style="margin-left:auto;background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">+ Novo BDI</button>
+        </div>
+        <div id="orc-bdi-list" style="display:flex;flex-direction:column;gap:12px">
+          <div style="padding:40px;text-align:center;color:var(--text3);font-size:12px">Carregando...</div>
+        </div>
+      </div>
+
+      <!-- ─── SUB: ORÇAMENTOS ───────────────────────────────────── -->
+      <div class="orc-sub" id="orc-sub-orcamentos" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">Orçamentos</div>
+          <button id="orc-novo-btn" style="margin-left:auto;background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">+ Novo orçamento</button>
+        </div>
+        <div id="orc-orc-list" style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+          <div style="padding:40px;text-align:center;color:var(--text3);font-size:12px">Carregando...</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Modal: Nova tabela / Importar -->
+    <div id="orc-tab-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;align-items:center;justify-content:center;padding:20px">
+      <div style="background:var(--surface);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:100%;max-width:560px;max-height:90vh;overflow:auto">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div id="orc-tab-modal-title" style="font-size:14px;font-weight:700;color:var(--text)">Nova tabela de preço</div>
+          <button onclick="document.getElementById('orc-tab-modal').style.display='none'" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px 8px">✕</button>
+        </div>
+        <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Fonte *</label>
+            <select id="orc-tab-fonte" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none">
+              <option value="SANEPAR">SANEPAR</option>
+              <option value="SINAPI">SINAPI</option>
+              <option value="EMOP">EMOP</option>
+              <option value="CUSTOM">Custom (2S / A2Z)</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Nome *</label>
+            <input id="orc-tab-nome" placeholder="ex: SANEPAR MOS Dezembro/2024" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 120px;gap:10px">
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Data referência *</label>
+              <input id="orc-tab-data" type="date" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">UF</label>
+              <input id="orc-tab-uf" placeholder="PR" maxlength="2" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;text-transform:uppercase"/>
+            </div>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Descrição (opcional)</label>
+            <input id="orc-tab-desc" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+          </div>
+          <div id="orc-tab-import-section" style="display:none;padding:12px;background:var(--surface2);border-radius:8px;border:1px dashed var(--border)">
+            <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:8px">Arquivo XLSX da tabela</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input id="orc-tab-file-path" readonly placeholder="Selecione o XLSX..." style="flex:1;padding:7px 10px;font-family:inherit;font-size:11px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;min-width:0"/>
+              <button id="orc-tab-file-btn" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:7px 12px;font-family:inherit;font-size:11px;font-weight:500;cursor:pointer;flex-shrink:0">Procurar</button>
+            </div>
+            <div id="orc-tab-file-info" style="font-size:10px;color:var(--text3);margin-top:8px"></div>
+          </div>
+          <div id="orc-tab-modal-status" style="font-size:11px;color:var(--text3);min-height:14px"></div>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="document.getElementById('orc-tab-modal').style.display='none'" style="background:var(--surface);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;cursor:pointer">Cancelar</button>
+          <button id="orc-tab-modal-save" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 18px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Salvar</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <!-- FIM ORÇAMENTO TAB ──────────────────────────────────────────── -->
+
+  <script>
+  // ============================================================
+  // ORÇAMENTO — lógica da aba (sub-tabs, tabelas de preço, BDI, orçamentos)
+  // ============================================================
+  (function(){
+    let _orcInitialized = false;
+    let _orcCurSub = 'tabelas';
+    let _orcTabFilter = 'all';
+    let _orcTabList = [];
+    let _orcBdiList = [];
+    let _orcOrcList = [];
+
+    function sbReady() { return !!window.sb; }
+
+    // ── Sub-tabs ──────────────────────────────────────────────
+    function showSub(name) {
+      _orcCurSub = name;
+      document.querySelectorAll('.orc-subtab').forEach(b => {
+        const on = b.dataset.sub === name;
+        b.classList.toggle('active', on);
+        b.style.borderBottomColor = on ? 'var(--gray-900)' : 'transparent';
+        b.style.color = on ? 'var(--text)' : 'var(--text3)';
+        b.style.fontWeight = on ? 600 : 500;
+      });
+      document.querySelectorAll('.orc-sub').forEach(d => {
+        d.style.display = d.id === 'orc-sub-' + name ? '' : 'none';
+      });
+      if (name === 'tabelas')    loadTabelas();
+      if (name === 'bdi')        loadBdi();
+      if (name === 'orcamentos') loadOrcamentos();
+    }
+
+    document.querySelectorAll('.orc-subtab').forEach(b => {
+      b.addEventListener('click', () => showSub(b.dataset.sub));
+    });
+
+    // ── Filtros de fonte ──────────────────────────────────────
+    document.querySelectorAll('.orc-filter').forEach(b => {
+      b.addEventListener('click', () => {
+        _orcTabFilter = b.dataset.filter;
+        document.querySelectorAll('.orc-filter').forEach(x => {
+          const on = x.dataset.filter === _orcTabFilter;
+          x.classList.toggle('active', on);
+          x.style.background = on ? 'var(--surface)' : 'none';
+          x.style.color = on ? 'var(--text)' : 'var(--text3)';
+        });
+        renderTabelasList();
+      });
+    });
+
+    // ── Load lists ────────────────────────────────────────────
+    async function loadTabelas() {
+      if (!sbReady()) return;
+      const { data, error } = await window.sb.from('tabelas_preco')
+        .select('*')
+        .order('fonte', { ascending: true })
+        .order('data_ref', { ascending: false });
+      if (error) { console.error(error); return; }
+      _orcTabList = data || [];
+      // Conta itens por tabela em paralelo
+      const counts = await Promise.all(_orcTabList.map(t =>
+        window.sb.from('itens_tabela').select('id', { count: 'exact', head: true }).eq('tabela_id', t.id)
+      ));
+      _orcTabList.forEach((t, i) => { t._count = counts[i].count || 0; });
+      renderTabelasList();
+    }
+
+    function renderTabelasList() {
+      const el = document.getElementById('orc-tab-list');
+      const list = _orcTabFilter === 'all'
+        ? _orcTabList
+        : _orcTabList.filter(t => t.fonte === _orcTabFilter);
+      if (!list.length) {
+        el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);font-size:12px">Nenhuma tabela cadastrada. Clique em <strong>Importar XLSX</strong> para começar.</div>';
+        return;
+      }
+      const fonteColors = {
+        SANEPAR: { bg: '#EFF6FF', fg: '#1E40AF' },
+        SINAPI:  { bg: '#F0FDF4', fg: '#166534' },
+        EMOP:    { bg: '#FEF3C7', fg: '#92400E' },
+        CUSTOM:  { bg: '#FAF5FF', fg: '#6B21A8' },
+      };
+      el.innerHTML =
+        '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+        + '<thead style="background:var(--surface2)"><tr>'
+        + '<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Fonte</th>'
+        + '<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Nome</th>'
+        + '<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Data ref.</th>'
+        + '<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">UF</th>'
+        + '<th style="padding:10px 14px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Itens</th>'
+        + '<th style="padding:10px 14px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Vigente</th>'
+        + '<th style="padding:10px 14px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Ações</th>'
+        + '</tr></thead><tbody>'
+        + list.map(t => {
+            const col = fonteColors[t.fonte] || { bg: '#f1f5f9', fg: '#334155' };
+            const data = t.data_ref ? new Date(t.data_ref + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+            return '<tr style="border-top:1px solid var(--border)">'
+              + '<td style="padding:10px 14px"><span style="display:inline-block;padding:3px 10px;border-radius:10px;background:' + col.bg + ';color:' + col.fg + ';font-size:10px;font-weight:700;letter-spacing:.3px">' + t.fonte + '</span></td>'
+              + '<td style="padding:10px 14px;color:var(--text);font-weight:500">' + (t.nome || '—') + (t.descricao ? '<div style="font-size:10px;color:var(--text3);font-weight:400;margin-top:2px">' + t.descricao + '</div>' : '') + '</td>'
+              + '<td style="padding:10px 14px;color:var(--text2);font-family:\'DM Mono\',monospace">' + data + '</td>'
+              + '<td style="padding:10px 14px;color:var(--text2);font-family:\'DM Mono\',monospace">' + (t.uf || '—') + '</td>'
+              + '<td style="padding:10px 14px;text-align:right;color:var(--text);font-weight:600;font-family:\'DM Mono\',monospace">' + (t._count || 0) + '</td>'
+              + '<td style="padding:10px 14px;text-align:center">' + (t.ativo ? '<span style="color:#16a34a;font-size:14px" title="Vigente">●</span>' : '<span style="color:var(--text3);font-size:14px">○</span>') + '</td>'
+              + '<td style="padding:10px 14px;text-align:right">'
+                + '<button onclick="window.orcToggleAtivo(' + t.id + ')" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:10px;cursor:pointer;color:var(--text2);margin-right:4px" title="Alternar vigência">' + (t.ativo ? 'Desativar' : 'Ativar') + '</button>'
+                + '<button onclick="window.orcDeleteTabela(' + t.id + ')" style="background:none;border:1px solid #FCA5A5;color:#dc2626;border-radius:4px;padding:4px 8px;font-size:10px;cursor:pointer">Excluir</button>'
+              + '</td>'
+              + '</tr>';
+          }).join('')
+        + '</tbody></table>';
+    }
+
+    // ── Modal nova tabela / importar ──────────────────────────
+    let _orcTabFilePath = null;
+    let _orcTabFileItems = null;  // itens parseados
+    let _orcTabModalMode = 'nova'; // 'nova' | 'import'
+
+    function openTabModal(mode) {
+      _orcTabModalMode = mode;
+      document.getElementById('orc-tab-modal-title').textContent = mode === 'import' ? 'Importar tabela de preço (XLSX)' : 'Nova tabela de preço (vazia)';
+      document.getElementById('orc-tab-import-section').style.display = mode === 'import' ? '' : 'none';
+      document.getElementById('orc-tab-nome').value = '';
+      document.getElementById('orc-tab-data').value = new Date().toISOString().slice(0,10);
+      document.getElementById('orc-tab-uf').value = '';
+      document.getElementById('orc-tab-desc').value = '';
+      document.getElementById('orc-tab-file-path').value = '';
+      document.getElementById('orc-tab-file-info').textContent = '';
+      document.getElementById('orc-tab-modal-status').textContent = '';
+      _orcTabFilePath = null;
+      _orcTabFileItems = null;
+      document.getElementById('orc-tab-modal').style.display = 'flex';
+    }
+
+    document.getElementById('orc-tab-nova-btn').addEventListener('click', () => openTabModal('nova'));
+    document.getElementById('orc-tab-import-btn').addEventListener('click', () => openTabModal('import'));
+
+    document.getElementById('orc-tab-file-btn').addEventListener('click', async () => {
+      const file = await window.electronAPI.selectFile([
+        { name: 'Excel', extensions: ['xlsx','xlsm','xls'] }
+      ]);
+      if (!file) return;
+      _orcTabFilePath = file;
+      document.getElementById('orc-tab-file-path').value = file.split(/[\\/]/).pop();
+      const info = document.getElementById('orc-tab-file-info');
+      info.textContent = 'Lendo arquivo...';
+      info.style.color = 'var(--text3)';
+      try {
+        const items = parseXlsxSanepar(file);
+        _orcTabFileItems = items;
+        info.textContent = items.length + ' itens detectados. Pronto para importar.';
+        info.style.color = '#16a34a';
+        // auto-preenche nome se estiver vazio
+        if (!document.getElementById('orc-tab-nome').value) {
+          const fn = file.split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
+          document.getElementById('orc-tab-nome').value = fn;
+        }
+      } catch (e) {
+        info.textContent = 'Erro ao ler XLSX: ' + e.message;
+        info.style.color = '#dc2626';
+        _orcTabFileItems = null;
+      }
+    });
+
+    // Parser: detecta automaticamente o header e lê Codigo/Descrição/Un./Valor
+    function parseXlsxSanepar(filePath) {
+      const xlsx = require('xlsx');
+      const wb = xlsx.readFile(filePath, { cellFormula: false, cellNF: false });
+      // Procura uma aba que contenha "TAB" ou "PREÇ" no nome, senão usa a 1ª
+      let sheetName = wb.SheetNames.find(n => /TAB|PRE[ÇC]|COMPOS|PREC/i.test(n)) || wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      if (!ws || !ws['!ref']) throw new Error('Aba vazia ou inválida');
+      const ref = xlsx.utils.decode_range(ws['!ref']);
+
+      // Acha a linha de header: procura uma linha que tenha "Código" e "Descrição" e "Valor"
+      let headerRow = -1;
+      let colCodigo = -1, colDesc = -1, colUn = -1, colVal = -1;
+      for (let r = 0; r <= Math.min(ref.e.r, 40); r++) {
+        const cells = [];
+        for (let c = 0; c <= ref.e.c; c++) {
+          const cell = ws[xlsx.utils.encode_cell({r,c})];
+          cells.push(cell && cell.v != null ? String(cell.v).toLowerCase().trim() : '');
+        }
+        const hasCod  = cells.findIndex(v => v === 'código' || v === 'codigo' || v === 'cód.');
+        const hasDesc = cells.findIndex(v => v.startsWith('descri'));
+        const hasUn   = cells.findIndex(v => /un\.?\s*med|unidade/.test(v));
+        const hasVal  = cells.findIndex(v => /valor/.test(v) && /unit|r\$/.test(v) || v === 'valor unitário' || v === 'valor unit' || v === 'valor');
+        if (hasCod >= 0 && hasDesc >= 0 && hasVal >= 0) {
+          headerRow = r;
+          colCodigo = hasCod;
+          colDesc   = hasDesc;
+          colUn     = hasUn >= 0 ? hasUn : -1;
+          colVal    = hasVal;
+          break;
+        }
+      }
+      if (headerRow < 0) {
+        throw new Error('Não encontrei as colunas Código / Descrição / Valor. Verifique se a planilha tem esses cabeçalhos.');
+      }
+
+      const items = [];
+      let emptyStreak = 0;
+      for (let r = headerRow + 1; r <= ref.e.r; r++) {
+        const cCod  = ws[xlsx.utils.encode_cell({r,c:colCodigo})];
+        const cDesc = ws[xlsx.utils.encode_cell({r,c:colDesc})];
+        const cUn   = colUn >= 0 ? ws[xlsx.utils.encode_cell({r,c:colUn})] : null;
+        const cVal  = ws[xlsx.utils.encode_cell({r,c:colVal})];
+        const cod   = cCod  && cCod.v  != null ? String(cCod.v).trim()  : '';
+        const desc  = cDesc && cDesc.v != null ? String(cDesc.v).trim() : '';
+        if (!cod && !desc) { if (++emptyStreak >= 10) break; continue; }
+        emptyStreak = 0;
+        if (!cod) continue;
+        const un    = cUn && cUn.v != null ? String(cUn.v).trim() : null;
+        let val = null;
+        if (cVal && cVal.v != null) {
+          const n = typeof cVal.v === 'number' ? cVal.v : parseFloat(String(cVal.v).replace(/\./g,'').replace(',','.'));
+          if (!isNaN(n)) val = n;
+        }
+        // Detecta nível por formato do código (heurística SANEPAR: NNN / NNN.NNN / NNNNNNNNN)
+        let nivel = 3;
+        if (/^\d{3}$/.test(cod)) nivel = 1;
+        else if (/^\d{3}\.\d{3}$/.test(cod)) nivel = 2;
+        items.push({
+          codigo: cod,
+          descricao: desc,
+          unidade: un,
+          valor_unitario: val,
+          nivel,
+        });
+      }
+      return items;
+    }
+
+    document.getElementById('orc-tab-modal-save').addEventListener('click', async () => {
+      const fonte = document.getElementById('orc-tab-fonte').value;
+      const nome  = document.getElementById('orc-tab-nome').value.trim();
+      const data  = document.getElementById('orc-tab-data').value;
+      const uf    = document.getElementById('orc-tab-uf').value.trim().toUpperCase() || null;
+      const desc  = document.getElementById('orc-tab-desc').value.trim() || null;
+      const status = document.getElementById('orc-tab-modal-status');
+      status.style.color = 'var(--text3)';
+
+      if (!nome || !data) {
+        status.textContent = 'Preencha nome e data de referência.';
+        status.style.color = '#dc2626';
+        return;
+      }
+      if (_orcTabModalMode === 'import' && (!_orcTabFileItems || !_orcTabFileItems.length)) {
+        status.textContent = 'Selecione um arquivo XLSX com itens válidos.';
+        status.style.color = '#dc2626';
+        return;
+      }
+
+      const btn = document.getElementById('orc-tab-modal-save');
+      btn.disabled = true;
+      btn.textContent = 'Salvando...';
+
+      try {
+        status.textContent = 'Criando tabela...';
+        const { data: tab, error: e1 } = await window.sb
+          .from('tabelas_preco')
+          .insert({ fonte, nome, data_ref: data, uf, descricao: desc, ativo: true })
+          .select('*')
+          .single();
+        if (e1) throw e1;
+
+        if (_orcTabModalMode === 'import' && _orcTabFileItems) {
+          const total = _orcTabFileItems.length;
+          const chunkSize = 500;
+          let inserted = 0;
+          for (let i = 0; i < total; i += chunkSize) {
+            const chunk = _orcTabFileItems.slice(i, i + chunkSize).map(it => ({
+              tabela_id: tab.id,
+              codigo: it.codigo,
+              descricao: it.descricao,
+              unidade: it.unidade,
+              valor_unitario: it.valor_unitario,
+              nivel: it.nivel,
+            }));
+            const { error: e2 } = await window.sb.from('itens_tabela').insert(chunk);
+            if (e2) throw e2;
+            inserted += chunk.length;
+            status.textContent = 'Importando itens... ' + inserted + ' / ' + total;
+          }
+          status.textContent = '✓ ' + total + ' itens importados.';
+          status.style.color = '#16a34a';
+        } else {
+          status.textContent = '✓ Tabela criada (vazia).';
+          status.style.color = '#16a34a';
+        }
+
+        setTimeout(() => {
+          document.getElementById('orc-tab-modal').style.display = 'none';
+          loadTabelas();
+        }, 700);
+      } catch (e) {
+        console.error(e);
+        status.textContent = 'Erro: ' + (e.message || e);
+        status.style.color = '#dc2626';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Salvar';
+      }
+    });
+
+    window.orcToggleAtivo = async function(id) {
+      const t = _orcTabList.find(x => x.id === id);
+      if (!t) return;
+      await window.sb.from('tabelas_preco').update({ ativo: !t.ativo }).eq('id', id);
+      loadTabelas();
+    };
+
+    window.orcDeleteTabela = async function(id) {
+      const t = _orcTabList.find(x => x.id === id);
+      if (!t) return;
+      if (!confirm('Excluir a tabela "' + t.nome + '"? Isso apaga todos os ' + (t._count || 0) + ' itens associados e NÃO afeta orçamentos antigos (que usam snapshots).')) return;
+      const { error } = await window.sb.from('tabelas_preco').delete().eq('id', id);
+      if (error) { alert('Erro: ' + error.message); return; }
+      loadTabelas();
+    };
+
+    // ── BDI ───────────────────────────────────────────────────
+    async function loadBdi() {
+      if (!sbReady()) return;
+      const { data, error } = await window.sb.from('bdi_templates').select('*').order('tipo').order('nome');
+      if (error) { console.error(error); return; }
+      _orcBdiList = data || [];
+      renderBdiList();
+    }
+
+    function computeBdi(faixa) {
+      // Fórmula: BDI = (((1+AC+SG+R)*(1+L)*(1+I)) / (1 - COFINS - PIS - ISS - CPRB)) - 1
+      const AC = +faixa.AC || 0, SG = +faixa.SG || 0, R = +faixa.R || 0;
+      const DF = +faixa.DF || 0, L = +faixa.L || 0;
+      const COFINS = +faixa.COFINS || 0, PIS = +faixa.PIS || 0;
+      const ISS = +faixa.ISS || 0, CPRB = +faixa.CPRB || 0;
+      // Nota: DF normalmente entra em (1+AC+SG+R+DF), mas o modelo SANEPAR separa.
+      // Vou manter a fórmula do modelo: (1+AC+SG+R)*(1+L)*(1+I) / (1-imp)
+      const num = (1 + AC + SG + R) * (1 + L) * (1 + COFINS);
+      const den = (1 - COFINS - PIS - ISS - CPRB);
+      if (den <= 0) return 0;
+      return (num / den) - 1;
+    }
+
+    function renderBdiList() {
+      const el = document.getElementById('orc-bdi-list');
+      if (!_orcBdiList.length) {
+        el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);font-size:12px">Nenhum BDI cadastrado.</div>';
+        return;
+      }
+      el.innerHTML = _orcBdiList.map(b => {
+        const faixas = b.faixas || [];
+        const badgeCol = b.tipo === 'OBRAS' ? '#1E40AF' : b.tipo === 'MATERIAIS' ? '#166534' : '#6B21A8';
+        const badgeBg  = b.tipo === 'OBRAS' ? '#EFF6FF' : b.tipo === 'MATERIAIS' ? '#F0FDF4' : '#FAF5FF';
+        return '<div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">'
+          + '<div style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);background:var(--surface2)">'
+          + '<span style="padding:3px 10px;border-radius:10px;background:' + badgeBg + ';color:' + badgeCol + ';font-size:10px;font-weight:700;letter-spacing:.3px">' + b.tipo + '</span>'
+          + '<div style="font-size:13px;font-weight:700;color:var(--text)">' + b.nome + '</div>'
+          + '<div style="font-size:10px;color:var(--text3);margin-left:auto">' + (b.base_calculo || '') + '</div>'
+          + '</div>'
+          + '<div style="padding:12px 18px;overflow-x:auto">'
+          + '<table style="width:100%;border-collapse:collapse;font-size:11px;font-family:\'DM Mono\',monospace">'
+          + '<thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase">'
+          + '<th style="padding:6px;text-align:left">Faixa (custo direto)</th>'
+          + '<th style="padding:6px;text-align:right">AC</th><th style="padding:6px;text-align:right">SG</th>'
+          + '<th style="padding:6px;text-align:right">R</th><th style="padding:6px;text-align:right">DF</th>'
+          + '<th style="padding:6px;text-align:right">L</th><th style="padding:6px;text-align:right">COFINS</th>'
+          + '<th style="padding:6px;text-align:right">PIS</th><th style="padding:6px;text-align:right">ISS</th>'
+          + '<th style="padding:6px;text-align:right">CPRB</th>'
+          + '<th style="padding:6px 10px;text-align:right;background:var(--surface2);color:var(--text)">BDI (%)</th>'
+          + '</tr></thead><tbody>'
+          + faixas.map((f, idx) => {
+              const faixaLbl = f.ate == null ? '> R$ ' + (idx > 0 ? (faixas[idx-1].ate/1000).toFixed(0) + ' mil' : '0') : 'até R$ ' + (f.ate >= 1e6 ? (f.ate/1e6).toFixed(1) + ' mi' : (f.ate/1e3).toFixed(0) + ' mil');
+              const bdi = computeBdi(f);
+              return '<tr style="border-top:1px solid var(--border)">'
+                + '<td style="padding:6px">' + faixaLbl + '</td>'
+                + '<td style="padding:6px;text-align:right">' + ((f.AC||0)*100).toFixed(2) + '%</td>'
+                + '<td style="padding:6px;text-align:right">' + ((f.SG||0)*100).toFixed(2) + '%</td>'
+                + '<td style="padding:6px;text-align:right">' + ((f.R||0)*100).toFixed(2) + '%</td>'
+                + '<td style="padding:6px;text-align:right">' + ((f.DF||0)*100).toFixed(2) + '%</td>'
+                + '<td style="padding:6px;text-align:right">' + ((f.L||0)*100).toFixed(2) + '%</td>'
+                + '<td style="padding:6px;text-align:right">' + ((f.COFINS||0)*100).toFixed(2) + '%</td>'
+                + '<td style="padding:6px;text-align:right">' + ((f.PIS||0)*100).toFixed(2) + '%</td>'
+                + '<td style="padding:6px;text-align:right">' + ((f.ISS||0)*100).toFixed(2) + '%</td>'
+                + '<td style="padding:6px;text-align:right">' + ((f.CPRB||0)*100).toFixed(2) + '%</td>'
+                + '<td style="padding:6px 10px;text-align:right;background:var(--surface2);color:var(--text);font-weight:700">' + (bdi*100).toFixed(2) + '%</td>'
+                + '</tr>';
+            }).join('')
+          + '</tbody></table>'
+          + '<div style="padding:8px 0 0;text-align:right">'
+            + '<button onclick="window.orcDeleteBdi(' + b.id + ')" style="background:none;border:1px solid #FCA5A5;color:#dc2626;border-radius:4px;padding:4px 10px;font-size:10px;cursor:pointer">Excluir</button>'
+          + '</div>'
+          + '</div></div>';
+      }).join('');
+    }
+
+    window.orcDeleteBdi = async function(id) {
+      const b = _orcBdiList.find(x => x.id === id);
+      if (!b) return;
+      if (!confirm('Excluir o BDI "' + b.nome + '"?')) return;
+      const { error } = await window.sb.from('bdi_templates').delete().eq('id', id);
+      if (error) { alert('Erro: ' + error.message); return; }
+      loadBdi();
+    };
+
+    document.getElementById('orc-bdi-novo-btn').addEventListener('click', () => {
+      alert('Cadastro manual de BDI será adicionado em breve. Por enquanto a migração já trouxe 2 BDIs padrão SANEPAR (Obras e Materiais).');
+    });
+
+    // ── Orçamentos ────────────────────────────────────────────
+    async function loadOrcamentos() {
+      if (!sbReady()) return;
+      const { data, error } = await window.sb.from('orcamentos').select('*').order('atualizado_em', { ascending: false });
+      if (error) { console.error(error); return; }
+      _orcOrcList = data || [];
+      renderOrcList();
+    }
+
+    function renderOrcList() {
+      const el = document.getElementById('orc-orc-list');
+      if (!_orcOrcList.length) {
+        el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);font-size:12px">Nenhum orçamento criado ainda. O construtor completo chega na próxima fase.</div>';
+        return;
+      }
+      el.innerHTML =
+        '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+        + '<thead style="background:var(--surface2)"><tr>'
+        + '<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase">Título</th>'
+        + '<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase">Cidade / Bacia</th>'
+        + '<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase">Revisão</th>'
+        + '<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase">Status</th>'
+        + '<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase">Atualizado</th>'
+        + '</tr></thead><tbody>'
+        + _orcOrcList.map(o =>
+          '<tr style="border-top:1px solid var(--border)">'
+          + '<td style="padding:10px 14px;color:var(--text);font-weight:500">' + (o.titulo || '—') + '</td>'
+          + '<td style="padding:10px 14px;color:var(--text2)">' + (o.cidade || '—') + ' / ' + (o.microbacia || '—') + '</td>'
+          + '<td style="padding:10px 14px;color:var(--text2);font-family:\'DM Mono\',monospace">' + (o.revisao || '—') + '</td>'
+          + '<td style="padding:10px 14px"><span style="padding:2px 8px;border-radius:8px;background:var(--surface2);font-size:10px;font-weight:600;color:var(--text2)">' + o.status + '</span></td>'
+          + '<td style="padding:10px 14px;color:var(--text3);font-size:10px">' + new Date(o.atualizado_em).toLocaleString('pt-BR') + '</td>'
+          + '</tr>'
+        ).join('')
+        + '</tbody></table>';
+    }
+
+    document.getElementById('orc-novo-btn').addEventListener('click', () => {
+      alert('Construtor de orçamento chega na Fase 2. Antes, precisamos confirmar que as tabelas de preço carregaram e o BDI está correto.');
+    });
+
+    // ── Init (chamado pelo switchTab) ─────────────────────────
+    window.orcInit = function() {
+      if (!sbReady()) {
+        console.warn('[orc] sb não inicializado ainda');
+        return;
+      }
+      if (_orcInitialized) {
+        // Recarrega a sub-tab atual
+        if (_orcCurSub === 'tabelas')    loadTabelas();
+        if (_orcCurSub === 'bdi')        loadBdi();
+        if (_orcCurSub === 'orcamentos') loadOrcamentos();
+        return;
+      }
+      _orcInitialized = true;
+      showSub('tabelas');
+    };
+  })();
   </script>
 
   <!-- RENOMEAR TAB -->
