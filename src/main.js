@@ -225,51 +225,18 @@ autoUpdater.on('download-progress', progress=>{
   mainWindow?.webContents.send('update-progress', Math.round(progress.percent));
 });
 
-let downloadedInstallerPath = null;
-
 autoUpdater.on('update-downloaded', info=>{
   logUpdate('update-downloaded: ' + info.version);
   updateState = { status: 'downloaded', version: info.version };
   splashWindow?.webContents.send('update-downloaded', info.version);
   mainWindow?.webContents.send('update-downloaded', info.version);
-  // Localiza o .exe baixado pelo electron-updater em %LOCALAPPDATA%/codepro-updater/
-  try {
-    const cacheDir = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'codepro-updater');
-    logUpdate('scanning cache dir: ' + cacheDir);
-    if (fs.existsSync(cacheDir)) {
-      const exes = fs.readdirSync(cacheDir)
-        .filter(f => f.toLowerCase().endsWith('.exe'))
-        .map(f => ({ name: f, time: fs.statSync(path.join(cacheDir, f)).mtimeMs }))
-        .sort((a, b) => b.time - a.time);
-      if (exes.length) {
-        downloadedInstallerPath = path.join(cacheDir, exes[0].name);
-        logUpdate('installer found: ' + downloadedInstallerPath);
-      }
-    }
-  } catch(e) { logUpdate('cache scan error: ' + e); }
 });
 
 autoUpdater.on('error', (err)=>{ logUpdate('autoUpdater error: ' + err); });
 
 ipcMain.on('install-update', ()=> {
-  logUpdate('install-update requested');
-  // Workaround para bug do electron-updater no Windows:
-  // quitAndInstall fecha o app mas o NSIS não consegue reabrir.
-  // Solução: spawnar o instalador com /S (silent) + --force-run (relaunch)
-  // como processo destacado, depois fechar o app.
-  if (downloadedInstallerPath && fs.existsSync(downloadedInstallerPath)) {
-    logUpdate('spawning installer manually: ' + downloadedInstallerPath);
-    autoUpdater.autoInstallOnAppQuit = false;
-    const { spawn } = require('child_process');
-    spawn(downloadedInstallerPath, ['/S', '--force-run'], {
-      detached: true,
-      stdio: 'ignore',
-    }).unref();
-    setTimeout(() => app.quit(), 1500);
-  } else {
-    logUpdate('installer path not found, fallback quitAndInstall');
-    autoUpdater.quitAndInstall(false, true);
-  }
+  logUpdate('install-update requested — quitAndInstall');
+  autoUpdater.quitAndInstall(false, true);
 });
 
 // ── CONFERÊNCIA DE ARQUIVOS ──
