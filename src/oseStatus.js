@@ -8,7 +8,7 @@
 //   CT_TOL = 0.05 m
 //   CF_TOL = 0.05 m
 //   H_TOL  = 0.05 m
-//   L_TOL  = 0.10 m   (apertado — antes 0.5m mascarava divergências tipo 49,31 vs 49,21)
+//   L_TOL  = 0.0001 m (0,01 cm — praticamente zero, por pedido do usuário)
 //   I_TOL  = 0.005 (m/m)
 //
 // Regras adicionais (além das tolerâncias):
@@ -22,8 +22,9 @@ const TOL = {
   CT: 0.05,
   CF: 0.05,
   H:  0.05,
-  L:  0.10,
+  L:  0.0001,
   I:  0.005,
+  TQ: 0.02,  // degrau / tubo de queda (2 cm)
 };
 
 const H_MIN            = 1.10;
@@ -73,13 +74,13 @@ function classifyOse(r) {
   if (!r.in_perfil) errors.push('ausente no Perfil');
   if (!r.in_excel)  errors.push('ausente na Planilha');
 
-  // Extensão L
+  // Extensão L — tolerância de 0,01 cm (0.0001 m), mensagem com 4 decimais.
   const Lm = r.mapa_L, Lp = r.excel_L, Lf = r.perfil_L;
   if (Lm != null && Lp != null && Math.abs(Lm - Lp) > TOL.L) {
-    errors.push('L: ' + fmt(Lm, 2) + ' vs ' + fmt(Lp, 2) + ' (Mapa-Plan)');
+    errors.push('L: ' + fmt(Lm, 4) + ' vs ' + fmt(Lp, 4) + ' (Mapa-Plan, Δ=' + fmt(Math.abs(Lm - Lp), 4) + 'm)');
   }
   if (Lm != null && Lf != null && Math.abs(Lm - Lf) > TOL.L) {
-    errors.push('L: ' + fmt(Lm, 2) + ' vs ' + fmt(Lf, 2) + ' (Mapa-Perfil)');
+    errors.push('L: ' + fmt(Lm, 4) + ' vs ' + fmt(Lf, 4) + ' (Mapa-Perfil, Δ=' + fmt(Math.abs(Lm - Lf), 4) + 'm)');
   }
 
   // Declividade i
@@ -124,6 +125,10 @@ function classifyOse(r) {
     if (pv.excel_has_tq) {
       hasTQ = true;
       warnings.push('T.Q. ' + pv.id + ' (' + (pv.excel_tq != null ? pv.excel_tq.toFixed(3) : '?') + 'm)');
+    }
+    // T.Q. calculado (via perfil) vs planilha
+    if (pv.diff_tq != null && pv.diff_tq > TOL.TQ) {
+      errors.push('T.Q. ' + pv.id + ' divergente: planilha=' + fmt(pv.excel_tq, 3) + 'm, calculado=' + fmt(pv.tq_calc, 3) + 'm (Δ=' + fmt(pv.diff_tq, 3) + 'm)');
     }
     // TL deve ser PV (h > 1,30) → agora é ERRO
     const tlH = tlShouldBePv(pv);

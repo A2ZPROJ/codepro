@@ -3271,11 +3271,12 @@ body {
 
     // Tolerâncias para coloração de células de DIFF (UI granular).
     // A classificação de status/erro vem de classifyOse (oseStatus.js).
-    const L_TOL  = 0.10;
+    const L_TOL  = 0.0001;  // 0,01 cm
     const I_TOL  = 0.005;
     const CT_TOL = 0.05;
     const CF_TOL = 0.05;
     const H_TOL  = 0.05;
+    const TQ_TOL = 0.02;
     const H_MIN     = 1.10;
     const TL_MAX_H  = 1.30;
 
@@ -3336,7 +3337,8 @@ body {
         + '<th style="' + thS + '" title="Cota de Fundo do PV — planilha">CF Fundo</th>'
         + '<th style="' + thS + '" title="Cota de Fundo — DXF Mapa (valor + Δ p/ fundo)">CF Mapa</th>'
         + '<th style="' + thS + '" title="Cota de Fundo saída — DXF Perfil (valor + Δ p/ fundo)">CF Perfil</th>'
-        + '<th style="' + thS + '" title="Tubo de queda (degrau em m)">T.Q.</th>'
+        + '<th style="' + thS + '" title="Tubo de queda (degrau em m) — da planilha">T.Q. Plan.</th>'
+        + '<th style="' + thS + '" title="T.Q. calculado pelo perfil: GI chegada − (CT − prof). Em vermelho quando diverge da planilha.">T.Q. Calc.</th>'
         + '<th style="' + thS + '" title="Profundidade de vala — planilha">h Plan.</th>'
         + '<th style="' + thS + '" title="Profundidade — DXF Mapa (valor + Δ p/ planilha)">h Mapa</th>'
         + '<th style="' + thS + ';text-align:center" title="Alertas do PV">Obs.</th>'
@@ -3372,6 +3374,7 @@ body {
           + '<td style="' + td + '">' + cellCompare(pv.excel_cf_pv, pv.mapa_cf, pv.diff_cf,      CF_TOL, 3) + '</td>'
           + '<td style="' + td + '">' + cellCompare(pv.excel_cf_pv, pv.perf_cf, pv.diff_cf_perf, CF_TOL, 3) + '</td>'
           + '<td style="' + td + '">' + (pv.excel_tq != null && pv.excel_tq > 0 ? pv.excel_tq.toFixed(3) + ' m' : '<span style="color:var(--text3)">—</span>') + '</td>'
+          + '<td style="' + td + (pv.diff_tq != null && pv.diff_tq > TQ_TOL ? ';color:#dc2626;font-weight:800' : '') + '">' + (pv.tq_calc != null ? pv.tq_calc.toFixed(3) + ' m' + (pv.diff_tq != null && pv.diff_tq > TQ_TOL ? ' <span style="font-size:9px">Δ' + pv.diff_tq.toFixed(3) + '</span>' : '') : '<span style="color:var(--text3)">—</span>') + '</td>'
           + '<td style="' + td + ';font-weight:600">' + cellVal(pv.excel_prof_pv, 3) + '</td>'
           + '<td style="' + td + '">' + cellCompare(pv.excel_prof_pv, pv.mapa_h, pv.diff_h, H_TOL, 3) + '</td>'
           + '<td style="' + td + ';text-align:center">' + obsHtml + '</td>'
@@ -3464,7 +3467,7 @@ body {
             + lbl('L Mapa',     Lm != null ? Lm.toFixed(2) + ' m' : '—')
             + lbl('L Plan.',    Lp != null ? Lp.toFixed(2) + ' m' : '—')
             + lbl('L Perf.',    Lf != null ? Lf.toFixed(2) + ' m' : '—')
-            + '<div title="Diferença absoluta entre L Mapa e L Planilha (tolerância 0,10 m)" style="display:flex;flex-direction:column;gap:2px;cursor:help"><span style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:600">Δ L</span><span style="font-size:12px;' + mono + ';' + dLclass + '">' + (dL != null ? dL.toFixed(3) + ' m' : '—') + '</span></div>'
+            + '<div title="Diferença absoluta entre L Mapa e L Planilha (tolerância 0,01 cm)" style="display:flex;flex-direction:column;gap:2px;cursor:help"><span style="font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:600">Δ L</span><span style="font-size:12px;' + mono + ';' + dLclass + '">' + (dL != null ? dL.toFixed(4) + ' m' : '—') + '</span></div>'
             + lbl('i Mapa',     Im != null ? (Im*100).toFixed(3) + '%' : '—', declColor)
             + lbl('i Plan.',    Ip != null ? (Ip*100).toFixed(3) + '%' : '—', declColor)
             + lbl('i Perf.',    If != null ? (If*100).toFixed(3) + '%' : '—', declColor)

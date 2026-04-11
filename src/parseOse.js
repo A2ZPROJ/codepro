@@ -544,6 +544,21 @@ function buildComparison(mapa, perfis, excel) {
       const blk_ct          = blockPv.ct          != null ? blockPv.ct          : ppv.ct;
       const blk_h           = blockPv.h           != null ? blockPv.h           : ppv.h;
 
+      // T.Q. calculado pelo perfil + planilha:
+      //   CF PV (calc)    = CT planilha − profundidade planilha
+      //   T.Q. calculado  = GI tubo de chegada (perfil) − CF PV (calc)
+      // Compara com excel_tq para validar o degrau declarado na planilha.
+      let tq_calc   = null;
+      let diff_tq   = null;
+      const gi_cheg = blk_cf_chegada != null ? blk_cf_chegada : null;
+      if (ep.ct != null && ep.prof_pv != null && gi_cheg != null) {
+        const cfCalc = ep.ct - ep.prof_pv;
+        tq_calc = rnd(gi_cheg - cfCalc, 4);
+        // Arredonda T.Q. negativos muito pequenos pra zero (ruído numérico).
+        if (tq_calc < 0 && tq_calc > -0.005) tq_calc = 0;
+        if (ep.tq != null) diff_tq = rnd(Math.abs(tq_calc - ep.tq), 4);
+      }
+
       pvComps.push({
         id:           ep.id,
         excel_dist:   ep.dist_acum,
@@ -559,6 +574,9 @@ function buildComparison(mapa, perfis, excel) {
         excel_prof_chegada: ep.prof_chegada,
         excel_tq:           ep.tq,
         excel_has_tq:       ep.has_tq,
+        // T.Q. calculado (pela fórmula GI_chegada − (CT − prof))
+        tq_calc,
+        diff_tq,
 
         mapa_ct:      mpv.ct  != null ? mpv.ct  : null,
         mapa_cf:      mpv.cf  != null ? mpv.cf  : null,
