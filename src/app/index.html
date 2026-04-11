@@ -3296,8 +3296,24 @@ body {
       else ok++;
     });
 
+    // Contagem e listagem de ausências por fonte
+    const faltaMapa   = data.filter(r => !r.in_mapa).map(r => 'OSE-' + r.ose);
+    const faltaPerfil = data.filter(r => !r.in_perfil).map(r => 'OSE-' + r.ose);
+    const faltaExcel  = data.filter(r => !r.in_excel).map(r => 'OSE-' + r.ose);
+    const faltaHtml = (label, arr) => {
+      if (!arr.length) return '';
+      const tip = arr.join(', ').replace(/"/g, '&quot;');
+      return '<span title="' + tip + '" style="color:#dc2626;cursor:help">Faltam em ' + label + ': <strong>' + arr.length + '</strong></span>';
+    };
+
     document.getElementById('ose-summary').innerHTML =
       '<span>Total: <strong>' + data.length + '</strong></span>' +
+      '<span style="color:var(--text3)">Mapa: <strong>' + data.filter(r=>r.in_mapa).length + '</strong></span>' +
+      '<span style="color:var(--text3)">Perfil: <strong>' + data.filter(r=>r.in_perfil).length + '</strong></span>' +
+      '<span style="color:var(--text3)">Planilha: <strong>' + data.filter(r=>r.in_excel).length + '</strong></span>' +
+      faltaHtml('Mapa',     faltaMapa) +
+      faltaHtml('Perfil',   faltaPerfil) +
+      faltaHtml('Planilha', faltaExcel) +
       '<span style="color:#16a34a">OK: <strong>' + ok + '</strong></span>' +
       (errCount ? '<span style="color:#dc2626">Erros: <strong>' + errCount + '</strong></span>' : '') +
       (warnCount ? '<span style="color:#b45309">Avisos: <strong>' + warnCount + '</strong></span>' : '');
