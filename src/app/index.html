@@ -3579,11 +3579,17 @@ body {
   <div class="tab-content" id="tab-renomear">
     <div style="padding:20px;max-width:960px;margin:0 auto">
 
-      <!-- Pasta -->
+      <!-- Pasta + Modo -->
       <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:12px">
-        <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
-          <div style="font-size:14px;font-weight:600;color:var(--text)">Renomear arquivos em lote</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:2px">Aplica múltiplas substituições em sequência — igual ao PowerShell <code style="font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:4px">-replace</code> encadeado</div>
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:14px;font-weight:600;color:var(--text)">Renomear arquivos em lote</div>
+            <div id="ren-mode-desc" style="font-size:12px;color:var(--text3);margin-top:2px">Extrai o número OSE do fim do nome e padroniza para <code style="font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:4px">OSE-###.ext</code></div>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:0;border:1.5px solid var(--border);border-radius:6px;overflow:hidden">
+            <button id="ren-mode-ose" style="background:var(--gray-900);color:white;border:none;padding:7px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Extrair OSE</button>
+            <button id="ren-mode-rules" style="background:var(--surface);color:var(--text2);border:none;border-left:1.5px solid var(--border);padding:7px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Regras avançadas</button>
+          </div>
         </div>
         <div style="padding:14px 20px;display:flex;align-items:center;gap:8px">
           <input id="ren-folder" placeholder="Selecione ou cole o caminho da pasta..." style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;min-width:0"/>
@@ -3594,8 +3600,26 @@ body {
         </div>
       </div>
 
-      <!-- Regras -->
-      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:12px">
+      <!-- Modo OSE: explicação -->
+      <div id="ren-ose-box" style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:12px">
+        <div style="padding:14px 20px;display:flex;flex-direction:column;gap:10px">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">Como funciona o modo Extrair OSE</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.55">
+            O Nexus lê o <strong>último número</strong> do nome de cada arquivo (ignorando a extensão), preenche com zeros à esquerda até 3 dígitos e renomeia para <code style="font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:4px">OSE-###.&lt;ext&gt;</code>. Exemplos:
+          </div>
+          <div style="font-size:11px;font-family:'DM Mono',monospace;color:var(--text3);line-height:1.7;background:var(--surface2);padding:8px 12px;border-radius:6px">
+            PERFIL-PA01-439.dxf&nbsp; → &nbsp;OSE-439.dxf<br>
+            Rev B - OSE 46.pdf&nbsp; → &nbsp;OSE-046.pdf<br>
+            mapa_sbb04_307.dxf&nbsp; → &nbsp;OSE-307.dxf
+          </div>
+          <div style="font-size:11px;color:var(--amber);line-height:1.5">
+            ⚠️ Se dois arquivos da pasta gerarem o mesmo nome final (ex: dois <code>.dxf</code> com número 439), o Nexus <strong>aborta</strong> toda a renomeação e aponta os conflitos.
+          </div>
+        </div>
+      </div>
+
+      <!-- Modo Regras -->
+      <div id="ren-rules-box" style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:12px;display:none">
         <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
           <div style="font-size:13px;font-weight:600;color:var(--text)">Regras de substituição</div>
           <button id="ren-add-rule" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:6px 12px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer">+ Adicionar regra</button>
@@ -3637,6 +3661,34 @@ body {
     var _renPending = [];
     var _renRules   = []; // [{id, find, replace}]
     var _renNextId  = 0;
+    var _renMode    = 'ose'; // 'ose' | 'rules'
+
+    // ── Modo (toggle) ──
+    function setRenMode(mode) {
+      _renMode = mode;
+      var btnOse   = document.getElementById('ren-mode-ose');
+      var btnRules = document.getElementById('ren-mode-rules');
+      var boxOse   = document.getElementById('ren-ose-box');
+      var boxRules = document.getElementById('ren-rules-box');
+      var desc     = document.getElementById('ren-mode-desc');
+      if (mode === 'ose') {
+        btnOse.style.background = 'var(--gray-900)';   btnOse.style.color = 'white';
+        btnRules.style.background = 'var(--surface)';  btnRules.style.color = 'var(--text2)';
+        boxOse.style.display = '';   boxRules.style.display = 'none';
+        desc.innerHTML = 'Extrai o número OSE do fim do nome e padroniza para <code style="font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:4px">OSE-###.ext</code>';
+      } else {
+        btnRules.style.background = 'var(--gray-900)'; btnRules.style.color = 'white';
+        btnOse.style.background = 'var(--surface)';    btnOse.style.color = 'var(--text2)';
+        boxOse.style.display = 'none'; boxRules.style.display = '';
+        desc.innerHTML = 'Aplica múltiplas substituições em sequência — igual ao PowerShell <code style="font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:4px">-replace</code> encadeado';
+      }
+      document.getElementById('ren-table-wrap').style.display = 'none';
+      document.getElementById('ren-status').textContent = '';
+      document.getElementById('ren-exec-btn').disabled = true;
+      document.getElementById('ren-exec-btn').style.opacity = '0.4';
+    }
+    document.getElementById('ren-mode-ose').addEventListener('click', function(){ setRenMode('ose'); });
+    document.getElementById('ren-mode-rules').addEventListener('click', function(){ setRenMode('rules'); });
 
     // ── Pasta ──
     document.getElementById('ren-folder-btn').addEventListener('click', async function() {
@@ -3691,6 +3743,14 @@ body {
     // Regra inicial igual ao script PowerShell do usuário: " - " → "-"
     addRule(' - ', '-');
 
+    // ── Extração do número OSE: último número do nome (sem extensão) ──
+    function extractOseNumber(base) {
+      var matches = base.match(/\d+/g);
+      if (!matches || !matches.length) return null;
+      return parseInt(matches[matches.length - 1], 10);
+    }
+    function pad3(n) { return (n < 10 ? '00' : n < 100 ? '0' : '') + n; }
+
     // ── Preview ──
     document.getElementById('ren-preview-btn').addEventListener('click', async function() {
       var folder = document.getElementById('ren-folder').value.trim();
@@ -3699,7 +3759,7 @@ body {
       if (!folder) { status.textContent = 'Selecione uma pasta.'; status.style.color = 'var(--amber)'; return; }
 
       var activeRules = _renRules.filter(function(r){ return r.find !== ''; });
-      if (activeRules.length === 0) {
+      if (_renMode === 'rules' && activeRules.length === 0) {
         status.textContent = 'Adicione ao menos uma regra com "Localizar no nome" preenchido.';
         status.style.color = 'var(--amber)';
         return;
@@ -3722,28 +3782,91 @@ body {
       var existingNames = new Set(files);
       var rows = [];
 
-      files.forEach(function(name) {
-        var dot     = name.lastIndexOf('.');
-        var base    = dot > 0 ? name.slice(0, dot) : name;
-        var ext     = dot > 0 ? name.slice(dot) : '';
+      // MODO OSE: detecta conflitos ANTES de montar _renPending. Se houver, aborta.
+      if (_renMode === 'ose') {
+        // 1ª passada: calcula novoNome por arquivo e agrupa por destino
+        var planned = []; // { cur, newName, ose }
+        var byTarget = {}; // newName → [cur,...]
+        var skippedNoNum = [];
 
-        // Aplica regras em sequência (como PowerShell encadeado)
-        var newBase = base;
-        activeRules.forEach(function(r) {
-          newBase = newBase.split(r.find).join(r.replace);
+        files.forEach(function(name) {
+          var dot  = name.lastIndexOf('.');
+          var base = dot > 0 ? name.slice(0, dot) : name;
+          var ext  = dot > 0 ? name.slice(dot).toLowerCase() : '';
+          var num  = extractOseNumber(base);
+          if (num == null) {
+            skippedNoNum.push(name);
+            planned.push({ cur: name, newName: null, ose: null });
+            return;
+          }
+          var newName = 'OSE-' + pad3(num) + ext;
+          planned.push({ cur: name, newName: newName, ose: num });
+          (byTarget[newName] = byTarget[newName] || []).push(name);
         });
-        var newName = newBase + ext;
 
-        if (name === newName) {
-          rows.push({ cur: name, nxt: '—', st: '✅  Já correto', cls: 'neu' });
-        } else if (existingNames.has(newName)) {
-          rows.push({ cur: name, nxt: newName, st: '⚠️  Conflito (já existe)', cls: 'err' });
-        } else {
-          rows.push({ cur: name, nxt: newName, st: '🔄  Será renomeado', cls: 'ok' });
-          _renPending.push({ from: name, to: newName });
-          existingNames.add(newName);
+        // 2ª passada: verifica conflitos (mais de um arquivo → mesmo destino)
+        var conflicts = Object.keys(byTarget).filter(function(k){ return byTarget[k].length > 1; });
+        if (conflicts.length) {
+          var detail = conflicts.map(function(k){
+            return k + ' ← ' + byTarget[k].join(', ');
+          }).join('\n');
+          status.textContent = 'Conflito: mais de um arquivo seria renomeado para o mesmo nome. Operação abortada.';
+          status.style.color = '#dc2626';
+          document.getElementById('ren-exec-btn').disabled = true;
+          document.getElementById('ren-exec-btn').style.opacity = '0.4';
+          document.getElementById('ren-table-wrap').style.display = '';
+
+          // Mostra a lista de conflitos no lugar da tabela
+          document.getElementById('ren-tbody').innerHTML =
+            '<tr><td colspan="3" style="padding:14px 20px;background:#FEE2E2;border-bottom:1px solid #FECACA;color:#7F1D1D;font-size:12px;line-height:1.6"><strong>⚠️ Renomeação abortada — conflitos encontrados:</strong><br><br>' +
+            conflicts.map(function(k){
+              return '<div style="margin-bottom:6px"><code style="font-family:\'DM Mono\',monospace;font-size:11px;background:rgba(0,0,0,.05);padding:1px 5px;border-radius:3px">' + k + '</code> viria de: <span style="font-family:\'DM Mono\',monospace;font-size:11px">' + byTarget[k].join(', ') + '</span></div>';
+            }).join('') +
+            '</td></tr>';
+
+          alert('⚠️ Renomeação abortada: ' + conflicts.length + ' conflito(s) detectado(s).\n\n' + detail + '\n\nNenhum arquivo foi alterado.');
+          return;
         }
-      });
+
+        // Sem conflito — monta lista de pendentes
+        planned.forEach(function(p) {
+          if (p.newName == null) {
+            rows.push({ cur: p.cur, nxt: '—', st: '⏭️  Sem número encontrado', cls: 'neu' });
+          } else if (p.cur === p.newName) {
+            rows.push({ cur: p.cur, nxt: '—', st: '✅  Já correto', cls: 'neu' });
+          } else if (existingNames.has(p.newName) && files.indexOf(p.newName) !== -1 && p.newName !== p.cur) {
+            // O destino já existe como arquivo diferente — também é conflito
+            rows.push({ cur: p.cur, nxt: p.newName, st: '⚠️  Destino já existe', cls: 'err' });
+          } else {
+            rows.push({ cur: p.cur, nxt: p.newName, st: '🔄  Será renomeado', cls: 'ok' });
+            _renPending.push({ from: p.cur, to: p.newName });
+            existingNames.add(p.newName);
+          }
+        });
+      } else {
+        // MODO REGRAS (legado)
+        files.forEach(function(name) {
+          var dot  = name.lastIndexOf('.');
+          var base = dot > 0 ? name.slice(0, dot) : name;
+          var ext  = dot > 0 ? name.slice(dot) : '';
+
+          var newBase = base;
+          activeRules.forEach(function(r) {
+            newBase = newBase.split(r.find).join(r.replace);
+          });
+          var newName = newBase + ext;
+
+          if (name === newName) {
+            rows.push({ cur: name, nxt: '—', st: '✅  Já correto', cls: 'neu' });
+          } else if (existingNames.has(newName)) {
+            rows.push({ cur: name, nxt: newName, st: '⚠️  Conflito (já existe)', cls: 'err' });
+          } else {
+            rows.push({ cur: name, nxt: newName, st: '🔄  Será renomeado', cls: 'ok' });
+            _renPending.push({ from: name, to: newName });
+            existingNames.add(newName);
+          }
+        });
+      }
 
       document.getElementById('ren-tbody').innerHTML = rows.map(function(r) {
         var bg = r.cls==='ok' ? 'background:rgba(22,163,74,0.06)' : r.cls==='err' ? 'background:rgba(220,38,38,0.06)' : '';
