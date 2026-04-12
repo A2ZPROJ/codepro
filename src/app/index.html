@@ -3053,9 +3053,8 @@ body {
 
         <!-- Mapa interativo da bacia -->
         <style>
-          .ose-pv-label { background:none!important; border:none!important; box-shadow:none!important; padding:0!important; }
-          .ose-pv-label::before { display:none!important; }
-          .ose-pv-label .pv-tag { display:inline-block; padding:1px 5px; border-radius:3px; font-family:'DM Mono',monospace; font-size:9px; font-weight:700; white-space:nowrap; }
+          .ose-pv-box { display:flex!important; align-items:center!important; justify-content:center!important; overflow:visible!important; width:0!important; height:0!important; }
+          .ose-pv-box .pv-card { display:inline-block; background:rgba(255,255,255,0.93); border-radius:4px; padding:3px 6px; font-family:'DM Mono',monospace; white-space:nowrap; box-shadow:0 1px 4px rgba(0,0,0,0.18); }
           .ose-net-label { display:flex!important; align-items:center!important; justify-content:center!important; overflow:visible!important; width:0!important; height:0!important; }
         </style>
         <div id="ose-map-wrap" style="display:none;margin-top:16px;background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
@@ -3691,7 +3690,7 @@ body {
     _oseMapMarkers.forEach(m => _oseMap.removeLayer(m));
     _oseMapMarkers = [];
 
-    // Adiciona marcadores de PV — label compacto (só nome), cotas no popup e hover
+    // Adiciona marcadores de PV com cotas permanentes (estilo CAD)
     const bounds = [];
     for (const p of points) {
       const color = p.hasErr ? '#dc2626' : p.hasTQ ? '#f59e0b' : '#16a34a';
@@ -3701,36 +3700,37 @@ body {
         radius, fillColor: color, color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.9,
       }).addTo(_oseMap);
 
-      // Popup detalhado (ao clicar)
       const ctTxt = p.ct != null ? p.ct.toFixed(3) : '—';
       const cfTxt = p.cf != null ? p.cf.toFixed(3) : '—';
-      const profTxt = p.prof != null ? p.prof.toFixed(3) + ' m' : '—';
+      const profTxt = p.prof != null ? p.prof.toFixed(2) : '—';
+
+      // Popup detalhado (ao clicar)
       marker.bindPopup(
-        '<div style="font-family:\'DM Mono\',monospace;font-size:12px;line-height:1.7;min-width:140px">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:12px;line-height:1.7;min-width:150px">' +
         '<div style="font-size:14px;font-weight:800;margin-bottom:4px;border-bottom:2px solid ' + color + ';padding-bottom:4px">' + p.id + ' <span style="color:' + color + ';font-size:10px">[' + p.status + ']</span></div>' +
         '<div style="display:grid;grid-template-columns:auto 1fr;gap:2px 8px">' +
         '<span style="color:#64748b">OSE</span><span>OSE-' + p.ose + '</span>' +
         '<span style="color:#1e40af;font-weight:600">CT</span><span>' + ctTxt + '</span>' +
         '<span style="color:#b91c1c;font-weight:600">CF</span><span>' + cfTxt + '</span>' +
-        '<span style="color:#6b21a8;font-weight:600">h</span><span>' + profTxt + '</span>' +
+        '<span style="color:#6b21a8;font-weight:600">h</span><span>' + profTxt + ' m</span>' +
         (p.diam ? '<span style="color:#64748b">DN</span><span>' + p.diam + ' mm</span>' : '') +
         '</div></div>',
         { maxWidth: 280 }
       );
 
-      // Tooltip hover (cotas resumidas — aparece ao passar mouse)
-      marker.bindTooltip(
-        '<span style="font-family:\'DM Mono\',monospace;font-size:10px"><b>' + p.id + '</b> CT:' + (p.ct||0).toFixed(2) + ' CF:' + (p.cf||0).toFixed(2) + ' h:' + (p.prof||0).toFixed(2) + '</span>',
-        { permanent: false, direction: 'top', offset: [0, -10] }
-      );
-
-      // Label permanente compacto — só o nome do PV ao lado do marcador
+      // Label permanente — card com nome + CT + CF + h (estilo anotação CAD)
+      const borderCol = p.hasErr ? '#fca5a5' : p.hasTQ ? '#fde68a' : '#86efac';
       const pvLabel = L.marker([p.lat, p.lon], {
         icon: L.divIcon({
-          className: 'ose-pv-label',
-          html: '<span class="pv-tag" style="color:' + color + '">' + p.id + '</span>',
+          className: 'ose-pv-box',
+          html: '<div class="pv-card" style="border:1.5px solid ' + borderCol + ';font-size:9px;line-height:1.35;text-align:center">' +
+            '<div style="font-weight:800;font-size:10px;color:' + color + ';border-bottom:1px solid ' + borderCol + ';padding-bottom:1px;margin-bottom:1px">' + p.id + '</div>' +
+            '<div style="color:#1e40af">CT:' + ctTxt + '</div>' +
+            '<div style="color:#b91c1c">CF:' + cfTxt + '</div>' +
+            '<div style="color:#6b21a8">h:' + profTxt + '</div>' +
+            '</div>',
           iconSize: [0, 0],
-          iconAnchor: [-10, 5],
+          iconAnchor: [0, 55],
         }),
         interactive: false,
       }).addTo(_oseMap);
