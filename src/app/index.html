@@ -3778,7 +3778,13 @@ body {
           <div id="orc-editor-titulo" style="font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
           <div id="orc-editor-sub" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace">—</div>
         </div>
-        <button id="orc-editor-export" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Exportar XLSX</button>
+        <button id="orc-editor-import-ose" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-family:inherit;font-size:11px;cursor:pointer">Importar OSE</button>
+        <button id="orc-editor-import-xlsx" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-family:inherit;font-size:11px;cursor:pointer">Importar planilha</button>
+        <select id="orc-editor-export-mode" style="padding:7px 10px;font-size:11px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-family:inherit">
+          <option value="full">Formato 2S completo</option>
+          <option value="compact">Compacto (só itens do orçamento)</option>
+        </select>
+        <button id="orc-editor-export" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Exportar XLSX</button>
       </div>
 
       <!-- Totais ao vivo -->
@@ -4662,14 +4668,17 @@ body {
       openOrcEditor(data);
     };
 
-    // ── Export XLSX (MVP) ─────────────────────────────────────
+    // ── Export XLSX ───────────────────────────────────────────
     document.getElementById('orc-editor-export').addEventListener('click', async () => {
       if (!_orcEditorCur) return;
       const btn = document.getElementById('orc-editor-export');
+      const mode = document.getElementById('orc-editor-export-mode').value;
       btn.disabled = true; btn.textContent = 'Exportando...';
       try {
-        await exportOrcamentoXlsx(_orcEditorCur, _orcEditorItens);
+        if (mode === 'full') await exportOrcamentoXlsxFull(_orcEditorCur, _orcEditorItens);
+        else                 await exportOrcamentoXlsx(_orcEditorCur, _orcEditorItens);
       } catch (e) {
+        console.error(e);
         alert('Erro ao exportar: ' + e.message);
       } finally {
         btn.disabled = false; btn.textContent = 'Exportar XLSX';
@@ -4845,6 +4854,585 @@ body {
       a.click();
       setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
     }
+
+    // ── Export XLSX formato 2S completo (SANEPAR) ───────────────
+    // Replica o layout do modelo 003-SES-0240-0005-PEXE-OR-...xlsx
+    // 3 abas: REF_TAB_PREÇOS_SANEPAR, BDI, ORÇAMENTO SINTÉTICO - SANEPAR
+    async function exportOrcamentoXlsxFull(orc, itens) {
+      const ExcelJS = require('exceljs');
+
+      // 1) Descobre a tabela base do orçamento
+      let tabelaBaseId = _orcEditorTabelaBase;
+      if (!tabelaBaseId) {
+        // Fallback: pega a tabela cuja fonte aparece mais em itens_snapshot
+        const counts = {};
+        itens.forEach(it => { if (it.fonte_snapshot && it.fonte_snapshot !== 'MANUAL') counts[it.fonte_snapshot] = (counts[it.fonte_snapshot] || 0) + 1; });
+        const fonte = Object.keys(counts).sort((a,b) => counts[b]-counts[a])[0] || 'SANEPAR';
+        const { data: tb } = await window.sb.from('tabelas_preco').select('id, fonte, nome').eq('fonte', fonte).eq('ativo', true).order('data_ref', { ascending: false }).limit(1).maybeSingle();
+        tabelaBaseId = tb?.id;
+      }
+      if (!tabelaBaseId) {
+        alert('Não consegui identificar a tabela base deste orçamento. Abra em "Tabelas de Preço" e certifique-se que há pelo menos uma vigente.');
+        return;
+      }
+
+      // 2) Busca tabela + TODOS os itens em chunks de 1000 (Supabase limita ~1000 por query)
+      const { data: tab } = await window.sb.from('tabelas_preco').select('*').eq('id', tabelaBaseId).single();
+      const todos = [];
+      let page = 0;
+      while (true) {
+        const { data: chunk, error } = await window.sb.from('itens_tabela')
+          .select('codigo, descricao, unidade, valor_unitario, nivel')
+          .eq('tabela_id', tabelaBaseId)
+          .order('codigo')
+          .range(page * 1000, (page + 1) * 1000 - 1);
+        if (error) throw error;
+        if (!chunk || !chunk.length) break;
+        todos.push(...chunk);
+        if (chunk.length < 1000) break;
+        page++;
+      }
+
+      // 3) Mapa código → item do orçamento (para preencher Quant.)
+      const byCode = {};
+      const manuais = [];
+      itens.forEach(it => {
+        if (it.codigo_snapshot && it.fonte_snapshot !== 'MANUAL') byCode[it.codigo_snapshot] = it;
+        else manuais.push(it);
+      });
+
+      // 4) Calcula totais e BDI efetivo
+      const custoDireto = itens.reduce((s, it) => s + (+it.quantidade || 0) * (+it.valor_unitario_snapshot || 0), 0);
+      const bdiO = orc.bdi_obras_id ? _orcEditorBdis[orc.bdi_obras_id] : null;
+      const bdiM = orc.bdi_materiais_id ? _orcEditorBdis[orc.bdi_materiais_id] : null;
+      const bdiOVal = bdiO ? bdiEfetivo(bdiO, custoDireto) : 0;
+      const bdiMVal = bdiM ? bdiEfetivo(bdiM, custoDireto) : 0;
+
+      // ── Workbook ──
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'Nexus — 2S Engenharia';
+      wb.created = new Date();
+
+      const DARK  = { argb: 'FF0F172A' };
+      const SLATE = { argb: 'FF334155' };
+      const SLATE_LIGHT = { argb: 'FFE2E8F0' };
+      const TITLE_BG = { argb: 'FF1E3A5F' };
+      const MONO = 'Courier New';
+
+      // ────────────────────────────────────────────────
+      // ABA 1: REF_TAB_PREÇOS_SANEPAR
+      // ────────────────────────────────────────────────
+      const wsR = wb.addWorksheet('REF_TAB_PREÇOS_' + (tab.fonte || 'BASE'));
+      wsR.columns = [
+        { width: 3 }, { width: 14 }, { width: 3 }, { width: 3 }, { width: 55 },
+        { width: 3 }, { width: 3 }, { width: 12 }, { width: 14 },
+      ];
+      // Título
+      const rTit = wsR.addRow(['', 'Tabela de Preços — ' + (tab.fonte || 'BASE')]);
+      wsR.mergeCells('B1:I1');
+      rTit.getCell(2).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+      rTit.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: DARK };
+      rTit.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+      rTit.height = 28;
+      wsR.addRow([]);
+      wsR.addRow([]);
+      wsR.addRow(['', 'Nome:', '', '', tab.nome]);
+      wsR.addRow(['', 'Data referência:', '', '', tab.data_ref ? new Date(tab.data_ref + 'T00:00:00').toLocaleDateString('pt-BR') : '—']);
+      wsR.addRow(['', 'Fonte:', '', '', tab.fonte]);
+      wsR.addRow([]);
+      // Header na linha 13 (pra bater com o modelo)
+      while (wsR.rowCount < 12) wsR.addRow([]);
+      const rH = wsR.addRow(['', 'Código', '', '', 'Descrição', '', '', 'Un. Med.', 'Valor Unitário']);
+      rH.eachCell({ includeEmpty: false }, c => {
+        c.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: SLATE };
+        c.alignment = { horizontal: 'center', vertical: 'middle' };
+        c.border = { bottom: { style: 'thin' } };
+      });
+      rH.height = 22;
+      todos.forEach(it => {
+        const r = wsR.addRow(['', it.codigo, '', '', it.descricao, '', '', it.unidade || '', it.valor_unitario]);
+        r.getCell(2).font = { name: MONO, size: 10, bold: it.nivel <= 2 };
+        r.getCell(5).font = { size: 10, bold: it.nivel <= 2 };
+        r.getCell(8).alignment = { horizontal: 'center' };
+        r.getCell(9).numFmt = 'R$ #,##0.00';
+        if (it.nivel === 1) r.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+        if (it.nivel === 2) r.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+      });
+      wsR.views = [{ state: 'frozen', ySplit: 13, xSplit: 1 }];
+
+      // ────────────────────────────────────────────────
+      // ABA 3 (criada antes pra ter referência): ORÇAMENTO SINTÉTICO
+      // ────────────────────────────────────────────────
+      const wsO = wb.addWorksheet('ORÇAMENTO SINTÉTICO - ' + (tab.fonte || 'BASE'));
+      wsO.columns = [
+        { width: 3 }, { width: 14 }, { width: 3 }, { width: 3 }, { width: 55 },
+        { width: 3 }, { width: 12 }, { width: 10 }, { width: 14 },
+        { width: 3 }, { width: 10 }, { width: 16 }, { width: 16 }, { width: 18 },
+      ];
+      // Título
+      const oTit = wsO.addRow(['', 'ORÇAMENTO SINTÉTICO SEM DESONERAÇÃO']);
+      wsO.mergeCells('B1:N1');
+      oTit.getCell(2).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+      oTit.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: DARK };
+      oTit.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+      oTit.height = 28;
+      wsO.addRow([]);
+      // Cabeçalho do projeto (replica do modelo)
+      const headPair = (label, val) => {
+        const r = wsO.addRow(['', '', '', '', '', '', label, '', val || '—']);
+        r.getCell(7).font = { bold: true, size: 10, color: { argb: 'FF475569' } };
+        r.getCell(9).font = { size: 10, bold: true, color: { argb: 'FF0F172A' } };
+        r.getCell(9).alignment = { horizontal: 'left' };
+      };
+      headPair('CIDADE:',         orc.cidade);
+      headPair('ESTADO:',         orc.uf);
+      headPair('SISTEMA:',        orc.sistema);
+      headPair('MICROBACIA:',     orc.microbacia);
+      headPair('DATA:',           orc.data_orcamento);
+      headPair('REVISÃO:',        orc.revisao);
+      headPair('ELABORAÇÃO:',     orc.elaborador);
+      headPair('ENG. RESPONSÁVEL:', orc.eng_responsavel);
+      headPair('CREA:',           orc.eng_crea);
+
+      // Header dos itens (linha ~12)
+      while (wsO.rowCount < 11) wsO.addRow([]);
+      const oH = wsO.addRow([
+        '', 'Código', '', '', 'Descrição', '', 'Quant.', 'Un. Med.', 'Valor Unitário',
+        '', 'BDI', 'Preço Unit. C/ BDI', 'Custo Total', 'Preço Total C/ BDI',
+      ]);
+      oH.eachCell({ includeEmpty: false }, c => {
+        c.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: SLATE };
+        c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        c.border = { bottom: { style: 'thin' } };
+      });
+      oH.height = 26;
+
+      // Itens (todos os 2563 da base) + quant preenchida onde houver
+      let custoTotal = 0, precoTotal = 0;
+      const firstItemRow = wsO.rowCount + 1;
+      todos.forEach(it => {
+        const orcIt = byCode[it.codigo];
+        const q = orcIt ? (+orcIt.quantidade || 0) : null;
+        const v = it.valor_unitario;
+        const bdiChoice = orcIt ? (orcIt.tipo_bdi || 'OBRAS') : 'OBRAS';
+        const bdi = bdiChoice === 'NENHUM' ? 0 : bdiChoice === 'MATERIAIS' ? bdiMVal : bdiOVal;
+        const pUnit = v != null ? v * (1 + bdi) : null;
+        const custo = (q != null && v != null) ? q * v : null;
+        const preco = custo != null ? custo * (1 + bdi) : null;
+        if (custo) custoTotal += custo;
+        if (preco) precoTotal += preco;
+
+        const r = wsO.addRow([
+          '', it.codigo, '', '', it.descricao, '',
+          q, it.unidade || '', v,
+          '', bdi, pUnit, custo, preco,
+        ]);
+        // Formatação
+        r.getCell(2).font = { name: MONO, size: 10, bold: it.nivel <= 2 };
+        r.getCell(5).font = { size: 10, bold: it.nivel <= 2 };
+        if (it.nivel === 1) r.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+        if (it.nivel === 2) r.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+        if (q != null && q > 0) {
+          for (let i = 2; i <= 14; i++) r.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFDF5' } };
+        }
+        r.getCell(7).numFmt = '#,##0.0000';
+        r.getCell(8).alignment = { horizontal: 'center' };
+        r.getCell(9).numFmt = 'R$ #,##0.00';
+        r.getCell(11).numFmt = '0.00%';
+        r.getCell(12).numFmt = 'R$ #,##0.00';
+        r.getCell(13).numFmt = 'R$ #,##0.00';
+        r.getCell(14).numFmt = 'R$ #,##0.00';
+      });
+
+      // Linhas extras: itens MANUAIS ou de outras fontes
+      const extras = itens.filter(it => it.fonte_snapshot === 'MANUAL' || !byCode[it.codigo_snapshot]);
+      if (extras.length) {
+        const sep = wsO.addRow(['', '', '', '', '— Composições próprias / outras fontes —']);
+        wsO.mergeCells(`B${sep.number}:N${sep.number}`);
+        sep.getCell(2).font = { bold: true, size: 10, italic: true, color: { argb: 'FF64748B' } };
+        sep.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: SLATE_LIGHT };
+        sep.getCell(2).alignment = { horizontal: 'center' };
+        extras.forEach(it => {
+          const q = +it.quantidade || 0;
+          const v = +it.valor_unitario_snapshot || 0;
+          const bdi = it.tipo_bdi === 'NENHUM' ? 0 : it.tipo_bdi === 'MATERIAIS' ? bdiMVal : bdiOVal;
+          const pUnit = v * (1 + bdi);
+          const custo = q * v;
+          const preco = custo * (1 + bdi);
+          custoTotal += custo;
+          precoTotal += preco;
+          const r = wsO.addRow([
+            '', it.codigo_snapshot || '(MANUAL)', '', '', it.descricao_snapshot || '', '',
+            q, it.unidade_snapshot || '', v, '', bdi, pUnit, custo, preco,
+          ]);
+          r.getCell(2).font = { name: MONO, size: 10 };
+          r.getCell(7).numFmt = '#,##0.0000';
+          r.getCell(9).numFmt = 'R$ #,##0.00';
+          r.getCell(11).numFmt = '0.00%';
+          r.getCell(12).numFmt = 'R$ #,##0.00';
+          r.getCell(13).numFmt = 'R$ #,##0.00';
+          r.getCell(14).numFmt = 'R$ #,##0.00';
+        });
+      }
+
+      // Linha TOTAL
+      const tot = wsO.addRow(['', 'VALOR TOTAL', '', '', '', '', '', '', '', '', '', '', custoTotal, precoTotal]);
+      tot.getCell(2).font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+      tot.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: DARK };
+      wsO.mergeCells(`B${tot.number}:L${tot.number}`);
+      tot.getCell(2).alignment = { horizontal: 'right', vertical: 'middle' };
+      tot.getCell(13).numFmt = 'R$ #,##0.00';
+      tot.getCell(14).numFmt = 'R$ #,##0.00';
+      tot.getCell(13).font = { bold: true, size: 12 };
+      tot.getCell(14).font = { bold: true, size: 12, color: { argb: 'FF0F766E' } };
+      tot.getCell(14).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFDF5' } };
+      tot.height = 26;
+
+      wsO.views = [{ state: 'frozen', ySplit: 12, xSplit: 1 }];
+
+      // ────────────────────────────────────────────────
+      // ABA 2: BDI (colocada no meio pra seguir ordem do modelo)
+      // ────────────────────────────────────────────────
+      const wsB = wb.addWorksheet('BDI');
+      wsB.columns = [{ width: 40 }, { width: 40 }, { width: 16 }, { width: 3 }, { width: 16 }, { width: 14 }];
+
+      const b1 = wsB.addRow(['COMPOSIÇÃO DE BDI E BASE DE PREÇOS', '', '', '', 'CUSTO DIRETO:', custoDireto]);
+      b1.getCell(1).font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+      b1.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: DARK };
+      wsB.mergeCells('A1:D1');
+      b1.getCell(5).font = { bold: true, size: 11 };
+      b1.getCell(6).numFmt = 'R$ #,##0.00';
+      b1.getCell(6).font = { bold: true, size: 11 };
+      b1.height = 24;
+      wsB.addRow(['COMPOSIÇÃO DO BDI PARA MODALIDADE A PREÇO UNITÁRIO']).getCell(1).font = { size: 10, italic: true, color: { argb: 'FF64748B' } };
+      wsB.addRow(['BASE DE CÁLCULO: Acórdão nº 2.622/2013 - TCU Plenário (TC 036.076/2011-2)']).getCell(1).font = { size: 10, italic: true, color: { argb: 'FF64748B' } };
+      wsB.addRow([]);
+
+      const writeBdi = (titulo, b, val) => {
+        if (!b) return;
+        const rT = wsB.addRow([titulo + ' — ' + b.nome]);
+        wsB.mergeCells(`A${rT.number}:F${rT.number}`);
+        rT.getCell(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        rT.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: TITLE_BG };
+        rT.getCell(1).alignment = { horizontal: 'center' };
+        rT.height = 22;
+
+        const hdr = wsB.addRow(['SIGLA', 'DISCRIMINAÇÃO DAS PARCELAS', 'BDI', '', 'Faixa aplicada', 'Custo direto']);
+        hdr.eachCell({ includeEmpty: false }, c => {
+          c.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } };
+          c.fill = { type: 'pattern', pattern: 'solid', fgColor: SLATE };
+          c.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        const faixa = b.faixas.find(f => f.ate == null || custoDireto <= +f.ate) || b.faixas[b.faixas.length - 1];
+        const faixaIdx = b.faixas.indexOf(faixa) + 1;
+        const faixaLbl = faixa.ate == null ? 'Faixa ' + faixaIdx + ' (>R$1,5mi)' : faixa.ate <= 150000 ? 'Faixa 1 (≤R$150k)' : 'Faixa 2 (R$150k–1,5mi)';
+
+        const rows = [
+          ['AC', 'Administração Central',                 faixa.AC || 0],
+          ['SG', 'Seguro e Garantia',                     faixa.SG || 0],
+          ['R',  'Risco',                                 faixa.R  || 0],
+          ['DF', 'Despesas Financeiras',                  faixa.DF || 0],
+          ['L',  'Lucro',                                 faixa.L  || 0],
+          ['I',  'COFINS',                                faixa.COFINS || 0],
+          ['',   'PIS',                                   faixa.PIS || 0],
+          ['',   'ISS',                                   faixa.ISS || 0],
+          ['',   'CRPB (desoneração)',                    faixa.CPRB || 0],
+        ];
+        rows.forEach((r, i) => {
+          const row = wsB.addRow([r[0], r[1], r[2]]);
+          row.getCell(1).font = { bold: true, name: MONO, size: 10 };
+          row.getCell(2).font = { size: 10 };
+          row.getCell(3).numFmt = '0.00%';
+          row.getCell(3).font = { name: MONO, size: 10 };
+          if (i === 0) {
+            row.getCell(5).value = faixaLbl;
+            row.getCell(6).value = custoDireto;
+            row.getCell(5).font = { size: 9, italic: true, color: { argb: 'FF64748B' } };
+            row.getCell(6).numFmt = 'R$ #,##0.00';
+            row.getCell(6).font = { size: 9, italic: true, color: { argb: 'FF64748B' } };
+          }
+        });
+        const rTot = wsB.addRow(['TOTAL ' + titulo, '', val]);
+        wsB.mergeCells(`A${rTot.number}:B${rTot.number}`);
+        rTot.getCell(1).font = { bold: true, size: 11 };
+        rTot.getCell(1).alignment = { horizontal: 'right' };
+        rTot.getCell(3).numFmt = '0.0000%';
+        rTot.getCell(3).font = { bold: true, size: 11, color: { argb: 'FF0F766E' } };
+        rTot.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFDF5' } };
+        wsB.addRow([]);
+      };
+      writeBdi('BDI 1 — OBRAS E SERVIÇOS',      bdiO, bdiOVal);
+      writeBdi('BDI 2 — FORNECIMENTO DE MATERIAIS', bdiM, bdiMVal);
+
+      // Download via blob
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeName = (orc.codigo_documento || orc.titulo || 'Orcamento').replace(/[^\w\-\.]+/g, '_');
+      a.href = url;
+      a.download = `${safeName}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+    }
+
+    // ── Importar planilha XLSX existente ────────────────────
+    // Lê um XLSX com código+quantidade (formato compatível com o modelo SANEPAR)
+    // e adiciona as linhas com quantidade > 0 ao orçamento corrente.
+    document.getElementById('orc-editor-import-xlsx').addEventListener('click', async () => {
+      if (!_orcEditorCur) return;
+      const file = await window.electronAPI.selectFile([
+        { name: 'Excel', extensions: ['xlsx','xlsm','xls'] },
+      ]);
+      if (!file) return;
+
+      const btn = document.getElementById('orc-editor-import-xlsx');
+      btn.disabled = true; btn.textContent = 'Lendo...';
+      try {
+        const xlsx = require('xlsx');
+        const wb = xlsx.readFile(file, { cellFormula: false });
+        // procura aba que lembra ORÇAMENTO / SINTÉTICO
+        const sheetName = wb.SheetNames.find(n => /OR[ÇC]A|SINTETIC|SINTÉTIC/i.test(n)) || wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        if (!ws || !ws['!ref']) throw new Error('Aba vazia');
+        const ref = xlsx.utils.decode_range(ws['!ref']);
+
+        // Acha headers: precisa ter Código, Descrição/Descricao (opcional), Quant. e Valor
+        let headerRow = -1, colCod = -1, colDesc = -1, colQt = -1, colVal = -1, colUn = -1;
+        for (let r = 0; r <= Math.min(ref.e.r, 60); r++) {
+          const cells = [];
+          for (let c = 0; c <= ref.e.c; c++) {
+            const cell = ws[xlsx.utils.encode_cell({r,c})];
+            cells.push(cell && cell.v != null ? String(cell.v).toLowerCase().trim() : '');
+          }
+          const hC  = cells.findIndex(v => v === 'código' || v === 'codigo' || v === 'cód.');
+          const hD  = cells.findIndex(v => v.startsWith('descri'));
+          const hQ  = cells.findIndex(v => v === 'quant.' || v === 'quant' || v === 'quantidade');
+          const hV  = cells.findIndex(v => v === 'valor unitário' || v === 'valor unit' || v === 'valor unitario' || (v.includes('valor') && v.includes('unit')));
+          const hU  = cells.findIndex(v => /un\.?\s*med|unidade/.test(v));
+          if (hC >= 0 && hQ >= 0) {
+            headerRow = r; colCod = hC; colDesc = hD; colQt = hQ; colVal = hV; colUn = hU;
+            break;
+          }
+        }
+        if (headerRow < 0) throw new Error('Não encontrei as colunas Código e Quant. na planilha.');
+
+        // Coleta linhas com quant > 0
+        const porCodigo = {}; // codigo → { qt, desc, un, val }
+        for (let r = headerRow + 1; r <= ref.e.r; r++) {
+          const cCod = ws[xlsx.utils.encode_cell({r,c:colCod})];
+          const cQt  = ws[xlsx.utils.encode_cell({r,c:colQt})];
+          const cod = cCod && cCod.v != null ? String(cCod.v).trim() : '';
+          if (!cod) continue;
+          let qt = null;
+          if (cQt && cQt.v != null) {
+            qt = typeof cQt.v === 'number' ? cQt.v : parseFloat(String(cQt.v).replace(',','.'));
+            if (isNaN(qt)) qt = null;
+          }
+          if (qt == null || qt === 0) continue;
+          const cDesc = colDesc >= 0 ? ws[xlsx.utils.encode_cell({r,c:colDesc})] : null;
+          const cUn   = colUn  >= 0 ? ws[xlsx.utils.encode_cell({r,c:colUn})]  : null;
+          const cVal  = colVal >= 0 ? ws[xlsx.utils.encode_cell({r,c:colVal})] : null;
+          porCodigo[cod] = {
+            qt,
+            desc: cDesc && cDesc.v != null ? String(cDesc.v).trim() : null,
+            un:   cUn   && cUn.v   != null ? String(cUn.v).trim()   : null,
+            val:  cVal  && cVal.v  != null ? (typeof cVal.v === 'number' ? cVal.v : parseFloat(String(cVal.v).replace(',','.'))) : null,
+          };
+        }
+        const codes = Object.keys(porCodigo);
+        if (!codes.length) {
+          alert('A planilha foi lida, mas nenhuma linha tem Quant. > 0.');
+          return;
+        }
+
+        // Busca esses códigos na tabela base do orçamento
+        let matched = [];
+        if (_orcEditorTabelaBase) {
+          const chunks = [];
+          for (let i = 0; i < codes.length; i += 200) chunks.push(codes.slice(i, i+200));
+          for (const ch of chunks) {
+            const { data } = await window.sb.from('itens_tabela')
+              .select('id, codigo, descricao, unidade, valor_unitario, tabelas_preco(fonte, data_ref)')
+              .eq('tabela_id', _orcEditorTabelaBase)
+              .in('codigo', ch);
+            if (data) matched.push(...data);
+          }
+        }
+        const byCode = {};
+        matched.forEach(m => { byCode[m.codigo] = m; });
+
+        // Monta lote de inserts
+        const existingCodes = new Set(_orcEditorItens.map(x => x.codigo_snapshot));
+        const inserts = [];
+        const skipped = [];
+        let ordem = _orcEditorItens.reduce((m, x) => Math.max(m, x.ordem || 0), 0);
+        for (const cod of codes) {
+          if (existingCodes.has(cod)) { skipped.push(cod); continue; }
+          const src = porCodigo[cod];
+          const m = byCode[cod];
+          ordem++;
+          if (m) {
+            inserts.push({
+              orcamento_id: _orcEditorCur.id,
+              ordem,
+              item_tabela_id: m.id,
+              fonte_snapshot: m.tabelas_preco?.fonte || null,
+              codigo_snapshot: m.codigo,
+              descricao_snapshot: m.descricao,
+              unidade_snapshot: m.unidade,
+              valor_unitario_snapshot: m.valor_unitario,
+              data_ref_snapshot: m.tabelas_preco?.data_ref || null,
+              quantidade: src.qt,
+              tipo_bdi: 'OBRAS',
+            });
+          } else {
+            // não achou na base → vira MANUAL com os dados da própria planilha
+            inserts.push({
+              orcamento_id: _orcEditorCur.id,
+              ordem,
+              item_tabela_id: null,
+              fonte_snapshot: 'MANUAL',
+              codigo_snapshot: cod,
+              descricao_snapshot: src.desc,
+              unidade_snapshot: src.un,
+              valor_unitario_snapshot: src.val,
+              data_ref_snapshot: new Date().toISOString().slice(0,10),
+              quantidade: src.qt,
+              tipo_bdi: 'OBRAS',
+            });
+          }
+        }
+
+        if (!inserts.length) {
+          alert('Nada a importar — todos os ' + codes.length + ' códigos já estão no orçamento.');
+          return;
+        }
+
+        const { data: newItens, error } = await window.sb.from('orcamento_itens').insert(inserts).select('*');
+        if (error) throw error;
+        _orcEditorItens.push(...(newItens || []));
+        renderEditorTable();
+
+        const mCount = inserts.filter(x => x.fonte_snapshot !== 'MANUAL').length;
+        const aCount = inserts.filter(x => x.fonte_snapshot === 'MANUAL').length;
+        alert(
+          `✓ Importação concluída\n\n` +
+          `Linhas com quant > 0 na planilha: ${codes.length}\n` +
+          `Adicionadas ao orçamento: ${inserts.length}\n` +
+          `  • Matched na tabela base: ${mCount}\n` +
+          `  • Como MANUAL (sem match): ${aCount}\n` +
+          (skipped.length ? `Puladas (já existiam): ${skipped.length}\n` : '')
+        );
+      } catch (e) {
+        console.error(e);
+        alert('Erro: ' + e.message);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Importar planilha';
+      }
+    });
+
+    // ── Importar da Conferência OSE ─────────────────────────
+    // Usa o window._ose.data do último parse da aba Conferência e mostra
+    // um painel com os agregados (L total, n° PVs por faixa de prof, n° TLs,
+    // contagem de TQ). Usuário clica em "Aplicar" para criar linhas
+    // manuais ou sugerir códigos da tabela base.
+    document.getElementById('orc-editor-import-ose').addEventListener('click', async () => {
+      if (!_orcEditorCur) return;
+      const oseData = window._ose && window._ose.data;
+      if (!oseData || !oseData.length) {
+        alert('Nenhum resultado de Conferência OSE carregado nesta sessão.\n\nAbra a aba "Conferência", rode a comparação DXF+Planilha, e depois volta aqui pra importar os agregados.');
+        return;
+      }
+
+      // Agrega métricas
+      const agg = {
+        oses_total: oseData.length,
+        L_mapa: 0, L_excel: 0, L_perfil: 0,
+        pvs_count: 0, tls_count: 0,
+        pvs_por_faixa: { '0-2': 0, '2-3': 0, '3-4': 0, '4+': 0 },
+        tqs_count: 0, tqs_soma: 0,
+      };
+      const seen = new Set();
+      for (const r of oseData) {
+        if (r.mapa_L)   agg.L_mapa   += r.mapa_L;
+        if (r.excel_L)  agg.L_excel  += r.excel_L;
+        if (r.perfil_L) agg.L_perfil += r.perfil_L;
+        for (const pv of (r.pvs || [])) {
+          const key = pv.id;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const isTL = /^TL/i.test(pv.id || '');
+          if (isTL) agg.tls_count++;
+          else      agg.pvs_count++;
+          const h = Math.max(pv.excel_prof_pv || 0, pv.excel_prof_chegada || 0, pv.mapa_h || 0, pv.perf_h || 0);
+          if (h > 0) {
+            if (h <= 2)      agg.pvs_por_faixa['0-2']++;
+            else if (h <= 3) agg.pvs_por_faixa['2-3']++;
+            else if (h <= 4) agg.pvs_por_faixa['3-4']++;
+            else             agg.pvs_por_faixa['4+']++;
+          }
+          if (pv.excel_has_tq) {
+            agg.tqs_count++;
+            if (pv.excel_tq) agg.tqs_soma += pv.excel_tq;
+          }
+        }
+      }
+
+      // Monta painel simples com alert — UX com modal dá muito mais trabalho
+      const resumo =
+        `=== RESUMO DA CONFERÊNCIA OSE ===\n\n` +
+        `Total de OSEs: ${agg.oses_total}\n` +
+        `L total (Mapa):    ${agg.L_mapa.toFixed(2)} m\n` +
+        `L total (Planilha): ${agg.L_excel.toFixed(2)} m\n` +
+        `L total (Perfil):  ${agg.L_perfil.toFixed(2)} m\n\n` +
+        `PVs (sem TL): ${agg.pvs_count}\n` +
+        `  • 0 a 2 m: ${agg.pvs_por_faixa['0-2']}\n` +
+        `  • 2 a 3 m: ${agg.pvs_por_faixa['2-3']}\n` +
+        `  • 3 a 4 m: ${agg.pvs_por_faixa['3-4']}\n` +
+        `  • > 4 m:   ${agg.pvs_por_faixa['4+']}\n\n` +
+        `TLs: ${agg.tls_count}\n` +
+        `Tubos de queda: ${agg.tqs_count} (soma = ${agg.tqs_soma.toFixed(3)} m)\n\n` +
+        `Deseja criar linhas manuais no orçamento com esses agregados?\n` +
+        `(Você vai poder editar os códigos/valores depois.)`;
+
+      if (!confirm(resumo)) return;
+
+      // Cria linhas MANUAIS com os agregados — o usuário edita depois
+      const ordemStart = _orcEditorItens.reduce((m, x) => Math.max(m, x.ordem || 0), 0);
+      const linhas = [
+        { desc: 'Extensão total de rede coletora (Mapa)',        un: 'm',  qt: +agg.L_mapa.toFixed(2),   val: 0 },
+        { desc: 'PVs profundidade ≤ 2 m',                        un: 'ud', qt: agg.pvs_por_faixa['0-2'], val: 0 },
+        { desc: 'PVs profundidade 2 a 3 m',                      un: 'ud', qt: agg.pvs_por_faixa['2-3'], val: 0 },
+        { desc: 'PVs profundidade 3 a 4 m',                      un: 'ud', qt: agg.pvs_por_faixa['3-4'], val: 0 },
+        { desc: 'PVs profundidade > 4 m',                        un: 'ud', qt: agg.pvs_por_faixa['4+'],  val: 0 },
+        { desc: 'Terminais de Limpeza (TL)',                     un: 'ud', qt: agg.tls_count,            val: 0 },
+        { desc: 'Tubos de queda / degraus (quantidade)',         un: 'ud', qt: agg.tqs_count,            val: 0 },
+      ].filter(l => l.qt > 0);
+
+      const payload = linhas.map((l, i) => ({
+        orcamento_id: _orcEditorCur.id,
+        ordem: ordemStart + i + 1,
+        item_tabela_id: null,
+        fonte_snapshot: 'MANUAL',
+        codigo_snapshot: null,
+        descricao_snapshot: l.desc,
+        unidade_snapshot: l.un,
+        valor_unitario_snapshot: l.val,
+        data_ref_snapshot: new Date().toISOString().slice(0,10),
+        quantidade: l.qt,
+        tipo_bdi: 'OBRAS',
+      }));
+
+      const { data: inserted, error } = await window.sb.from('orcamento_itens').insert(payload).select('*');
+      if (error) { alert('Erro: ' + error.message); return; }
+      _orcEditorItens.push(...(inserted || []));
+      renderEditorTable();
+      alert('✓ ' + (inserted || []).length + ' linhas adicionadas como MANUAL. Edite os valores unitários e, se quiser, troque por códigos da tabela base.');
+    });
 
     // ── Init (chamado pelo switchTab) ─────────────────────────
     window.orcInit = function() {
