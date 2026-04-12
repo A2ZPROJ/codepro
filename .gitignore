@@ -16,6 +16,8 @@ config.json
 
 # Build artifacts
 *.blockmap
+*.jsc
+*.js.src
 
 # Scraper node_modules (separado do principal)
 scripts/scraper/node_modules/

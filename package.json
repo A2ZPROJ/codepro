@@ -1,13 +1,15 @@
 {
   "name": "codepro",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "description": "Nexus — Gestão de Projetos A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "build": "electron-builder --win",
-    "build:publish": "electron-builder --win --publish always"
+    "precompile": "npx electron scripts/compile-bytecode.js",
+    "postrestore": "node scripts/restore-source.js",
+    "build": "npm run precompile && electron-builder --win && npm run postrestore",
+    "build:publish": "npm run precompile && electron-builder --win --publish always && npm run postrestore"
   },
   "build": {
     "appId": "com.a2zprojetos.codepro",
@@ -50,6 +52,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",
+    "bytenode": "^1.5.7",
     "docx": "^9.6.1",
     "electron-updater": "^6.1.7",
     "exceljs": "^4.4.0",
