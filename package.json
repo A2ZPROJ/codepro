@@ -16,6 +16,11 @@
     "directories": {
       "output": "dist"
     },
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/xlsx/**",
+      "node_modules/exceljs/**"
+    ],
     "files": [
       "src/**/*",
       "assets/**/*",

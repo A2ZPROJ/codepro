@@ -95,6 +95,33 @@ let splashWindow, mainWindow, sessionUser = null;
 // Estado do update preservado entre janelas
 let updateState = { status: 'idle', version: null }; // idle | available | downloading | downloaded
 
+// ── SEGURANÇA ────────────────────────────────────────────────────────
+// Bloqueia DevTools em produção para prevenir inspeção de código/chaves.
+// Em dev (--dev) fica habilitado para debug.
+if (!isDev) {
+  app.on('web-contents-created', (_, wc) => {
+    // Bloqueia abertura de DevTools
+    wc.on('before-input-event', (event, input) => {
+      // Bloqueia F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C
+      if (input.key === 'F12' ||
+          (input.control && input.shift && (input.key === 'I' || input.key === 'i' || input.key === 'J' || input.key === 'j' || input.key === 'C' || input.key === 'c'))) {
+        event.preventDefault();
+      }
+    });
+    // Previne navegação para URLs externas (evita phishing/redirect)
+    wc.on('will-navigate', (event, url) => {
+      if (!url.startsWith('file://')) event.preventDefault();
+    });
+    // Previne abertura de novas janelas (exceto para impressão)
+    wc.setWindowOpenHandler(({ url }) => {
+      if (url.startsWith('file://')) return { action: 'allow' };
+      // Abre links externos no navegador do sistema (não no Electron)
+      shell.openExternal(url);
+      return { action: 'deny' };
+    });
+  });
+}
+
 function createSplash(){
   splashWindow = new BrowserWindow({
     width: 480,
@@ -142,6 +169,29 @@ function createMain(licenseData){
 
   const licQuery = licenseData ? Buffer.from(JSON.stringify(licenseData)).toString('base64') : '';
   mainWindow.loadFile(path.join(__dirname,'app','index.html'), { query: licQuery ? { lic: licQuery } : {} });
+
+  // CSP + segurança extra em produção
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, cb) => {
+    cb({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; " +
+          "connect-src 'self' https://xszpzsmdpbgaiodeqcpi.supabase.co wss://xszpzsmdpbgaiodeqcpi.supabase.co https://generativelanguage.googleapis.com https://*.tile.openstreetmap.org https://servicodados.ibge.gov.br https://is.gd https://brasilapi.com.br https://archive-api.open-meteo.com; " +
+          "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://server.arcgisonline.com https://*.opentopomap.org; " +
+          "font-src 'self' data: https://fonts.gstatic.com; " +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com;"
+        ],
+      },
+    });
+  });
+
+  // Desativa DevTools em produção
+  if (!isDev) {
+    mainWindow.webContents.on('devtools-opened', () => {
+      mainWindow.webContents.closeDevTools();
+    });
+  }
 
   mainWindow.once('ready-to-show', ()=>{
     if(splashWindow){ splashWindow.close(); splashWindow=null; }

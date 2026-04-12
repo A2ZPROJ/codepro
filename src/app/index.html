@@ -1443,7 +1443,11 @@
     btn.disabled=false;btn.textContent='Salvar alterações';
   };
 
-  const GEMINI_KEY='AIzaSyCf_c-4K8uWf5zPCR4PLbNQxEn4-TbLTHI';
+  // Gemini key lida do config local (NÃO fica no código-fonte)
+  const _gkParts = (function(){ try { const fs=require('fs'), p=require('path'), os=require('os');
+    const cfg = JSON.parse(fs.readFileSync(p.join(os.homedir(),'.codepro','config.json'),'utf8'));
+    return cfg.gemini_key || ''; } catch { return ''; } })();
+  const GEMINI_KEY = _gkParts;
   window.aiSuggest=async()=>{
     const desc=document.getElementById('aiInput').value.trim();
     if(!desc){alert('Descreva o documento.');return;}
@@ -2244,6 +2248,49 @@ body {
 </style>
 </head>
 <body>
+<script>
+// ── PROTEÇÃO ANTI-ENGENHARIA REVERSA ──────────────────────────────
+// Bloqueia atalhos de DevTools, menu de contexto, seleção de texto,
+// e tentativas de copiar o código-fonte. Só ativa em produção.
+(function(){
+  const isDev = process.argv && process.argv.includes('--dev');
+  if (isDev) return; // Em dev, permite tudo
+
+  // 1. Bloqueia clique-direito (context menu)
+  document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+
+  // 2. Bloqueia atalhos de DevTools / inspect / source
+  document.addEventListener('keydown', function(e) {
+    // F12
+    if (e.key === 'F12') { e.preventDefault(); return false; }
+    // Ctrl+Shift+I / J / C (DevTools)
+    if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) {
+      e.preventDefault(); return false;
+    }
+    // Ctrl+U (view source)
+    if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) { e.preventDefault(); return false; }
+  });
+
+  // 3. Detecta DevTools aberto por timing (fallback — se alguém bypassar o bloqueio)
+  const _dtCheck = setInterval(function() {
+    const t0 = performance.now();
+    // debugger statement causa pause se DevTools está aberto
+    // eslint-disable-next-line no-debugger
+    (function(){}).constructor('debugger')();
+    const dt = performance.now() - t0;
+    if (dt > 100) {
+      // DevTools provavelmente aberto — fecha a janela
+      clearInterval(_dtCheck);
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0f172a;color:#dc2626;font-size:18px;font-family:monospace;text-align:center;padding:40px">ACESSO NÃO AUTORIZADO DETECTADO<br><br>DevTools está bloqueado neste aplicativo.<br>O programa será encerrado.</div>';
+      setTimeout(function(){ try { require('electron').remote.getCurrentWindow().close(); } catch {} window.close(); }, 3000);
+    }
+  }, 2000);
+
+  // 4. Previne arrastar arquivos para dentro (evita injeção de scripts)
+  document.addEventListener('dragover', function(e) { e.preventDefault(); });
+  document.addEventListener('drop', function(e) { e.preventDefault(); });
+})();
+</script>
 
 <!-- AUTH -->
 <div class="auth-screen" id="authScreen" style="display:none">
