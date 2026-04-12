@@ -3057,16 +3057,17 @@ body {
           .ose-pv-tooltip::before { border-top-color:#94a3b8!important; }
         </style>
         <div id="ose-map-wrap" style="display:none;margin-top:16px;background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
-          <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+          <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <div style="font-size:13px;font-weight:700;color:var(--text)">Mapa da Bacia</div>
             <div style="font-size:10px;color:var(--text3)">PVs coloridos por status — clique para ver detalhes</div>
-            <div style="margin-left:auto;display:flex;gap:8px;font-size:10px">
+            <div style="margin-left:auto;display:flex;gap:10px;align-items:center;font-size:10px">
               <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;border-radius:50%;background:#16a34a;display:inline-block"></span> OK</span>
               <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;border-radius:50%;background:#dc2626;display:inline-block"></span> Erro</span>
               <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;display:inline-block"></span> T.Q.</span>
+              <button id="ose-map-theme-btn" onclick="window.oseMapToggleTheme()" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 10px;font-size:10px;cursor:pointer;color:var(--text2);font-family:inherit;font-weight:600">Escuro</button>
             </div>
           </div>
-          <div id="ose-map" style="height:450px;width:100%"></div>
+          <div id="ose-map" style="height:500px;width:100%"></div>
         </div>
       </div>
 
@@ -3635,7 +3636,22 @@ body {
     return { lat: lat * 180 / Math.PI, lon: lon * 180 / Math.PI };
   }
 
-  let _oseMap = null, _oseMapMarkers = [];
+  let _oseMap = null, _oseMapMarkers = [], _oseMapTile = null;
+  const _oseMapTiles = {
+    light: { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', attr: '© OSM © CARTO', sub: 'abcd' },
+    dark:  { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',  attr: '© OSM © CARTO', sub: 'abcd' },
+  };
+  let _oseMapTheme = 'light';
+  window.oseMapToggleTheme = function() {
+    _oseMapTheme = _oseMapTheme === 'light' ? 'dark' : 'light';
+    const btn = document.getElementById('ose-map-theme-btn');
+    if (btn) btn.textContent = _oseMapTheme === 'light' ? 'Escuro' : 'Claro';
+    if (_oseMap && _oseMapTile) {
+      _oseMap.removeLayer(_oseMapTile);
+      const t = _oseMapTiles[_oseMapTheme];
+      _oseMapTile = L.tileLayer(t.url, { maxZoom: 19, attribution: t.attr, subdomains: t.sub }).addTo(_oseMap);
+    }
+  };
 
   window.oseRenderMap = function(data) {
     const wrap = document.getElementById('ose-map-wrap');
@@ -3667,9 +3683,8 @@ body {
     // Inicializa ou limpa mapa
     if (!_oseMap) {
       _oseMap = L.map('ose-map', { scrollWheelZoom: true, zoomControl: true });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19, attribution: 'OSM'
-      }).addTo(_oseMap);
+      const t = _oseMapTiles[_oseMapTheme];
+      _oseMapTile = L.tileLayer(t.url, { maxZoom: 19, attribution: t.attr, subdomains: t.sub }).addTo(_oseMap);
     }
     _oseMapMarkers.forEach(m => _oseMap.removeLayer(m));
     _oseMapMarkers = [];
@@ -3754,42 +3769,34 @@ body {
       if (angle > 90) angle -= 180;
       if (angle < -90) angle += 180;
 
-      // Label completo alinhado com a rede: OSE + L + i + DN
+      // Layout estilo DXF: texto em cima + seta + texto embaixo, tudo alinhado com a rede
       const midIdx = Math.floor(latlngs.length / 2);
       const midLat = (latlngs[midIdx][0] + latlngs[Math.max(0, midIdx-1)][0]) / 2;
       const midLon = (latlngs[midIdx][1] + latlngs[Math.max(0, midIdx-1)][1]) / 2;
-      const Ltxt = r.excel_L ? r.excel_L.toFixed(1) + 'm' : '';
-      const itxt = r.excel_i ? (r.excel_i*100).toFixed(2) + '%' : '';
+      const Ltxt = r.excel_L ? r.excel_L.toFixed(2) + 'm' : '';
+      const itxt = r.excel_i ? 'i=' + (r.excel_i*100).toFixed(2) + '%' : '';
       const dtxt = diam ? 'DN' + diam : '';
-      const infoLine = ['OSE-' + r.ose, Ltxt, itxt, dtxt].filter(Boolean).join(' | ');
+      const topLine = 'OSE-' + r.ose + (Ltxt ? '  L=' + Ltxt : '');
+      const botLine = [itxt, dtxt].filter(Boolean).join('  ');
+
+      // Bloco vertical: [linha superior] [seta ▶] [linha inferior]
+      // Tudo rotacionado alinhado com a rede
+      const labelHtml =
+        '<div style="transform:rotate(' + (-angle).toFixed(1) + 'deg);transform-origin:center;display:flex;flex-direction:column;align-items:center;gap:0px;white-space:nowrap;font-family:\'DM Mono\',monospace">' +
+        '<div style="background:rgba(15,23,42,0.85);color:#fff;padding:1px 5px;border-radius:3px 3px 0 0;font-size:8px;font-weight:700;letter-spacing:.2px;border:1px solid ' + lineColor + ';border-bottom:none">' + topLine + '</div>' +
+        '<div style="color:' + lineColor + ';font-size:12px;font-weight:900;line-height:1;text-shadow:0 0 4px rgba(0,0,0,0.6)">▶</div>' +
+        '<div style="background:rgba(15,23,42,0.85);color:#cbd5e1;padding:1px 5px;border-radius:0 0 3px 3px;font-size:7px;font-weight:600;letter-spacing:.2px;border:1px solid ' + lineColor + ';border-top:none">' + botLine + '</div>' +
+        '</div>';
       const label = L.marker([midLat, midLon], {
         icon: L.divIcon({
           className: '',
-          html: '<div style="transform:rotate(' + (-angle).toFixed(1) + 'deg);transform-origin:center;background:rgba(15,23,42,0.85);color:#fff;padding:2px 6px;border-radius:3px;font-size:8px;font-weight:600;font-family:\'DM Mono\',monospace;white-space:nowrap;border:1px solid ' + lineColor + ';letter-spacing:.2px">' + infoLine + '</div>',
+          html: labelHtml,
           iconSize: null,
-          iconAnchor: [60, 8],
+          iconAnchor: [50, 16],
         }),
         interactive: false,
       }).addTo(_oseMap);
       _oseMapMarkers.push(label);
-
-      // Seta indicando o sentido do fluxo (montante → jusante)
-      // Coloca a seta no ponto 70% do trecho (próximo do final/jusante)
-      const arrowIdx = Math.min(latlngs.length - 1, Math.floor(latlngs.length * 0.7));
-      const arrowPrev = Math.max(0, arrowIdx - 1);
-      const arrowAngle = calcAngleDeg(latlngs[arrowPrev], latlngs[arrowIdx]);
-      const arrowLat = latlngs[arrowIdx][0];
-      const arrowLon = latlngs[arrowIdx][1];
-      const arrow = L.marker([arrowLat, arrowLon], {
-        icon: L.divIcon({
-          className: '',
-          html: '<div style="transform:rotate(' + (90 - arrowAngle).toFixed(1) + 'deg);color:' + lineColor + ';font-size:16px;font-weight:900;text-shadow:0 0 3px rgba(0,0,0,0.5);line-height:1">▼</div>',
-          iconSize: [16, 16],
-          iconAnchor: [8, 8],
-        }),
-        interactive: false,
-      }).addTo(_oseMap);
-      _oseMapMarkers.push(arrow);
     });
 
     // Ajusta zoom pra caber todos os pontos
