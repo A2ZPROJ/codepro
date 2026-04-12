@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const { classifyOse, crossCheckPVs } = require('./oseStatus');
 const { generateMemorial } = require('./memorialGenerator');
+const { generateFromTemplate } = require('./memorialTemplate');
 
 let licenseData = null;
 
@@ -49,6 +50,7 @@ window.electronAPI = {
   classifyOse:    (r)          => classifyOse(r),
   crossCheckPVs:  (data)       => crossCheckPVs(data),
   generateMemorial: (info, agg) => generateMemorial(info, agg),
+  generateFromTemplate: (tplPath, info, agg) => generateFromTemplate(tplPath, info, agg),
   dashboard: {
     getData:        ()    => ipcRenderer.invoke('dashboard:get-data'),
     getHistory:     ()    => ipcRenderer.invoke('dashboard:get-history'),

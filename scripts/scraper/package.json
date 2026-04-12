@@ -11,6 +11,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",
     "adm-zip": "^0.5.16",
+    "puppeteer": "^24.40.0",
     "xlsx": "^0.18.5"
   }
 }

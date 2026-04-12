@@ -25,11 +25,10 @@ async function main() {
   const dryRun = !!args.dryRun;
   const uf = args.uf || 'PR';
 
-  // sinapi está desabilitado por default (Caixa bloqueia scraping).
-  // Rodar explícito com --only=sinapi se quiser tentar.
+  // sinapi agora usa Puppeteer (headless Chromium) pra navegar na página AJAX da Caixa.
   const all = [
     { name: 'sanepar', fn: () => scrapeSanepar({ dryRun }), defaultRun: true },
-    { name: 'sinapi',  fn: () => scrapeSinapi({ dryRun, uf }), defaultRun: false },
+    { name: 'sinapi',  fn: () => scrapeSinapi({ dryRun, uf }), defaultRun: true },
   ];
   const tasks = args.only
     ? all.filter(t => t.name === args.only)

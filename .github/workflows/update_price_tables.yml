@@ -24,7 +24,7 @@ on:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -34,6 +34,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      # Puppeteer precisa de libs de sistema pra rodar Chromium headless
+      - name: Install Chromium deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 libxshmfence1 2>/dev/null || true
 
       - name: Install scraper deps
         working-directory: scripts/scraper
@@ -45,6 +51,7 @@ jobs:
           SUPABASE_URL: https://xszpzsmdpbgaiodeqcpi.supabase.co
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           DEBUG: '1'
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'false'
         run: |
           ARGS=""
           if [ -n "${{ github.event.inputs.only }}" ]; then
