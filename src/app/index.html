@@ -3050,6 +3050,20 @@ body {
           </div>
           <div id="ose-cross" style="display:none;padding:0 16px 16px"></div>
         </div>
+
+        <!-- Mapa interativo da bacia -->
+        <div id="ose-map-wrap" style="display:none;margin-top:16px;background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+          <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+            <div style="font-size:13px;font-weight:700;color:var(--text)">Mapa da Bacia</div>
+            <div style="font-size:10px;color:var(--text3)">PVs coloridos por status — clique para ver detalhes</div>
+            <div style="margin-left:auto;display:flex;gap:8px;font-size:10px">
+              <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;border-radius:50%;background:#16a34a;display:inline-block"></span> OK</span>
+              <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;border-radius:50%;background:#dc2626;display:inline-block"></span> Erro</span>
+              <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;display:inline-block"></span> T.Q.</span>
+            </div>
+          </div>
+          <div id="ose-map" style="height:450px;width:100%"></div>
+        </div>
       </div>
 
     </div>
@@ -3587,10 +3601,104 @@ body {
     }
 
     document.getElementById('ose-results').style.display = '';
+
+    // Renderiza mapa se houver coordenadas
+    if (window.oseRenderMap) window.oseRenderMap(data);
   };
 
   window.oseFilter = function() {
     if (window._ose.data) oseRenderTable(window._ose.data);
+  };
+
+  // ── Mapa interativo da bacia ────────────────────────────────
+  // Converte UTM Zone 22S → WGS84 lat/lon (SIRGAS 2000 ≈ WGS84)
+  function utmToLatLon(x, y, zone, south) {
+    // Simplified UTM to lat/lon conversion
+    const k0 = 0.9996, a = 6378137, e = 0.081819191, e2 = e * e;
+    const e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+    const M = south ? (y - 10000000) / k0 : y / k0;
+    const mu = M / (a * (1 - e2/4 - 3*e2*e2/64));
+    const phi1 = mu + (3*e1/2 - 27*e1*e1*e1/32)*Math.sin(2*mu)
+                    + (21*e1*e1/16 - 55*e1*e1*e1*e1/32)*Math.sin(4*mu)
+                    + (151*e1*e1*e1/96)*Math.sin(6*mu);
+    const sp = Math.sin(phi1), cp = Math.cos(phi1), tp = sp/cp;
+    const N1 = a / Math.sqrt(1 - e2*sp*sp);
+    const T1 = tp*tp, C1 = (e2/(1-e2))*cp*cp, R1 = a*(1-e2)/Math.pow(1-e2*sp*sp,1.5);
+    const D = (x - 500000) / (N1 * k0);
+    const lat = phi1 - (N1*tp/R1)*(D*D/2 - (5+3*T1+10*C1-4*C1*C1-9*e2/(1-e2))*D*D*D*D/24);
+    const lon0 = ((zone - 1) * 6 - 180 + 3) * Math.PI / 180;
+    const lon = lon0 + (D - (1+2*T1+C1)*D*D*D/6) / cp;
+    return { lat: lat * 180 / Math.PI, lon: lon * 180 / Math.PI };
+  }
+
+  let _oseMap = null, _oseMapMarkers = [];
+
+  window.oseRenderMap = function(data) {
+    const wrap = document.getElementById('ose-map-wrap');
+    // Coleta PVs com coordenadas
+    const points = [];
+    const cls = data.map(r => window.electronAPI.classifyOse(r));
+    const seen = new Set();
+    data.forEach((r, idx) => {
+      const c = cls[idx];
+      for (const pv of (r.pvs || [])) {
+        if (!pv.coord_x || !pv.coord_y || seen.has(pv.id)) continue;
+        seen.add(pv.id);
+        // Detecta zona UTM pelo range de X (heurística: PR = zona 22)
+        const zone = 22;
+        const ll = utmToLatLon(pv.coord_x, pv.coord_y, zone, true);
+        if (isNaN(ll.lat) || isNaN(ll.lon) || Math.abs(ll.lat) > 90) continue;
+        points.push({
+          id: pv.id, lat: ll.lat, lon: ll.lon,
+          ose: r.ose, status: c.status, hasErr: c.hasErr, hasTQ: c.hasTQ,
+          ct: pv.excel_ct, cf: pv.excel_cf_pv, prof: pv.excel_prof_pv,
+          diam: pv.excel_diam,
+        });
+      }
+    });
+
+    if (!points.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+
+    // Inicializa ou limpa mapa
+    if (!_oseMap) {
+      _oseMap = L.map('ose-map', { scrollWheelZoom: true, zoomControl: true });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, attribution: 'OSM'
+      }).addTo(_oseMap);
+    }
+    _oseMapMarkers.forEach(m => _oseMap.removeLayer(m));
+    _oseMapMarkers = [];
+
+    // Adiciona marcadores
+    const bounds = [];
+    for (const p of points) {
+      const color = p.hasErr ? '#dc2626' : p.hasTQ ? '#f59e0b' : '#16a34a';
+      const isTL = /^TL/i.test(p.id);
+      const radius = isTL ? 5 : 7;
+      const marker = L.circleMarker([p.lat, p.lon], {
+        radius, fillColor: color, color: '#fff', weight: 1.5, opacity: 1, fillOpacity: 0.85,
+      }).addTo(_oseMap);
+      marker.bindPopup(
+        '<div style="font-family:\'DM Mono\',monospace;font-size:11px;line-height:1.6">' +
+        '<strong style="font-size:13px">' + p.id + '</strong> <span style="color:' + color + ';font-weight:700">[' + p.status + ']</span><br>' +
+        'OSE-' + p.ose + '<br>' +
+        'CT: ' + (p.ct != null ? p.ct.toFixed(3) : '—') + '<br>' +
+        'CF: ' + (p.cf != null ? p.cf.toFixed(3) : '—') + '<br>' +
+        'Prof: ' + (p.prof != null ? p.prof.toFixed(3) + ' m' : '—') + '<br>' +
+        (p.diam ? 'DN: ' + p.diam + ' mm<br>' : '') +
+        '</div>',
+        { maxWidth: 250 }
+      );
+      marker.bindTooltip(p.id, { permanent: false, direction: 'top', offset: [0, -8] });
+      _oseMapMarkers.push(marker);
+      bounds.push([p.lat, p.lon]);
+    }
+
+    // Ajusta zoom pra caber todos os pontos
+    if (bounds.length) {
+      _oseMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 17 });
+    }
   };
 
   // ── Busca global de PV ──────────────────────────────────────

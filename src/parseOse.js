@@ -101,16 +101,17 @@ function parseMapaDxf(filePath) {
 
   const pvs  = {};
   const oses = {};
+  const pvCoords = {};  // id_norm → { x, y } (UTM do DXF)
 
   let etype  = null;
   let mlBuf  = '';
   let mtText = '';
+  let mlX = null, mlY = null;
 
   function flushMultiLeader() {
     if (!mlBuf) return;
     const mId = mlBuf.match(/;((?:PV|TL|PIT)[\s\-]+\d+)/i);
     const cleaned = mlBuf.replace(/\\f[^;]*;/gi, '').replace(/[{}]/g, '');
-    // Aceita tanto `\PCT:` (separador raw MTEXT) quanto `CT:` direto
     const mCt = cleaned.match(/(?:\\P|^|\s)CT\s*:\s*([\d.,]+)/i);
     const mCf = cleaned.match(/(?:\\P|^|\s)CF\s*:\s*([\d.,]+)/i);
     const mH  = cleaned.match(/(?:\\P|^|\s|;)h\s*:\s*([\d.,]+)/i);
@@ -121,8 +122,9 @@ function parseMapaDxf(filePath) {
         cf: parseFloat(mCf[1].replace(',', '.')),
         h:  mH ? parseFloat(mH[1].replace(',', '.')) : null,
       };
+      if (mlX != null && mlY != null) pvCoords[pid] = { x: mlX, y: mlY };
     }
-    mlBuf = '';
+    mlBuf = ''; mlX = null; mlY = null;
   }
 
   function flushMtext() {
@@ -144,10 +146,12 @@ function parseMapaDxf(filePath) {
       flushMultiLeader();
       flushMtext();
       etype = val;
-      mlBuf = '';
+      mlBuf = ''; mlX = null; mlY = null;
       mtText = '';
     } else if (etype === 'MULTILEADER') {
       if (code === 304 || code === 302 || code === 1) mlBuf += val;
+      if (code === 10 && mlX == null) mlX = parseFloat(val);
+      if (code === 20 && mlY == null) mlY = parseFloat(val);
     } else if (etype === 'MTEXT') {
       if (code === 1 || code === 3) mtText += val;
     }
@@ -155,7 +159,7 @@ function parseMapaDxf(filePath) {
   flushMultiLeader();
   flushMtext();
 
-  return { pvs, oses };
+  return { pvs, oses, pvCoords };
 }
 
 // ── PERFIS DXF ─────────────────────────────────────────────────────────────
@@ -484,6 +488,7 @@ function buildComparison(mapa, perfis, excel) {
   const perfisList = perfis.present;
   const perfisPvs  = perfis.pvs;
   const perOse     = perfis.perOse || {};
+  const mapCoords  = mapa.pvCoords || {};
 
   const allNums = [...new Set([
     ...Object.keys(mapa.oses),
@@ -609,6 +614,9 @@ function buildComparison(mapa, perfis, excel) {
         diff_h_perf:       diff(ep.prof_pv,   blk_h,  3),
         diff_decl_perf:    diff(ep.decl,      pv_decl_local, 6),
         diff_ext_perf:     diff(ep.dist_acum, pv_ext_local, 3),
+        // Coordenadas UTM do mapa DXF (para plotar no mapa interativo)
+        coord_x:           mapCoords[pid] ? mapCoords[pid].x : null,
+        coord_y:           mapCoords[pid] ? mapCoords[pid].y : null,
       });
     }
 
