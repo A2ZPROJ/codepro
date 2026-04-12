@@ -170,21 +170,10 @@ function createMain(licenseData){
   const licQuery = licenseData ? Buffer.from(JSON.stringify(licenseData)).toString('base64') : '';
   mainWindow.loadFile(path.join(__dirname,'app','index.html'), { query: licQuery ? { lic: licQuery } : {} });
 
-  // CSP + segurança extra em produção
-  mainWindow.webContents.session.webRequest.onHeadersReceived((details, cb) => {
-    cb({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; " +
-          "connect-src 'self' https://xszpzsmdpbgaiodeqcpi.supabase.co wss://xszpzsmdpbgaiodeqcpi.supabase.co https://generativelanguage.googleapis.com https://*.tile.openstreetmap.org https://servicodados.ibge.gov.br https://is.gd https://brasilapi.com.br https://archive-api.open-meteo.com https://esm.sh; " +
-          "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://server.arcgisonline.com https://*.opentopomap.org; " +
-          "font-src 'self' data: https://fonts.gstatic.com; " +
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://esm.sh;"
-        ],
-      },
-    });
-  });
+  // CSP removido — com webSecurity:false + nodeIntegration:true, o CSP causava
+  // bloqueio de CDNs legítimos (esm.sh, fonts.googleapis, Chart.js) sem ganho
+  // real de segurança. A proteção do app vem de: DevTools bloqueado, anti-debug,
+  // bytenode, ASAR, e bloqueio de navegação/janelas externas no main process.
 
   // Desativa DevTools em produção
   if (!isDev) {
