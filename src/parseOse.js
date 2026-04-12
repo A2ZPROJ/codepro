@@ -394,6 +394,7 @@ function parseExcel(filePath) {
         cf:        get(9),   // col J — C. Fundo
         dist_acum: get(6),   // col G — Dist. Acumulada
         decl:      get(14),  // col O — Declividade
+        diam:      get(15),  // col P — Diam. Interno (mm)
         prof:      get(18),  // col S — Prof. Vala
         obs:       getStr(20), // col U — Observações
       };
@@ -461,6 +462,7 @@ function parseExcel(filePath) {
         prof_chegada: rnd(pr_ch, 4),
         dist_acum:  rnd(base.dist_acum, 4),
         decl:       rnd(base.decl, 6),
+        diam:       base.diam != null ? Math.round(base.diam) : null, // DN interno (mm)
         tq:         rnd(tq, 4),
         has_tq,
       });
@@ -571,6 +573,7 @@ function buildComparison(mapa, perfis, excel) {
         id:           ep.id,
         excel_dist:   ep.dist_acum,
         excel_decl:   ep.decl,
+        excel_diam:   ep.diam,
         excel_ct:     ep.ct,
         // legados
         excel_cf:     ep.cf_pv,

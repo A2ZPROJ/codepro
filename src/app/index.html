@@ -3054,12 +3054,17 @@ body {
         </div>
 
         <!-- Filtro -->
-        <div id="ose-filter-row" style="display:none;margin-bottom:12px;display:none;gap:8px;align-items:center">
+        <div id="ose-filter-row" style="display:none;margin-bottom:12px;display:none;gap:8px;align-items:center;flex-wrap:wrap">
           <input id="ose-filter" oninput="oseFilter()" placeholder="Filtrar por OSE..." style="padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;width:180px"/>
           <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer">
             <input type="checkbox" id="ose-only-errors" onchange="oseFilter()" style="cursor:pointer"> Mostrar apenas divergências
           </label>
+          <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+            <input id="ose-pv-search" placeholder="Buscar PV (ex: PV-439)..." oninput="window.osePvSearch(this.value)" style="padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;width:200px"/>
+          </div>
         </div>
+        <!-- Resultado busca PV -->
+        <div id="ose-pv-results" style="display:none;margin-bottom:12px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:var(--shadow-sm)"></div>
 
         <!-- Tabela de resultados -->
         <div id="ose-results" style="display:none;background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
@@ -3368,6 +3373,41 @@ body {
       (errCount ? '<span style="color:#dc2626">Erros: <strong>' + errCount + '</strong></span>' : '') +
       (warnCount ? '<span style="color:#b45309">Avisos: <strong>' + warnCount + '</strong></span>' : '');
 
+    // ── Estatísticas agregadas da bacia ──────────────────────
+    (function renderBaciaStats() {
+      let Ltotal = 0, profSum = 0, profMax = 0, profCount = 0, nPVs = 0, nTLs = 0, nTQ = 0;
+      const seenPV = new Set();
+      for (const r of data) {
+        if (r.excel_L) Ltotal += r.excel_L;
+        else if (r.mapa_L) Ltotal += r.mapa_L;
+        for (const pv of (r.pvs || [])) {
+          if (seenPV.has(pv.id)) continue;
+          seenPV.add(pv.id);
+          if (/^TL/i.test(pv.id)) nTLs++; else nPVs++;
+          const h = Math.max(pv.excel_prof_pv || 0, pv.excel_prof_chegada || 0, pv.mapa_h || 0);
+          if (h > 0) { profSum += h; profMax = Math.max(profMax, h); profCount++; }
+          if (pv.excel_has_tq) nTQ++;
+        }
+      }
+      const profMed = profCount > 0 ? profSum / profCount : 0;
+      const card = function(label, value, color) {
+        return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:100px">'
+          + '<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px">' + label + '</div>'
+          + '<div style="font-size:16px;font-weight:800;font-family:\'DM Mono\',monospace;color:' + (color || 'var(--text)') + ';margin-top:3px">' + value + '</div></div>';
+      };
+      const statsEl = document.getElementById('ose-summary');
+      if (statsEl && data.length) {
+        statsEl.innerHTML += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;width:100%">'
+          + card('Extensão total', Ltotal.toFixed(1) + ' m')
+          + card('PVs', nPVs)
+          + card('TLs', nTLs)
+          + card('T.Q.', nTQ, nTQ > 0 ? '#b45309' : undefined)
+          + card('Prof. média', profMed.toFixed(2) + ' m')
+          + card('Prof. máx', profMax.toFixed(2) + ' m', profMax > 3 ? '#dc2626' : undefined)
+          + '</div>';
+      }
+    })();
+
     // Helpers de formatação de célula comparativa (valor + diff colorido).
     function cellCompare(valPlan, valRef, diff, tol, dec) {
       if (valRef == null) return '<span style="color:var(--text3)">—</span>';
@@ -3610,6 +3650,93 @@ body {
 
   window.oseFilter = function() {
     if (window._ose.data) oseRenderTable(window._ose.data);
+  };
+
+  // ── Busca global de PV ──────────────────────────────────────
+  // Digita "PV-439" e mostra todas as OSEs onde esse PV aparece + dados
+  window.osePvSearch = function(term) {
+    const el = document.getElementById('ose-pv-results');
+    if (!term || !term.trim() || !window._ose || !window._ose.data) {
+      el.style.display = 'none';
+      return;
+    }
+    const q = term.trim().toUpperCase().replace(/[\s\-]+/g, '');
+    const results = [];
+    for (const r of window._ose.data) {
+      for (const pv of (r.pvs || [])) {
+        const norm = (pv.id || '').toUpperCase().replace(/[\s\-]+/g, '');
+        if (norm.includes(q)) {
+          const c = window.electronAPI.classifyOse(r);
+          results.push({ ose: r.ose, pv, status: c.status, hasErr: c.hasErr, hasTQ: c.hasTQ });
+        }
+      }
+    }
+    if (!results.length) {
+      el.innerHTML = '<div style="padding:14px 20px;font-size:12px;color:var(--text3)">Nenhum PV encontrado com "' + term.replace(/</g,'&lt;') + '"</div>';
+      el.style.display = '';
+      return;
+    }
+    const td = 'padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px';
+    const mono = "font-family:'DM Mono',monospace";
+    el.innerHTML =
+      '<div style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;color:var(--text)">Resultados para "' + term.replace(/</g,'&lt;') + '" — ' + results.length + ' ocorrência(s)</div>' +
+      '<table style="width:100%;border-collapse:collapse">' +
+      '<tr style="background:var(--surface2)">' +
+      '<th style="' + td + ';font-weight:700;color:var(--text3);text-transform:uppercase;font-size:10px">PV</th>' +
+      '<th style="' + td + ';font-weight:700;color:var(--text3);text-transform:uppercase;font-size:10px">OSE</th>' +
+      '<th style="' + td + ';font-weight:700;color:var(--text3);text-transform:uppercase;font-size:10px">Status</th>' +
+      '<th style="' + td + ';font-weight:700;color:var(--text3);text-transform:uppercase;font-size:10px;text-align:right">CT Plan.</th>' +
+      '<th style="' + td + ';font-weight:700;color:var(--text3);text-transform:uppercase;font-size:10px;text-align:right">CF Plan.</th>' +
+      '<th style="' + td + ';font-weight:700;color:var(--text3);text-transform:uppercase;font-size:10px;text-align:right">Prof. (m)</th>' +
+      '<th style="' + td + ';font-weight:700;color:var(--text3);text-transform:uppercase;font-size:10px;text-align:right">Dist. Acum.</th>' +
+      '<th style="' + td + ';font-weight:700;color:var(--text3);text-transform:uppercase;font-size:10px">T.Q.</th>' +
+      '</tr>' +
+      results.map(function(r) {
+        const pv = r.pv;
+        const bg = r.hasErr ? 'background:rgba(220,38,38,0.05)' : r.hasTQ ? 'background:rgba(245,158,11,0.05)' : '';
+        const sc = r.hasErr ? 'color:#dc2626' : r.hasTQ ? 'color:#b45309' : 'color:#16a34a';
+        return '<tr style="' + bg + '">' +
+          '<td style="' + td + ';font-weight:600;' + mono + '">' + pv.id + '</td>' +
+          '<td style="' + td + ';' + mono + '">OSE-' + r.ose + '</td>' +
+          '<td style="' + td + ';font-weight:700;' + sc + '">' + r.status + '</td>' +
+          '<td style="' + td + ';text-align:right;' + mono + '">' + (pv.excel_ct != null ? pv.excel_ct.toFixed(3) : '—') + '</td>' +
+          '<td style="' + td + ';text-align:right;' + mono + '">' + (pv.excel_cf_pv != null ? pv.excel_cf_pv.toFixed(3) : '—') + '</td>' +
+          '<td style="' + td + ';text-align:right;' + mono + '">' + (pv.excel_prof_pv != null ? pv.excel_prof_pv.toFixed(3) : '—') + '</td>' +
+          '<td style="' + td + ';text-align:right;' + mono + '">' + (pv.excel_dist != null ? pv.excel_dist.toFixed(2) + ' m' : '—') + '</td>' +
+          '<td style="' + td + '">' + (pv.excel_has_tq ? '<span style="color:#b45309;font-weight:700">T.Q. ' + (pv.excel_tq||0).toFixed(3) + 'm</span>' : '—') + '</td>' +
+          '</tr>';
+      }).join('') +
+      '</table>';
+    el.style.display = '';
+  };
+
+  // ── Auto-save últimos arquivos ──────────────────────────────
+  // Salva os 3 caminhos (mapa, perfil, excel) em config e restaura ao abrir
+  (function() {
+    try {
+      const fs = require('fs'), path = require('path'), os = require('os');
+      const cfgPath = path.join(os.homedir(), '.codepro', 'config.json');
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      if (cfg.ose_last_mapa)   document.getElementById('ose-mapa-path').value   = cfg.ose_last_mapa;
+      if (cfg.ose_last_perfil) document.getElementById('ose-perfil-path').value = cfg.ose_last_perfil;
+      if (cfg.ose_last_excel)  document.getElementById('ose-excel-path').value  = cfg.ose_last_excel;
+    } catch {}
+  })();
+
+  // Hook no botão Comparar pra salvar os caminhos após uso
+  const _origOseRun = window.oseRun;
+  window.oseRun = async function() {
+    // Salva caminhos antes de rodar
+    try {
+      const fs = require('fs'), path = require('path'), os = require('os');
+      const cfgPath = path.join(os.homedir(), '.codepro', 'config.json');
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      cfg.ose_last_mapa   = document.getElementById('ose-mapa-path').value || '';
+      cfg.ose_last_perfil = document.getElementById('ose-perfil-path').value || '';
+      cfg.ose_last_excel  = document.getElementById('ose-excel-path').value || '';
+      fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+    } catch {}
+    return _origOseRun.apply(this, arguments);
   };
 
   window.oseExportXLSX = async function() {
@@ -4305,7 +4432,33 @@ body {
     };
 
     document.getElementById('orc-bdi-novo-btn').addEventListener('click', () => {
-      alert('Cadastro manual de BDI será adicionado em breve. Por enquanto a migração já trouxe 2 BDIs padrão SANEPAR (Obras e Materiais).');
+      const nome = prompt('Nome do BDI (ex: BDI Custom Obras):');
+      if (!nome) return;
+      const tipo = prompt('Tipo (OBRAS / MATERIAIS / CUSTOM):', 'OBRAS');
+      if (!tipo) return;
+      const base = prompt('Base de cálculo (ex: Acórdão 2622/2013 - TCU):', 'Acórdão 2622/2013 - TCU');
+      // Pede as alíquotas — pré-preenche com valores padrão faixa 3
+      const parseP = (v) => { const n = parseFloat((v||'0').replace(',','.')); return isNaN(n) ? 0 : n/100; };
+      const AC = parseP(prompt('AC - Administração Central (%):', '3.5'));
+      const SG = parseP(prompt('SG - Seguro e Garantia (%):', '0.4'));
+      const R  = parseP(prompt('R - Risco (%):', '1.1'));
+      const DF = parseP(prompt('DF - Despesas Financeiras (%):', '0.7'));
+      const L  = parseP(prompt('L - Lucro (%):', '6.5'));
+      const COFINS = parseP(prompt('COFINS (%):', '3.0'));
+      const PIS = parseP(prompt('PIS (%):', '0.65'));
+      const ISS = parseP(prompt('ISS (%):', tipo === 'MATERIAIS' ? '0' : '3.0'));
+      const CPRB = parseP(prompt('CPRB - Desoneração (%):', '0'));
+      const faixa = { ate: null, AC, SG, R, DF, L, COFINS, PIS, ISS, CPRB };
+      const bdiCalc = computeBdi(faixa);
+      if (!confirm('BDI calculado: ' + (bdiCalc * 100).toFixed(2) + '%\n\nConfirma a criação do BDI "' + nome + '"?')) return;
+      window.sb.from('bdi_templates').insert({
+        nome, tipo: tipo.toUpperCase(),
+        base_calculo: base || null,
+        faixas: [faixa],
+      }).then(({ error }) => {
+        if (error) { alert('Erro: ' + error.message); return; }
+        loadBdi();
+      });
     });
 
     // ── Orçamentos ────────────────────────────────────────────
