@@ -3866,15 +3866,25 @@ body {
   };
 
   // ── Auto-save últimos arquivos ──────────────────────────────
-  // Salva os 3 caminhos (mapa, perfil, excel) em config e restaura ao abrir
+  // Salva os 3 caminhos (mapa, perfil, excel) em config e restaura ao abrir.
+  // Também popula window._ose.paths pra que o oseRun funcione sem re-selecionar.
   (function() {
     try {
       const fs = require('fs'), path = require('path'), os = require('os');
       const cfgPath = path.join(os.homedir(), '.codepro', 'config.json');
       const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-      if (cfg.ose_last_mapa)   document.getElementById('ose-mapa-path').value   = cfg.ose_last_mapa;
-      if (cfg.ose_last_perfil) document.getElementById('ose-perfil-path').value = cfg.ose_last_perfil;
-      if (cfg.ose_last_excel)  document.getElementById('ose-excel-path').value  = cfg.ose_last_excel;
+      if (cfg.ose_last_mapa) {
+        document.getElementById('ose-mapa-path').value = cfg.ose_last_mapa;
+        window._ose.paths.mapa = cfg.ose_last_mapa;
+      }
+      if (cfg.ose_last_perfil) {
+        document.getElementById('ose-perfil-path').value = cfg.ose_last_perfil;
+        window._ose.paths.perfil = cfg.ose_last_perfil;
+      }
+      if (cfg.ose_last_excel) {
+        document.getElementById('ose-excel-path').value = cfg.ose_last_excel;
+        window._ose.paths.excel = cfg.ose_last_excel;
+      }
     } catch {}
   })();
 
