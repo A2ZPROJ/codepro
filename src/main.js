@@ -160,8 +160,7 @@ function createMain(licenseData){
       preload: path.join(__dirname,'preload.js'),
       nodeIntegration: true,
       contextIsolation: false,
-      // webSecurity removido (v2.0.2) — era risco de segurança (bypass CORS).
-      // Se alguma requisição cross-origin falhar, tratar via CSP ou proxy IPC.
+      webSecurity: false,  // Necessário: renderer carrega de file:// e importa Supabase JS de https://esm.sh. Sem isso = tela branca. Segurança compensada por CSP restritivo.
       additionalArguments: [licArg],
     },
     backgroundColor: '#0f172a',
@@ -178,10 +177,10 @@ function createMain(licenseData){
         ...details.responseHeaders,
         'Content-Security-Policy': [
           "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; " +
-          "connect-src 'self' https://xszpzsmdpbgaiodeqcpi.supabase.co wss://xszpzsmdpbgaiodeqcpi.supabase.co https://generativelanguage.googleapis.com https://*.tile.openstreetmap.org https://servicodados.ibge.gov.br https://is.gd https://brasilapi.com.br https://archive-api.open-meteo.com; " +
+          "connect-src 'self' https://xszpzsmdpbgaiodeqcpi.supabase.co wss://xszpzsmdpbgaiodeqcpi.supabase.co https://generativelanguage.googleapis.com https://*.tile.openstreetmap.org https://servicodados.ibge.gov.br https://is.gd https://brasilapi.com.br https://archive-api.open-meteo.com https://esm.sh; " +
           "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://server.arcgisonline.com https://*.opentopomap.org; " +
           "font-src 'self' data: https://fonts.gstatic.com; " +
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com;"
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://esm.sh;"
         ],
       },
     });
