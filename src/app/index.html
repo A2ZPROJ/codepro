@@ -3780,6 +3780,7 @@ body {
         </div>
         <button id="orc-editor-import-ose" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-family:inherit;font-size:11px;cursor:pointer">Importar OSE</button>
         <button id="orc-editor-import-xlsx" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-family:inherit;font-size:11px;cursor:pointer">Importar planilha</button>
+        <button id="orc-editor-memorial" style="background:var(--surface);color:#0f766e;border:1.5px solid #0f766e;border-radius:6px;padding:7px 12px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">Gerar Memorial</button>
         <select id="orc-editor-export-mode" style="padding:7px 10px;font-size:11px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-family:inherit">
           <option value="full">Formato 2S completo</option>
           <option value="compact">Compacto (só itens do orçamento)</option>
@@ -5177,6 +5178,102 @@ body {
       a.click();
       setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
     }
+
+    // ── Gerar Memorial Descritivo ────────────────────────────
+    document.getElementById('orc-editor-memorial').addEventListener('click', async () => {
+      if (!_orcEditorCur) return;
+      const orc = _orcEditorCur;
+
+      // Pede campos extras via prompts simples
+      const art = prompt('Nº da ART:', '') || '';
+      const contrato = prompt('Nº do Contrato:', '') || '';
+      const ete = prompt('Nome da ETE de destino (ex: ETE Água do Brás):', '') || '';
+      const empresa = prompt('Nome da empresa (cabeçalho):', '2S ENGENHARIA E GEOTECNOLOGIA') || '2S ENGENHARIA E GEOTECNOLOGIA';
+
+      const info = {
+        titulo:           orc.titulo,
+        codigo_documento: orc.codigo_documento,
+        cidade:           orc.cidade,
+        uf:               orc.uf,
+        sistema:          orc.sistema,
+        microbacia:       orc.microbacia,
+        revisao:          orc.revisao,
+        data_orcamento:   orc.data_orcamento,
+        elaborador:       orc.elaborador,
+        eng_responsavel:  orc.eng_responsavel,
+        eng_crea:         orc.eng_crea,
+        art,
+        contrato,
+        ete_destino: ete,
+        empresa,
+      };
+
+      // Agrega dados da conferência OSE (se disponível)
+      let oseAgg = null;
+      const oseData = window._ose && window._ose.data;
+      if (oseData && oseData.length) {
+        oseAgg = {
+          oses_total: oseData.length,
+          L_total: 0, pvs_count: 0, tls_count: 0,
+          pvs_por_faixa: { '0-2': 0, '2-3': 0, '3-4': 0, '4+': 0 },
+          tqs_count: 0,
+          trechos: [],
+        };
+        const seen = new Set();
+        for (const r of oseData) {
+          if (r.mapa_L) oseAgg.L_total += r.mapa_L;
+          // Trecho
+          const pvA = r.pvs[0], pvB = r.pvs[r.pvs.length - 1];
+          if (pvA && pvB) {
+            oseAgg.trechos.push({
+              trecho: 'OSE-' + r.ose,
+              pvMont: pvA.id,
+              pvJus:  pvB.id,
+              profMont: pvA.excel_prof_pv,
+              profJus:  pvB.excel_prof_pv,
+              ext: r.excel_L || r.mapa_L,
+              diam: 150, // placeholder — não temos no parser
+              decl: r.excel_i || r.mapa_i,
+            });
+          }
+          for (const pv of (r.pvs || [])) {
+            if (seen.has(pv.id)) continue;
+            seen.add(pv.id);
+            const isTL = /^TL/i.test(pv.id);
+            if (isTL) oseAgg.tls_count++;
+            else      oseAgg.pvs_count++;
+            const h = Math.max(pv.excel_prof_pv || 0, pv.excel_prof_chegada || 0, pv.mapa_h || 0);
+            if (h > 0) {
+              if (h <= 2)      oseAgg.pvs_por_faixa['0-2']++;
+              else if (h <= 3) oseAgg.pvs_por_faixa['2-3']++;
+              else if (h <= 4) oseAgg.pvs_por_faixa['3-4']++;
+              else             oseAgg.pvs_por_faixa['4+']++;
+            }
+            if (pv.excel_has_tq) oseAgg.tqs_count++;
+          }
+        }
+      }
+
+      const btn = document.getElementById('orc-editor-memorial');
+      btn.disabled = true; btn.textContent = 'Gerando...';
+      try {
+        const buf = await window.electronAPI.generateMemorial(info, oseAgg);
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const safeName = (orc.codigo_documento || orc.titulo || 'Memorial_Descritivo').replace(/[^\w\-\.]+/g, '_');
+        a.href = url;
+        a.download = safeName + '_MTG.docx';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+      } catch (e) {
+        console.error(e);
+        alert('Erro ao gerar memorial: ' + e.message);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Gerar Memorial';
+      }
+    });
 
     // ── Importar planilha XLSX existente ────────────────────
     // Lê um XLSX com código+quantidade (formato compatível com o modelo SANEPAR)

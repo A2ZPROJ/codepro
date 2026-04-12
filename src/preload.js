@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { classifyOse, crossCheckPVs } = require('./oseStatus');
+const { generateMemorial } = require('./memorialGenerator');
 
 let licenseData = null;
 
@@ -47,6 +48,7 @@ window.electronAPI = {
   exportOseXlsx:  (opts)       => ipcRenderer.invoke('export-ose-xlsx', opts),
   classifyOse:    (r)          => classifyOse(r),
   crossCheckPVs:  (data)       => crossCheckPVs(data),
+  generateMemorial: (info, agg) => generateMemorial(info, agg),
   dashboard: {
     getData:        ()    => ipcRenderer.invoke('dashboard:get-data'),
     getHistory:     ()    => ipcRenderer.invoke('dashboard:get-history'),

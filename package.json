@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "1.12.1",
+  "version": "1.13.0",
   "description": "Nexus — Gestão de Projetos A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",
+    "docx": "^9.6.1",
     "electron-updater": "^6.1.7",
     "exceljs": "^4.4.0",
     "xlsx": "^0.18.5"
