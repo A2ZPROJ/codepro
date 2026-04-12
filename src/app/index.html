@@ -2275,7 +2275,25 @@ body {
   // lentas e destruía o DOM (tela branca). A proteção contra DevTools já é feita
   // pelo main process (devtools-opened → closeDevTools) e pelos atalhos bloqueados.
 
-  // 4. Previne arrastar arquivos para dentro (evita injeção de scripts)
+  // 4. Atalhos de teclado globais (funcionam em dev e prod)
+  document.addEventListener('keydown', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+    // Ctrl+1..9 troca de aba
+    if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
+      e.preventDefault();
+      const tabs = document.querySelectorAll('.tab-btn');
+      const idx = parseInt(e.key) - 1;
+      if (tabs[idx]) tabs[idx].click();
+    }
+    // Ctrl+E exportar (conferência ou orçamento)
+    if (e.ctrlKey && (e.key === 'e' || e.key === 'E')) {
+      e.preventDefault();
+      const expBtn = document.getElementById('ose-export-btn') || document.getElementById('orc-editor-export');
+      if (expBtn && expBtn.offsetParent) expBtn.click();
+    }
+  });
+
+  // 5. Previne arrastar arquivos para dentro (evita injeção de scripts)
   document.addEventListener('dragover', function(e) { e.preventDefault(); });
   document.addEventListener('drop', function(e) { e.preventDefault(); });
 })();
@@ -3066,7 +3084,12 @@ body {
               <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;border-radius:50%;background:#16a34a;display:inline-block"></span> OK</span>
               <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;border-radius:50%;background:#dc2626;display:inline-block"></span> Erro</span>
               <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;display:inline-block"></span> T.Q.</span>
+              <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" checked onchange="window.oseMapToggleLayer('pvs',this.checked)" style="cursor:pointer"> PVs</label>
+              <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" checked onchange="window.oseMapToggleLayer('tls',this.checked)" style="cursor:pointer"> TLs</label>
+              <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" checked onchange="window.oseMapToggleLayer('redes',this.checked)" style="cursor:pointer"> Redes</label>
+              <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" checked onchange="window.oseMapToggleLayer('labels',this.checked)" style="cursor:pointer"> Labels</label>
               <button id="ose-map-theme-btn" onclick="window.oseMapToggleTheme()" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 10px;font-size:10px;cursor:pointer;color:var(--text2);font-family:inherit;font-weight:600">Escuro</button>
+              <button onclick="window.oseMapExportPng()" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 10px;font-size:10px;cursor:pointer;color:var(--text2);font-family:inherit;font-weight:600">Salvar PNG</button>
             </div>
           </div>
           <div id="ose-map" style="height:500px;width:100%"></div>
@@ -3658,6 +3681,33 @@ body {
     }
   };
 
+  // Layer groups pra filtros
+  let _oseMapLayers = { pvs: null, tls: null, redes: null, labels: null };
+  window.oseMapToggleLayer = function(name, show) {
+    if (!_oseMap || !_oseMapLayers[name]) return;
+    if (show) _oseMap.addLayer(_oseMapLayers[name]);
+    else _oseMap.removeLayer(_oseMapLayers[name]);
+  };
+
+  // Export mapa como PNG via canvas
+  window.oseMapExportPng = function() {
+    if (!_oseMap) return;
+    // Usa leaflet-image ou html2canvas. Sem lib extra, usamos um hack: captura o container via canvas.
+    try {
+      const mapEl = document.getElementById('ose-map');
+      const html2canvas = require('html2canvas');
+      html2canvas(mapEl).then(canvas => {
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = 'mapa_bacia.png';
+        a.click();
+      });
+    } catch {
+      // Fallback: usa domtoimage ou alert
+      alert('Para exportar PNG, instale html2canvas: npm install html2canvas.\nAlternativa: use Print Screen (Win+Shift+S) na área do mapa.');
+    }
+  };
+
   window.oseRenderMap = function(data) {
     const wrap = document.getElementById('ose-map-wrap');
     // Coleta PVs com coordenadas
@@ -3670,8 +3720,7 @@ body {
         if (!pv.coord_x || !pv.coord_y || seen.has(pv.id)) continue;
         seen.add(pv.id);
         // Detecta zona UTM pelo range de X (heurística: PR = zona 22)
-        const zone = 22;
-        const ll = utmToLatLon(pv.coord_x, pv.coord_y, zone, true);
+        const ll = utmToLatLon(pv.coord_x, pv.coord_y, autoZone, true);
         if (isNaN(ll.lat) || isNaN(ll.lon) || Math.abs(ll.lat) > 90) continue;
         points.push({
           id: pv.id, lat: ll.lat, lon: ll.lon,
@@ -3693,6 +3742,36 @@ body {
     }
     _oseMapMarkers.forEach(m => _oseMap.removeLayer(m));
     _oseMapMarkers = [];
+    // Remove layer groups antigos
+    Object.values(_oseMapLayers).forEach(lg => { if (lg) _oseMap.removeLayer(lg); });
+    _oseMapLayers = {
+      pvs:    L.layerGroup().addTo(_oseMap),
+      tls:    L.layerGroup().addTo(_oseMap),
+      redes:  L.layerGroup().addTo(_oseMap),
+      labels: L.layerGroup().addTo(_oseMap),
+    };
+
+    // Detecta zona UTM automaticamente pelo range de X dos PVs
+    // UTM zones no Brasil: 18-25. Central meridian = (zone-1)*6 - 180 + 3
+    // X ~170k=zona 21, ~500k=zona 22, ~830k=zona 23 (aprox)
+    function detectUtmZone(pts) {
+      const xs = pts.map(p => p.coord_x).filter(x => x != null);
+      if (!xs.length) return 22;
+      const avgX = xs.reduce((a,b) => a+b, 0) / xs.length;
+      // X no UTM vai de ~160k (borda oeste da zona) a ~840k (borda leste)
+      // Centro da zona = 500k. Se avgX < 300k, pode ser a zona anterior.
+      // Para o Brasil sul (PR/SC/RS): zonas 21 (CM -57°), 22 (CM -51°), 23 (CM -45°)
+      // Heurística: Y ~7.2M-7.5M = latitude -22 a -25 (PR)
+      // Tenta calcular a zona pela longitude implícita
+      for (let z = 18; z <= 25; z++) {
+        const cm = (z - 1) * 6 - 180 + 3; // central meridian
+        // Se X está perto de 500k nessa zona, é ela
+        if (avgX > 160000 && avgX < 840000) return z;
+      }
+      return 22; // fallback
+    }
+    const autoZone = detectUtmZone(points);
+    console.log('[Mapa] Zona UTM detectada:', autoZone, '(baseado em', points.length, 'PVs)');
 
     // Adiciona marcadores de PV com cotas permanentes (estilo CAD)
     const bounds = [];
@@ -3700,9 +3779,10 @@ body {
       const color = p.hasErr ? '#dc2626' : p.hasTQ ? '#f59e0b' : '#16a34a';
       const isTL = /^TL/i.test(p.id);
       const radius = isTL ? 5 : 8;
+      const targetLayer = isTL ? _oseMapLayers.tls : _oseMapLayers.pvs;
       const marker = L.circleMarker([p.lat, p.lon], {
         radius, fillColor: color, color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.9,
-      }).addTo(_oseMap);
+      }).addTo(targetLayer);
 
       const ctTxt = p.ct != null ? p.ct.toFixed(3) : '—';
       const cfTxt = p.cf != null ? p.cf.toFixed(3) : '—';
@@ -3727,7 +3807,7 @@ body {
       const pvLabel = L.marker([p.lat, p.lon], {
         icon: L.divIcon({
           className: 'ose-pv-box',
-          html: '<div class="pv-card" style="border:1.5px solid ' + borderCol + ';font-size:9px;line-height:1.35;text-align:center">' +
+          html: '<div class="pv-card" style="border:1.5px solid ' + borderCol + ';font-size:9px;line-height:1.35;text-align:center;pointer-events:none">' +
             '<div style="font-weight:800;font-size:10px;color:' + color + ';border-bottom:1px solid ' + borderCol + ';padding-bottom:1px;margin-bottom:1px">' + p.id + '</div>' +
             '<div style="color:#1e40af">CT:' + ctTxt + '</div>' +
             '<div style="color:#b91c1c">CF:' + cfTxt + '</div>' +
@@ -3737,14 +3817,13 @@ body {
           iconAnchor: [0, 55],
         }),
         interactive: false,
-      }).addTo(_oseMap);
+      }).addTo(_oseMapLayers.labels);
       _oseMapMarkers.push(marker);
       _oseMapMarkers.push(pvLabel);
       bounds.push([p.lat, p.lon]);
     }
 
     // Desenha as redes (linhas) com label completo + seta de sentido
-    const zone = 22;
     function calcAngleDeg(ll0, ll1) {
       const dy = ll1[0] - ll0[0], dx = ll1[1] - ll0[1];
       return Math.atan2(dy, dx) * 180 / Math.PI;
@@ -3756,7 +3835,7 @@ body {
       if (pvsWithCoords.length < 2) return;
 
       const latlngs = pvsWithCoords.map(pv => {
-        const ll = utmToLatLon(pv.coord_x, pv.coord_y, zone, true);
+        const ll = utmToLatLon(pv.coord_x, pv.coord_y, autoZone, true);
         return [ll.lat, ll.lon];
       }).filter(ll => !isNaN(ll[0]) && !isNaN(ll[1]));
       if (latlngs.length < 2) return;
@@ -3765,11 +3844,11 @@ body {
       const diam = pvsWithCoords.find(pv => pv.excel_diam)?.excel_diam || null;
 
       // Polyline da rede — borda escura + linha colorida
-      L.polyline(latlngs, { color: '#0f172a', weight: 6, opacity: 0.3 }).addTo(_oseMap); // sombra
+      L.polyline(latlngs, { color: '#0f172a', weight: 6, opacity: 0.3 }).addTo(_oseMapLayers.redes);
       const line = L.polyline(latlngs, {
         color: lineColor, weight: 3.5, opacity: 0.9, dashArray: c.hasErr ? '8,5' : null,
         lineCap: 'round', lineJoin: 'round',
-      }).addTo(_oseMap);
+      }).addTo(_oseMapLayers.redes);
       line.bindPopup(
         '<div style="font-family:\'DM Mono\',monospace;font-size:11px">' +
         '<strong>OSE-' + r.ose + '</strong> [' + c.status + ']<br>' +
@@ -3815,7 +3894,7 @@ body {
           iconAnchor: [0, 0],
         }),
         interactive: false,
-      }).addTo(_oseMap);
+      }).addTo(_oseMapLayers.labels);
       _oseMapMarkers.push(label);
     });
 
@@ -5358,6 +5437,9 @@ body {
       }
 
       // Download via blob
+      // Curva ABC
+      addCurvaABC(wb, itens, bdiOVal, bdiMVal);
+
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
@@ -5368,6 +5450,65 @@ body {
       document.body.appendChild(a);
       a.click();
       setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+    }
+
+    // ── Curva ABC — adiciona aba ao workbook ──────────────────
+    function addCurvaABC(wb, itens, bdiOVal, bdiMVal) {
+      const sorted = itens
+        .map(it => {
+          const q = +it.quantidade || 0, v = +it.valor_unitario_snapshot || 0;
+          const c = q * v;
+          const bdi = it.tipo_bdi === 'NENHUM' ? 0 : it.tipo_bdi === 'MATERIAIS' ? bdiMVal : bdiOVal;
+          return { ...it, custo: c, preco: c * (1 + bdi) };
+        })
+        .filter(it => it.preco > 0)
+        .sort((a, b) => b.preco - a.preco);
+      if (!sorted.length) return;
+
+      const total = sorted.reduce((s, it) => s + it.preco, 0);
+      const ws = wb.addWorksheet('Curva ABC');
+      ws.columns = [
+        { width: 5 }, { width: 14 }, { width: 50 }, { width: 10 },
+        { width: 14 }, { width: 14 }, { width: 16 }, { width: 12 }, { width: 10 },
+      ];
+      const tit = ws.addRow(['', 'CURVA ABC — ITENS POR ORDEM DE IMPACTO']);
+      ws.mergeCells('B1:I1');
+      tit.getCell(2).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+      tit.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+      tit.getCell(2).alignment = { horizontal: 'center' }; tit.height = 26;
+      ws.addRow([]);
+      const hdr = ws.addRow(['#', 'Código', 'Descrição', 'Un.', 'Quant.', 'V.Unit.', 'Preço c/BDI', '% do Total', '% Acum.']);
+      hdr.eachCell(c => { c.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }; c.alignment = { horizontal: 'center' }; });
+
+      let acum = 0;
+      sorted.forEach((it, i) => {
+        acum += it.preco;
+        const pct = it.preco / total;
+        const pctAcum = acum / total;
+        const classe = pctAcum <= 0.8 ? 'A' : pctAcum <= 0.95 ? 'B' : 'C';
+        const bgColor = classe === 'A' ? 'FFFEF2F2' : classe === 'B' ? 'FFFFFBEB' : 'FFF0FDF4';
+        const r = ws.addRow([
+          i + 1, it.codigo_snapshot || '', it.descricao_snapshot || '', it.unidade_snapshot || '',
+          +it.quantidade || 0, +it.valor_unitario_snapshot || 0, it.preco, pct, pctAcum,
+        ]);
+        r.getCell(5).numFmt = '#,##0.0000';
+        r.getCell(6).numFmt = 'R$ #,##0.00';
+        r.getCell(7).numFmt = 'R$ #,##0.00';
+        r.getCell(8).numFmt = '0.00%';
+        r.getCell(9).numFmt = '0.00%';
+        r.eachCell(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } }; });
+        r.getCell(9).font = { bold: true, size: 10 };
+      });
+      ws.addRow([]);
+      const totRow = ws.addRow(['', '', 'TOTAL', '', '', '', total]);
+      totRow.getCell(3).font = { bold: true, size: 11 };
+      totRow.getCell(7).numFmt = 'R$ #,##0.00';
+      totRow.getCell(7).font = { bold: true, size: 11 };
+      ws.addRow([]);
+      ws.addRow(['', '', 'Classe A (até 80%): ' + sorted.filter((_, i) => { let a2 = 0; for (let j = 0; j <= i; j++) a2 += sorted[j].preco; return a2/total <= 0.8; }).length + ' itens']);
+      ws.addRow(['', '', 'Classe B (80-95%): itens intermediários']);
+      ws.addRow(['', '', 'Classe C (95-100%): itens de menor impacto']);
+      ws.views = [{ state: 'frozen', ySplit: 3 }];
     }
 
     // ── Export XLSX formato 2S completo (SANEPAR) ───────────────
@@ -5680,6 +5821,9 @@ body {
       };
       writeBdi('BDI 1 — OBRAS E SERVIÇOS',      bdiO, bdiOVal);
       writeBdi('BDI 2 — FORNECIMENTO DE MATERIAIS', bdiM, bdiMVal);
+
+      // Curva ABC
+      addCurvaABC(wb, itens, bdiOVal, bdiMVal);
 
       // Download via blob
       const buf = await wb.xlsx.writeBuffer();
