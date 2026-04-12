@@ -3053,8 +3053,9 @@ body {
 
         <!-- Mapa interativo da bacia -->
         <style>
-          .ose-pv-tooltip { background:rgba(255,255,255,0.92)!important; border:1px solid #94a3b8!important; box-shadow:0 2px 6px rgba(0,0,0,0.15)!important; padding:4px 6px!important; border-radius:5px!important; }
-          .ose-pv-tooltip::before { border-top-color:#94a3b8!important; }
+          .ose-pv-label { background:none!important; border:none!important; box-shadow:none!important; padding:0!important; }
+          .ose-pv-label::before { display:none!important; }
+          .ose-pv-label .pv-tag { display:inline-block; padding:1px 5px; border-radius:3px; font-family:'DM Mono',monospace; font-size:9px; font-weight:700; white-space:nowrap; }
           .ose-net-label { display:flex!important; align-items:center!important; justify-content:center!important; overflow:visible!important; width:0!important; height:0!important; }
         </style>
         <div id="ose-map-wrap" style="display:none;margin-top:16px;background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
@@ -3690,40 +3691,51 @@ body {
     _oseMapMarkers.forEach(m => _oseMap.removeLayer(m));
     _oseMapMarkers = [];
 
-    // Adiciona marcadores de PV com cotas permanentes
+    // Adiciona marcadores de PV — label compacto (só nome), cotas no popup e hover
     const bounds = [];
     for (const p of points) {
       const color = p.hasErr ? '#dc2626' : p.hasTQ ? '#f59e0b' : '#16a34a';
       const isTL = /^TL/i.test(p.id);
-      const radius = isTL ? 5 : 7;
+      const radius = isTL ? 5 : 8;
       const marker = L.circleMarker([p.lat, p.lon], {
-        radius, fillColor: color, color: '#fff', weight: 1.5, opacity: 1, fillOpacity: 0.85,
+        radius, fillColor: color, color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.9,
       }).addTo(_oseMap);
+
+      // Popup detalhado (ao clicar)
+      const ctTxt = p.ct != null ? p.ct.toFixed(3) : '—';
+      const cfTxt = p.cf != null ? p.cf.toFixed(3) : '—';
+      const profTxt = p.prof != null ? p.prof.toFixed(3) + ' m' : '—';
       marker.bindPopup(
-        '<div style="font-family:\'DM Mono\',monospace;font-size:11px;line-height:1.6">' +
-        '<strong style="font-size:13px">' + p.id + '</strong> <span style="color:' + color + ';font-weight:700">[' + p.status + ']</span><br>' +
-        'OSE-' + p.ose + '<br>' +
-        'CT: ' + (p.ct != null ? p.ct.toFixed(3) : '—') + '<br>' +
-        'CF: ' + (p.cf != null ? p.cf.toFixed(3) : '—') + '<br>' +
-        'Prof: ' + (p.prof != null ? p.prof.toFixed(3) + ' m' : '—') + '<br>' +
-        (p.diam ? 'DN: ' + p.diam + ' mm<br>' : '') +
-        '</div>',
-        { maxWidth: 250 }
+        '<div style="font-family:\'DM Mono\',monospace;font-size:12px;line-height:1.7;min-width:140px">' +
+        '<div style="font-size:14px;font-weight:800;margin-bottom:4px;border-bottom:2px solid ' + color + ';padding-bottom:4px">' + p.id + ' <span style="color:' + color + ';font-size:10px">[' + p.status + ']</span></div>' +
+        '<div style="display:grid;grid-template-columns:auto 1fr;gap:2px 8px">' +
+        '<span style="color:#64748b">OSE</span><span>OSE-' + p.ose + '</span>' +
+        '<span style="color:#1e40af;font-weight:600">CT</span><span>' + ctTxt + '</span>' +
+        '<span style="color:#b91c1c;font-weight:600">CF</span><span>' + cfTxt + '</span>' +
+        '<span style="color:#6b21a8;font-weight:600">h</span><span>' + profTxt + '</span>' +
+        (p.diam ? '<span style="color:#64748b">DN</span><span>' + p.diam + ' mm</span>' : '') +
+        '</div></div>',
+        { maxWidth: 280 }
       );
-      // Label permanente com nome + cotas
-      const ctTxt = p.ct != null ? p.ct.toFixed(2) : '—';
-      const cfTxt = p.cf != null ? p.cf.toFixed(2) : '—';
-      const profTxt = p.prof != null ? p.prof.toFixed(2) : '—';
+
+      // Tooltip hover (cotas resumidas — aparece ao passar mouse)
       marker.bindTooltip(
-        '<div style="text-align:center;font-family:\'DM Mono\',monospace;font-size:11px;line-height:1.4">' +
-        '<strong style="font-size:12px">' + p.id + '</strong><br>' +
-        '<span style="color:#1e40af">CT ' + ctTxt + '</span><br>' +
-        '<span style="color:#b91c1c">CF ' + cfTxt + '</span><br>' +
-        '<span style="color:#6b21a8">h ' + profTxt + '</span>' +
-        '</div>',
-        { permanent: true, direction: 'top', offset: [0, -10], className: 'ose-pv-tooltip' }
+        '<span style="font-family:\'DM Mono\',monospace;font-size:10px"><b>' + p.id + '</b> CT:' + (p.ct||0).toFixed(2) + ' CF:' + (p.cf||0).toFixed(2) + ' h:' + (p.prof||0).toFixed(2) + '</span>',
+        { permanent: false, direction: 'top', offset: [0, -10] }
       );
+
+      // Label permanente compacto — só o nome do PV ao lado do marcador
+      const pvLabel = L.marker([p.lat, p.lon], {
+        icon: L.divIcon({
+          className: 'ose-pv-label',
+          html: '<span class="pv-tag" style="color:' + color + '">' + p.id + '</span>',
+          iconSize: [0, 0],
+          iconAnchor: [-10, 5],
+        }),
+        interactive: false,
+      }).addTo(_oseMap);
       _oseMapMarkers.push(marker);
+      _oseMapMarkers.push(pvLabel);
       bounds.push([p.lat, p.lon]);
     }
 
@@ -3748,9 +3760,11 @@ body {
       // Diâmetro do trecho (pega do primeiro PV que tenha)
       const diam = pvsWithCoords.find(pv => pv.excel_diam)?.excel_diam || null;
 
-      // Polyline da rede
+      // Polyline da rede — borda escura + linha colorida
+      L.polyline(latlngs, { color: '#0f172a', weight: 6, opacity: 0.3 }).addTo(_oseMap); // sombra
       const line = L.polyline(latlngs, {
-        color: lineColor, weight: 3, opacity: 0.7, dashArray: c.hasErr ? '6,4' : null,
+        color: lineColor, weight: 3.5, opacity: 0.9, dashArray: c.hasErr ? '8,5' : null,
+        lineCap: 'round', lineJoin: 'round',
       }).addTo(_oseMap);
       line.bindPopup(
         '<div style="font-family:\'DM Mono\',monospace;font-size:11px">' +
