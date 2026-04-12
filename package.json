@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Nexus — Gestão de Projetos A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
@@ -30,7 +30,9 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "signingHashAlgorithms": ["sha256"],
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": true,

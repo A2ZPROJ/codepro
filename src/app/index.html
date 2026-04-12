@@ -3001,6 +3001,7 @@ body {
           <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:10px;align-items:center">
             <button id="ose-run-btn" onclick="oseRun()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:9px 24px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Comparar</button>
             <button id="ose-export-btn" onclick="oseExportXLSX()" style="display:none;background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;cursor:pointer">Exportar XLSX</button>
+            <button id="ose-diff-btn" onclick="oseDiffRevisions()" style="display:none;background:transparent;color:#6b21a8;border:1.5px solid #6b21a8;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Comparar revisões</button>
             <span id="ose-status" style="font-size:12px;color:var(--text3)"></span>
           </div>
         </div>
@@ -3269,6 +3270,9 @@ body {
     oseRenderTable(res.data);
     document.getElementById('ose-filter-row').style.display = 'flex';
     document.getElementById('ose-export-btn').style.display = '';
+    document.getElementById('ose-diff-btn').style.display = '';
+    // Salva snapshot automaticamente no Supabase pra futuras comparações
+    oseSaveSnapshot(res.data);
   };
 
   function oseDiffClass(val, tol) {
@@ -3916,6 +3920,136 @@ body {
       fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
     } catch {}
     return _origOseRun.apply(this, arguments);
+  };
+
+  // ── Snapshot + Diff entre revisões ───────────────────────
+  // Salva automaticamente cada conferência como snapshot no Supabase.
+  // Permite comparar a rodada atual com uma anterior.
+  async function oseSaveSnapshot(data) {
+    if (!window.sb || !data || !data.length) return;
+    try {
+      const { mapa, perfil, excel } = window._ose.paths;
+      const crypto = require('crypto');
+      const hash = crypto.createHash('md5').update([mapa, perfil, excel].join('|')).digest('hex');
+      const nome = (excel || '').split(/[\\/]/).pop().replace(/\.[^.]+$/, '') || 'Conferência';
+      let e = 0, w = 0;
+      for (const r of data) { const c = window.electronAPI.classifyOse(r); if (c.hasErr) e++; else if (c.hasTQ) w++; }
+      // Resumo compacto (só o necessário pra diff — não salva o JSON inteiro que é enorme)
+      const resumo = data.map(r => {
+        const c = window.electronAPI.classifyOse(r);
+        return {
+          ose: r.ose, status: c.status, in_mapa: r.in_mapa, in_perfil: r.in_perfil, in_excel: r.in_excel,
+          mapa_L: r.mapa_L, excel_L: r.excel_L, excel_i: r.excel_i,
+          pvs: (r.pvs || []).map(pv => ({
+            id: pv.id, ct: pv.excel_ct, cf: pv.excel_cf_pv, prof: pv.excel_prof_pv, diam: pv.excel_diam,
+          })),
+        };
+      });
+      await window.sb.from('ose_snapshots').insert({
+        hash_arquivos: hash, nome_projeto: nome,
+        total_oses: data.length, total_erros: e, total_avisos: w,
+        resultado: resumo,
+      });
+    } catch (ex) { console.warn('Snapshot save failed:', ex.message); }
+  }
+
+  window.oseDiffRevisions = async function() {
+    if (!window.sb || !window._ose.data) { alert('Rode a conferência primeiro.'); return; }
+    const { data: snaps, error } = await window.sb.from('ose_snapshots')
+      .select('id, nome_projeto, data_rodada, total_oses, total_erros, total_avisos')
+      .order('data_rodada', { ascending: false }).limit(20);
+    if (error || !snaps || !snaps.length) { alert('Nenhum snapshot anterior encontrado. Rode a conferência mais uma vez pra ter pelo menos 2 registros.'); return; }
+
+    // Mostra lista pra escolher
+    const opts = snaps.map((s, i) =>
+      (i + 1) + '. ' + s.nome_projeto + ' — ' + new Date(s.data_rodada).toLocaleString('pt-BR') +
+      ' (OSEs:' + s.total_oses + ' Err:' + s.total_erros + ' Av:' + s.total_avisos + ')'
+    ).join('\n');
+    const pick = prompt('Escolha o snapshot anterior pra comparar (número):\n\n' + opts, '1');
+    if (!pick) return;
+    const idx = parseInt(pick) - 1;
+    if (idx < 0 || idx >= snaps.length) return;
+
+    // Carrega o snapshot completo
+    const { data: snapFull } = await window.sb.from('ose_snapshots').select('resultado').eq('id', snaps[idx].id).single();
+    if (!snapFull || !snapFull.resultado) { alert('Erro ao carregar snapshot.'); return; }
+    const old = snapFull.resultado;
+    const cur = window._ose.data;
+
+    // Compara
+    const oldMap = {};
+    old.forEach(r => { oldMap[r.ose] = r; });
+    const curMap = {};
+    cur.forEach(r => { curMap[r.ose] = { ose: r.ose, status: window.electronAPI.classifyOse(r).status, mapa_L: r.mapa_L, excel_L: r.excel_L }; });
+
+    const diffs = [];
+    // OSEs novas
+    for (const r of cur) {
+      if (!oldMap[r.ose]) diffs.push({ tipo: 'NOVA', ose: r.ose, detalhe: 'OSE adicionada' });
+    }
+    // OSEs removidas
+    for (const o of old) {
+      if (!curMap[o.ose]) diffs.push({ tipo: 'REMOVIDA', ose: o.ose, detalhe: 'OSE removida' });
+    }
+    // OSEs alteradas
+    for (const r of cur) {
+      const o = oldMap[r.ose];
+      if (!o) continue;
+      const cStatus = window.electronAPI.classifyOse(r).status;
+      if (o.status !== cStatus) {
+        diffs.push({ tipo: 'STATUS', ose: r.ose, detalhe: o.status + ' → ' + cStatus });
+      }
+      if (o.excel_L != null && r.excel_L != null && Math.abs(o.excel_L - r.excel_L) > 0.01) {
+        diffs.push({ tipo: 'L', ose: r.ose, detalhe: 'L: ' + (o.excel_L||0).toFixed(2) + ' → ' + (r.excel_L||0).toFixed(2) });
+      }
+      // PVs adicionados/removidos
+      const oldPvIds = new Set((o.pvs || []).map(p => p.id));
+      const curPvIds = new Set((r.pvs || []).map(p => p.id));
+      for (const pv of r.pvs || []) {
+        if (!oldPvIds.has(pv.id)) diffs.push({ tipo: 'PV_NOVO', ose: r.ose, detalhe: pv.id + ' adicionado' });
+      }
+      for (const pv of o.pvs || []) {
+        if (!curPvIds.has(pv.id)) diffs.push({ tipo: 'PV_REMOVIDO', ose: r.ose, detalhe: pv.id + ' removido' });
+      }
+      // CT/CF mudou
+      for (const pv of r.pvs || []) {
+        const oldPv = (o.pvs || []).find(p => p.id === pv.id);
+        if (!oldPv) continue;
+        if (oldPv.ct != null && pv.excel_ct != null && Math.abs(oldPv.ct - pv.excel_ct) > 0.001) {
+          diffs.push({ tipo: 'CT', ose: r.ose, detalhe: pv.id + ' CT: ' + oldPv.ct.toFixed(3) + ' → ' + pv.excel_ct.toFixed(3) });
+        }
+        if (oldPv.cf != null && pv.excel_cf_pv != null && Math.abs(oldPv.cf - pv.excel_cf_pv) > 0.001) {
+          diffs.push({ tipo: 'CF', ose: r.ose, detalhe: pv.id + ' CF: ' + oldPv.cf.toFixed(3) + ' → ' + pv.excel_cf_pv.toFixed(3) });
+        }
+      }
+    }
+
+    if (!diffs.length) { alert('Nenhuma diferença encontrada entre a revisão atual e o snapshot selecionado.'); return; }
+
+    // Mostra resultado
+    const html = '<div style="max-height:60vh;overflow-y:auto;font-family:\'DM Mono\',monospace;font-size:11px">' +
+      '<div style="margin-bottom:10px;font-size:13px;font-weight:700">Comparação: Atual vs ' + snaps[idx].nome_projeto + ' (' + new Date(snaps[idx].data_rodada).toLocaleDateString('pt-BR') + ')</div>' +
+      '<div style="margin-bottom:10px;color:var(--text3)">Encontradas <strong>' + diffs.length + '</strong> diferença(s)</div>' +
+      '<table style="width:100%;border-collapse:collapse"><tr style="background:var(--surface2)">' +
+      '<th style="padding:6px 10px;text-align:left;font-size:10px">TIPO</th>' +
+      '<th style="padding:6px 10px;text-align:left;font-size:10px">OSE</th>' +
+      '<th style="padding:6px 10px;text-align:left;font-size:10px">DETALHE</th></tr>' +
+      diffs.map(d => {
+        const bg = d.tipo === 'NOVA' ? 'rgba(22,163,74,0.08)' : d.tipo === 'REMOVIDA' ? 'rgba(220,38,38,0.08)' : '';
+        const tc = d.tipo === 'NOVA' ? '#16a34a' : d.tipo === 'REMOVIDA' ? '#dc2626' : d.tipo === 'STATUS' ? '#6b21a8' : '#b45309';
+        return '<tr style="border-top:1px solid var(--border);' + (bg ? 'background:' + bg : '') + '">' +
+          '<td style="padding:5px 10px;font-weight:700;color:' + tc + '">' + d.tipo + '</td>' +
+          '<td style="padding:5px 10px">OSE-' + d.ose + '</td>' +
+          '<td style="padding:5px 10px">' + d.detalhe + '</td></tr>';
+      }).join('') + '</table></div>';
+
+    // Mostra num modal simples
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.innerHTML = '<div style="background:var(--surface);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:100%;max-width:800px;max-height:90vh;overflow:auto;padding:20px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-size:14px;font-weight:700">Diff entre Revisões</div><button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--text3)">✕</button></div>' +
+      html + '</div>';
+    document.body.appendChild(modal);
   };
 
   window.oseExportXLSX = async function() {
