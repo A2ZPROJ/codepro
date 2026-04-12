@@ -1,0 +1,57 @@
+name: Update Price Tables
+
+on:
+  schedule:
+    # Dia 1 de cada mês, 08:00 UTC (05:00 BRT)
+    - cron: '0 8 1 * *'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Rodar apenas uma fonte (sanepar, sinapi)'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - sanepar
+          - sinapi
+      dry_run:
+        description: 'Dry run (não escreve no banco)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install scraper deps
+        working-directory: scripts/scraper
+        run: npm install --no-audit --no-fund
+
+      - name: Run scraper
+        working-directory: scripts/scraper
+        env:
+          SUPABASE_URL: https://xszpzsmdpbgaiodeqcpi.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DEBUG: '1'
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.only }}" ]; then
+            ARGS="$ARGS --only=${{ github.event.inputs.only }}"
+          fi
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          echo "Running: node index.js $ARGS"
+          node index.js $ARGS
