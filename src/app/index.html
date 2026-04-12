@@ -2969,45 +2969,8 @@ body {
   <div class="tab-content" id="tab-conferencia">
     <div style="padding:20px;max-width:1400px;margin:0 auto">
 
-      <!-- Mode toggle -->
-      <div style="display:flex;gap:0;margin-bottom:20px;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;width:fit-content">
-        <button id="conf-mode-files" onclick="confSetMode('files')" style="padding:8px 20px;font-family:inherit;font-size:12px;font-weight:600;border:none;cursor:pointer;background:var(--gray-900);color:#fff">Arquivos</button>
-        <button id="conf-mode-ose" onclick="confSetMode('ose')" style="padding:8px 20px;font-family:inherit;font-size:12px;font-weight:600;border:none;cursor:pointer;background:var(--surface);color:var(--text2)">Verificação OSE</button>
-      </div>
-
-      <!-- ── MODO ARQUIVOS ── -->
-      <div id="conf-files-section">
-        <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:16px">
-          <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-            <div style="font-size:14px;font-weight:600;color:var(--text)">Pastas para conferência</div>
-            <button onclick="confAddFolder()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:7px 14px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer">+ Adicionar pasta</button>
-          </div>
-          <div id="conf-folders" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px"></div>
-          <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center">
-            <button id="conf-run-btn" onclick="confRun()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:9px 22px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Verificar</button>
-            <span id="conf-status" style="font-size:12px;color:var(--text3)"></span>
-          </div>
-        </div>
-        <div id="conf-results-wrap" style="display:none;background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
-          <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-            <div style="font-size:14px;font-weight:600;color:var(--text)">Resultado</div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <input id="conf-filter" oninput="confFilter()" placeholder="Filtrar arquivo..." style="padding:6px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--gray-200);border-radius:6px;color:var(--text);background:var(--surface);outline:none;width:200px"/>
-              <button onclick="confExportCSV()" style="background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:6px 12px;font-family:inherit;font-size:12px;cursor:pointer">Exportar</button>
-            </div>
-          </div>
-          <div id="conf-stats" style="padding:10px 20px;border-bottom:1px solid var(--border);display:flex;gap:20px;font-size:12px;color:var(--text2)"></div>
-          <div style="overflow-x:auto">
-            <table style="width:100%;border-collapse:collapse;font-size:12px">
-              <thead id="conf-thead" style="background:var(--surface2)"></thead>
-              <tbody id="conf-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── MODO OSE ── -->
-      <div id="conf-ose-section" style="display:none">
+      <!-- ── CONFERÊNCIA OSE (modo único — sem toggle) ── -->
+      <div id="conf-ose-section">
 
         <!-- Seleção de arquivos -->
         <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:16px">
@@ -3242,18 +3205,7 @@ body {
   confAddFolder(); confAddFolder();
 
 
-  // ── MODO TOGGLE ──
-  window.confSetMode = function(mode) {
-    const isOse = mode === 'ose';
-    document.getElementById('conf-files-section').style.display = isOse ? 'none' : '';
-    document.getElementById('conf-ose-section').style.display   = isOse ? '' : 'none';
-    document.getElementById('conf-mode-files').style.background = isOse ? 'var(--surface)' : 'var(--gray-900)';
-    document.getElementById('conf-mode-files').style.color      = isOse ? 'var(--text2)' : '#fff';
-    document.getElementById('conf-mode-ose').style.background   = isOse ? 'var(--gray-900)' : 'var(--surface)';
-    document.getElementById('conf-mode-ose').style.color        = isOse ? '#fff' : 'var(--text2)';
-  };
-
-  // ── VERIFICAÇÃO OSE ──
+  // ── VERIFICAÇÃO OSE (seção única — toggle de modo removido) ──
   window._ose = { data: null, paths: { mapa: '', perfil: '', excel: '' } };
 
   window.osePick = async function(tipo) {
