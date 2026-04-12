@@ -3781,6 +3781,7 @@ body {
         <button id="orc-editor-import-ose" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-family:inherit;font-size:11px;cursor:pointer">Importar OSE</button>
         <button id="orc-editor-import-xlsx" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-family:inherit;font-size:11px;cursor:pointer">Importar planilha</button>
         <button id="orc-editor-memorial" style="background:var(--surface);color:#0f766e;border:1.5px solid #0f766e;border-radius:6px;padding:7px 12px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">Gerar Memorial</button>
+        <button id="orc-editor-entrega" style="background:#0f766e;color:white;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">Gerar Entrega (ZIP)</button>
         <select id="orc-editor-export-mode" style="padding:7px 10px;font-size:11px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-family:inherit">
           <option value="full">Formato 2S completo</option>
           <option value="compact">Compacto (só itens do orçamento)</option>
@@ -5274,6 +5275,230 @@ body {
         btn.disabled = false; btn.textContent = 'Gerar Memorial';
       }
     });
+
+    // ── Gerar Entrega da Bacia (ZIP) ─────────────────────────
+    // Empacota: Memorial .docx + Orçamento .xlsx + Relatório OSE .xlsx + GRD .doc
+    document.getElementById('orc-editor-entrega').addEventListener('click', async () => {
+      if (!_orcEditorCur) return;
+      const orc = _orcEditorCur;
+      const btn = document.getElementById('orc-editor-entrega');
+      btn.disabled = true; btn.textContent = 'Preparando...';
+
+      const JSZip = require('jszip');
+      const zip = new JSZip();
+      const baseCode = orc.codigo_documento || orc.titulo || 'Entrega';
+      const safeBase = baseCode.replace(/[^\w\-\.]+/g, '_');
+      const statusEl = document.getElementById('orc-editor-sub');
+      const origSub = statusEl.textContent;
+      const status = (msg) => { statusEl.textContent = msg; };
+
+      try {
+        // ── 1. Memorial Descritivo (.docx) ──
+        status('Gerando Memorial Descritivo...');
+        const art = prompt('Nº da ART (para o memorial):', '') || '';
+        const contrato = prompt('Nº do Contrato:', '') || '';
+        const ete = prompt('ETE de destino (ex: ETE Água do Brás):', '') || '';
+        const empresa = prompt('Nome da empresa:', '2S ENGENHARIA E GEOTECNOLOGIA') || '2S ENGENHARIA E GEOTECNOLOGIA';
+
+        const memorialInfo = {
+          titulo: orc.titulo, codigo_documento: orc.codigo_documento,
+          cidade: orc.cidade, uf: orc.uf, sistema: orc.sistema, microbacia: orc.microbacia,
+          revisao: orc.revisao, data_orcamento: orc.data_orcamento,
+          elaborador: orc.elaborador, eng_responsavel: orc.eng_responsavel, eng_crea: orc.eng_crea,
+          art, contrato, ete_destino: ete, empresa,
+        };
+
+        // Agrega OSE (mesmo código do botão Gerar Memorial)
+        let oseAgg = null;
+        const oseData = window._ose && window._ose.data;
+        if (oseData && oseData.length) {
+          oseAgg = {
+            oses_total: oseData.length, L_total: 0, pvs_count: 0, tls_count: 0,
+            pvs_por_faixa: { '0-2': 0, '2-3': 0, '3-4': 0, '4+': 0 },
+            tqs_count: 0, trechos: [],
+          };
+          const seen = new Set();
+          for (const r of oseData) {
+            if (r.mapa_L) oseAgg.L_total += r.mapa_L;
+            const pvA = r.pvs[0], pvB = r.pvs[r.pvs.length - 1];
+            if (pvA && pvB) {
+              oseAgg.trechos.push({
+                trecho: 'OSE-' + r.ose, pvMont: pvA.id, pvJus: pvB.id,
+                profMont: pvA.excel_prof_pv, profJus: pvB.excel_prof_pv,
+                ext: r.excel_L || r.mapa_L, diam: 150, decl: r.excel_i || r.mapa_i,
+              });
+            }
+            for (const pv of (r.pvs || [])) {
+              if (seen.has(pv.id)) continue; seen.add(pv.id);
+              if (/^TL/i.test(pv.id)) oseAgg.tls_count++; else oseAgg.pvs_count++;
+              const h = Math.max(pv.excel_prof_pv || 0, pv.excel_prof_chegada || 0, pv.mapa_h || 0);
+              if (h > 0) {
+                if (h <= 2) oseAgg.pvs_por_faixa['0-2']++;
+                else if (h <= 3) oseAgg.pvs_por_faixa['2-3']++;
+                else if (h <= 4) oseAgg.pvs_por_faixa['3-4']++;
+                else oseAgg.pvs_por_faixa['4+']++;
+              }
+              if (pv.excel_has_tq) oseAgg.tqs_count++;
+            }
+          }
+        }
+
+        const memorialBuf = await window.electronAPI.generateMemorial(memorialInfo, oseAgg);
+        zip.file(safeBase + '_MTG.docx', memorialBuf);
+
+        // ── 2. Orçamento (.xlsx — formato 2S) ──
+        status('Gerando Orçamento...');
+        // Reutiliza a função exportOrcamentoXlsxFull mas retorna buffer em vez de download
+        const orcBuf = await generateOrcamentoBuf(orc, _orcEditorItens);
+        zip.file(safeBase + '_OR.xlsx', orcBuf);
+
+        // ── 3. Relatório Conferência OSE (.xlsx) ──
+        if (oseData && oseData.length) {
+          status('Gerando Relatório de Conferência OSE...');
+          const { buildOseWorkbook } = require('../../src/exportOse');
+          // exportOse está em src/ mas o require path depende do contexto.
+          // Como nodeIntegration está ligado, tentamos require relativo ou direto.
+          let wb;
+          try {
+            const mod = require(__dirname + '/../../src/exportOse.js') || require('../exportOse.js');
+            wb = mod.buildOseWorkbook(oseData);
+          } catch {
+            try {
+              const mod2 = require(require('path').join(process.cwd(), 'src', 'exportOse.js'));
+              wb = mod2.buildOseWorkbook(oseData);
+            } catch (ex) {
+              console.warn('Não conseguiu carregar exportOse:', ex.message);
+            }
+          }
+          if (wb) {
+            const oseBuf = await wb.xlsx.writeBuffer();
+            zip.file(safeBase + '_REL_OSE.xlsx', oseBuf);
+          }
+        }
+
+        // ── 4. GRD (.doc) ──
+        status('Buscando GRD...');
+        // Tenta encontrar a última GRD salva no Supabase (projeto_id ou mais recente)
+        let grdHtml = null;
+        if (window._grdHtml) {
+          // Última GRD renderizada na sessão
+          grdHtml = window._grdHtml;
+        } else {
+          // Busca a mais recente do banco
+          const { data: grds } = await window.sb.from('grds')
+            .select('id, numero, nome_projeto, documentos')
+            .order('criado_em', { ascending: false })
+            .limit(5);
+          if (grds && grds.length) {
+            // Mostra pro usuário escolher
+            const opts = grds.map(g => `GRD-${String(g.numero).padStart(3,'0')} — ${g.nome_projeto || '(sem nome)'}`).join('\n');
+            const pick = prompt(
+              'Qual GRD incluir na entrega?\nDigite o número (1 a ' + grds.length + ') ou 0 para pular:\n\n' +
+              grds.map((g, i) => (i+1) + '. GRD-' + String(g.numero).padStart(3,'0') + ' — ' + (g.nome_projeto || '(sem nome)')).join('\n'),
+              '1'
+            );
+            const idx = parseInt(pick) - 1;
+            if (idx >= 0 && idx < grds.length && window._buildGrdHtml) {
+              // Carrega a GRD no formulário e gera o HTML
+              const g = grds[idx];
+              // Tenta renderizar com os dados do banco
+              grdHtml = '<html><head><meta charset="utf-8"><title>GRD-' + String(g.numero).padStart(3,'0') + '</title></head><body>'
+                + '<h1>GRD-' + String(g.numero).padStart(3,'0') + '</h1>'
+                + '<p>Projeto: ' + (g.nome_projeto || '—') + '</p>'
+                + '<p>Para a GRD completa com formatação, abra a aba GRD no Nexus e exporte antes de gerar a entrega.</p>'
+                + '<h2>Documentos</h2><table border="1" cellpadding="4" style="border-collapse:collapse">'
+                + '<tr><th>Rev</th><th>Código</th><th>Título</th></tr>'
+                + (Array.isArray(g.documentos) ? g.documentos.map(d =>
+                    '<tr><td>' + (d.rev || '') + '</td><td>' + (d.code || '') + '</td><td>' + (d.title || '') + '</td></tr>'
+                  ).join('') : '')
+                + '</table></body></html>';
+            }
+          }
+        }
+        if (grdHtml) {
+          zip.file(safeBase + '_GRD.doc', grdHtml);
+        }
+
+        // ── Gera e baixa o ZIP ──
+        status('Empacotando ZIP...');
+        const zipBuf = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+        const blob = new Blob([zipBuf], { type: 'application/zip' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = safeBase + '_ENTREGA.zip';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 200);
+
+        // Resumo
+        const files = Object.keys(zip.files);
+        alert('✓ Entrega gerada com ' + files.length + ' arquivo(s):\n\n' + files.map(f => '  • ' + f).join('\n'));
+      } catch (e) {
+        console.error(e);
+        alert('Erro ao gerar entrega: ' + e.message);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Gerar Entrega (ZIP)';
+        statusEl.textContent = origSub;
+      }
+    });
+
+    // Helper: gera o orçamento XLSX (formato 2S) e retorna Buffer sem baixar
+    async function generateOrcamentoBuf(orc, itens) {
+      const ExcelJS = require('exceljs');
+
+      let tabelaBaseId = _orcEditorTabelaBase;
+      if (!tabelaBaseId) {
+        const counts = {};
+        itens.forEach(it => { if (it.fonte_snapshot && it.fonte_snapshot !== 'MANUAL') counts[it.fonte_snapshot] = (counts[it.fonte_snapshot] || 0) + 1; });
+        const fonte = Object.keys(counts).sort((a,b) => counts[b]-counts[a])[0] || 'SANEPAR';
+        const { data: tb } = await window.sb.from('tabelas_preco').select('id').eq('fonte', fonte).eq('ativo', true).order('data_ref', { ascending: false }).limit(1).maybeSingle();
+        tabelaBaseId = tb?.id;
+      }
+
+      // Chama exportOrcamentoXlsxFull mas captura o buffer em vez de fazer download
+      // Precisamos duplicar uma parte da lógica (ou refatorar). Para não duplicar,
+      // vou gerar via a versão compact do ExcelJS que é mais curta.
+      const custoDireto = itens.reduce((s, it) => s + (+it.quantidade || 0) * (+it.valor_unitario_snapshot || 0), 0);
+      const bdiO = orc.bdi_obras_id ? _orcEditorBdis[orc.bdi_obras_id] : null;
+      const bdiM = orc.bdi_materiais_id ? _orcEditorBdis[orc.bdi_materiais_id] : null;
+      const bdiOVal = bdiO ? bdiEfetivo(bdiO, custoDireto) : 0;
+      const bdiMVal = bdiM ? bdiEfetivo(bdiM, custoDireto) : 0;
+
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'Nexus — 2S Engenharia';
+      const ws = wb.addWorksheet('Orçamento Sintético');
+      ws.columns = [
+        { width: 5 }, { width: 14 }, { width: 55 }, { width: 8 }, { width: 12 },
+        { width: 14 }, { width: 10 }, { width: 14 }, { width: 16 }, { width: 18 },
+      ];
+      // Header
+      const hd = (k,v) => { const r = ws.addRow([k,'','',v]); r.getCell(1).font = {bold:true,size:10}; };
+      const t = ws.addRow(['ORÇAMENTO — ' + (orc.titulo || '')]); t.getCell(1).font = {bold:true,size:14}; ws.mergeCells('A1:J1');
+      ws.addRow([]); hd('Cidade:', orc.cidade); hd('Sistema:', orc.sistema);
+      hd('Microbacia:', orc.microbacia); hd('Revisão:', orc.revisao);
+      hd('Elaborador:', orc.elaborador); hd('Eng.:', orc.eng_responsavel);
+      ws.addRow([]);
+      const h = ws.addRow(['#','Código','Descrição','Un.','Quant.','V.Unit.','BDI','P.Unit.c/BDI','Custo','Preço c/BDI']);
+      h.eachCell(c => { c.font = {bold:true,size:10,color:{argb:'FFFFFFFF'}}; c.fill = {type:'pattern',pattern:'solid',fgColor:{argb:'FF334155'}}; c.alignment = {horizontal:'center'}; });
+
+      let cdTot = 0, ptTot = 0;
+      itens.forEach((it, i) => {
+        const q = +it.quantidade||0, v = +it.valor_unitario_snapshot||0, c = q*v;
+        const bdi = it.tipo_bdi==='NENHUM'?0:it.tipo_bdi==='MATERIAIS'?bdiMVal:bdiOVal;
+        const p = c*(1+bdi); cdTot += c; ptTot += p;
+        const r = ws.addRow([i+1, it.codigo_snapshot||'', it.descricao_snapshot||'', it.unidade_snapshot||'', q, v, bdi, v*(1+bdi), c, p]);
+        [5].forEach(x => r.getCell(x).numFmt='#,##0.0000');
+        [6,8,9,10].forEach(x => r.getCell(x).numFmt='R$ #,##0.00');
+        r.getCell(7).numFmt = '0.00%';
+      });
+      ws.addRow([]);
+      const tf = ws.addRow(['','','TOTAL','','','','','',cdTot,ptTot]);
+      tf.getCell(3).font = {bold:true,size:11}; tf.getCell(9).numFmt='R$ #,##0.00'; tf.getCell(10).numFmt='R$ #,##0.00';
+      tf.getCell(10).font = {bold:true,size:11,color:{argb:'FF0F766E'}};
+
+      return wb.xlsx.writeBuffer();
+    }
 
     // ── Importar planilha XLSX existente ────────────────────
     // Lê um XLSX com código+quantidade (formato compatível com o modelo SANEPAR)
