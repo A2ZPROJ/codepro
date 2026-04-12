@@ -4,9 +4,10 @@
  *
  * Uso: node scripts/restore-source.js
  *
- * Restaura os .js.src (backups) de volta para .js e remove os .jsc.
+ * Restaura os .js.src e .html.src (backups) e remove os .jsc.
  * Deve ser rodado APÓS electron-builder terminar, para que o repositório
  * volte ao estado normal (com código legível para desenvolvimento).
+ * Restaura tanto bytenode (.js.src→.js) quanto obfuscator (.html.src→.html).
  */
 'use strict';
 
@@ -28,13 +29,13 @@ function walk(dir) {
 const files = walk(SRC);
 let restored = 0, cleaned = 0;
 
-// Restaura .js.src → .js
+// Restaura .js.src → .js e .html.src → .html
 for (const f of files) {
-  if (f.endsWith('.js.src')) {
-    const jsPath = f.replace(/\.src$/, '');
-    fs.copyFileSync(f, jsPath);
+  if (f.endsWith('.src')) {
+    const origPath = f.replace(/\.src$/, '');
+    fs.copyFileSync(f, origPath);
     fs.unlinkSync(f);
-    console.log('  ↩  ' + path.relative(SRC, jsPath));
+    console.log('  ↩  ' + path.relative(SRC, origPath));
     restored++;
   }
 }
