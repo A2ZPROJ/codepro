@@ -1,6 +1,21 @@
 node_modules/
 dist/
-.env
 *.log
 .DS_Store
 Thumbs.db
+
+# Secrets / credentials
+.env
+.env.*
+config.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.cert
+
+# Build artifacts
+*.blockmap
+
+# Scraper node_modules (separado do principal)
+scripts/scraper/node_modules/

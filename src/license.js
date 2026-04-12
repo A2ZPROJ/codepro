@@ -1,6 +1,10 @@
 const crypto = require('crypto');
 
-const SECRET = 'A2ZCODEPRO2024!';
+// Secret ofuscado — não armazena em texto plano no source.
+// Decodificado em runtime via Buffer.from(base64) XOR com salt fixo.
+const _s = Buffer.from('FWUgMCA2JyUhe1YFVFNJ', 'base64');
+const _k = [0x54, 0x57, 0x7A, 0x73, 0x6F, 0x72, 0x62, 0x75, 0x73, 0x34, 0x64, 0x35, 0x66, 0x67, 0x68, 0x21];
+const SECRET = Buffer.from(_s.map((b, i) => b ^ _k[i % _k.length])).toString('utf8').replace(/\0+$/, '');
 const EPOCH = new Date('2024-01-01');
 const ROLES = ['visualizador','criador','desenvolvedor','master'];
 const ROLES_LABEL = ['Visualizador','Criador','Desenvolvedor','Master'];

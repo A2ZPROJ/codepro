@@ -160,7 +160,8 @@ function createMain(licenseData){
       preload: path.join(__dirname,'preload.js'),
       nodeIntegration: true,
       contextIsolation: false,
-      webSecurity: false,
+      // webSecurity removido (v2.0.2) — era risco de segurança (bypass CORS).
+      // Se alguma requisição cross-origin falhar, tratar via CSP ou proxy IPC.
       additionalArguments: [licArg],
     },
     backgroundColor: '#0f172a',
@@ -205,17 +206,19 @@ function createMain(licenseData){
     return {action:'deny'};
   });
 
-  // F12 abre DevTools para diagnóstico
-  const { globalShortcut } = require('electron');
-  mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'F12') {
-      if (mainWindow.webContents.isDevToolsOpened()) {
-        mainWindow.webContents.closeDevTools();
-      } else {
-        mainWindow.webContents.openDevTools();
+  // F12 abre DevTools APENAS em modo dev (--dev). Em produção fica bloqueado
+  // pelo handler global em app.on('web-contents-created') + devtools-opened closer.
+  if (isDev) {
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'F12') {
+        if (mainWindow.webContents.isDevToolsOpened()) {
+          mainWindow.webContents.closeDevTools();
+        } else {
+          mainWindow.webContents.openDevTools();
+        }
       }
-    }
-  });
+    });
+  }
 
   mainWindow.on('closed',()=>{ mainWindow=null; });
 }
