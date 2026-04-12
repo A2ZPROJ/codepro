@@ -15,9 +15,11 @@ config.json
 *.cert
 
 # Build artifacts
+dist/
 *.blockmap
 *.jsc
 *.js.src
+*.html.src
 
 # Scraper node_modules (separado do principal)
 scripts/scraper/node_modules/
