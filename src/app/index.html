@@ -3690,6 +3690,159 @@ body {
       </div>
     </div>
 
+    <!-- Modal: Novo orçamento (cabeçalho + BDIs) -->
+    <div id="orc-new-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;align-items:center;justify-content:center;padding:20px">
+      <div style="background:var(--surface);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:100%;max-width:720px;max-height:90vh;overflow:auto">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:14px;font-weight:700;color:var(--text)">Novo orçamento</div>
+          <button onclick="document.getElementById('orc-new-modal').style.display='none'" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px 8px">✕</button>
+        </div>
+        <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div style="grid-column:span 2">
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Título *</label>
+              <input id="orc-new-titulo" placeholder="ex: Orçamento Rede Coletora — Santa Fé SB-01 R03" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+            <div style="grid-column:span 2">
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Código do documento</label>
+              <input id="orc-new-codigo" placeholder="ex: 003-SES-0240-0005-PEXE-OR-0005RCE240STAFE-R3" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;font-family:'DM Mono',monospace"/>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Cidade</label>
+              <input id="orc-new-cidade" placeholder="Santa Fé" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">UF</label>
+              <input id="orc-new-uf" placeholder="PR" maxlength="2" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;text-transform:uppercase"/>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Sistema</label>
+              <input id="orc-new-sistema" placeholder="Água do Brás" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Microbacia</label>
+              <input id="orc-new-microbacia" placeholder="SB-01" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Revisão</label>
+              <input id="orc-new-revisao" placeholder="R00" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;font-family:'DM Mono',monospace"/>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Data do orçamento</label>
+              <input id="orc-new-data" type="date" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Elaborador</label>
+              <input id="orc-new-elaborador" placeholder="Nome do elaborador" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Eng. responsável</label>
+              <input id="orc-new-eng" placeholder="Nome do responsável técnico" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">CREA</label>
+              <input id="orc-new-crea" placeholder="SC-0680240/D" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;font-family:'DM Mono',monospace"/>
+            </div>
+            <div style="grid-column:span 2;border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+              <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Configuração</div>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Tabela de preço base</label>
+              <select id="orc-new-tabela" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"></select>
+            </div>
+            <div></div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">BDI Obras e Serviços</label>
+              <select id="orc-new-bdi-obras" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"></select>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">BDI Materiais</label>
+              <select id="orc-new-bdi-materiais" style="width:100%;padding:8px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"></select>
+            </div>
+          </div>
+          <div id="orc-new-status" style="font-size:11px;color:var(--text3);min-height:14px"></div>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="document.getElementById('orc-new-modal').style.display='none'" style="background:var(--surface);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;cursor:pointer">Cancelar</button>
+          <button id="orc-new-save" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 18px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Criar e abrir</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Editor de orçamento (tela cheia da aba — substitui a lista quando ativo) -->
+    <div id="orc-editor" style="display:none">
+      <!-- Barra superior: voltar + título + ações -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-sm)">
+        <button id="orc-editor-back" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text2);font-family:inherit">← Voltar</button>
+        <div style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1">
+          <div id="orc-editor-titulo" style="font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
+          <div id="orc-editor-sub" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace">—</div>
+        </div>
+        <button id="orc-editor-export" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Exportar XLSX</button>
+      </div>
+
+      <!-- Totais ao vivo -->
+      <div id="orc-editor-totais" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+          <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Custo direto</div>
+          <div id="orc-tot-cd" style="font-size:18px;font-weight:800;color:var(--text);font-family:'DM Mono',monospace;margin-top:4px">R$ 0,00</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+          <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">BDI médio</div>
+          <div id="orc-tot-bdi" style="font-size:18px;font-weight:800;color:var(--text);font-family:'DM Mono',monospace;margin-top:4px">—</div>
+        </div>
+        <div style="background:var(--surface);border:1.5px solid #0f766e;border-radius:10px;padding:12px 14px">
+          <div style="font-size:10px;font-weight:700;color:#0f766e;text-transform:uppercase;letter-spacing:.4px">Preço total c/ BDI</div>
+          <div id="orc-tot-pt" style="font-size:18px;font-weight:800;color:#0f766e;font-family:'DM Mono',monospace;margin-top:4px">R$ 0,00</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+          <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Itens</div>
+          <div id="orc-tot-ct" style="font-size:18px;font-weight:800;color:var(--text);font-family:'DM Mono',monospace;margin-top:4px">0</div>
+        </div>
+      </div>
+
+      <!-- Busca + add -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:600;color:var(--text2)">Adicionar item</div>
+          <select id="orc-search-fonte" style="padding:6px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-family:inherit">
+            <option value="base">Da tabela base do orçamento</option>
+            <option value="all">De qualquer tabela vigente</option>
+          </select>
+          <button id="orc-add-custom" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;cursor:pointer;color:var(--text2);font-family:inherit">+ Linha manual</button>
+        </div>
+        <input id="orc-search-input" placeholder="Digite código ou descrição (ex: 'escavação', '004002')..." style="width:100%;padding:9px 12px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+        <div id="orc-search-results" style="margin-top:8px;max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;display:none"></div>
+      </div>
+
+      <!-- Tabela de itens do orçamento -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+          <div style="font-size:12px;font-weight:600;color:var(--text2)">Itens do orçamento</div>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px" id="orc-editor-table">
+            <thead style="background:var(--surface2)">
+              <tr>
+                <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;white-space:nowrap">#</th>
+                <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;white-space:nowrap">Fonte</th>
+                <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;white-space:nowrap">Código</th>
+                <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;min-width:260px">Descrição</th>
+                <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;white-space:nowrap">Un.</th>
+                <th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;white-space:nowrap">Quant.</th>
+                <th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;white-space:nowrap">V. Unit.</th>
+                <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;white-space:nowrap">BDI</th>
+                <th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;white-space:nowrap">Custo</th>
+                <th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;white-space:nowrap">Preço c/BDI</th>
+                <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase"></th>
+              </tr>
+            </thead>
+            <tbody id="orc-editor-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </div>
   <!-- FIM ORÇAMENTO TAB ──────────────────────────────────────────── -->
 
@@ -4126,7 +4279,7 @@ body {
         + '<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase">Atualizado</th>'
         + '</tr></thead><tbody>'
         + _orcOrcList.map(o =>
-          '<tr style="border-top:1px solid var(--border)">'
+          '<tr onclick="window.orcOpenOrcamento(' + o.id + ')" style="border-top:1px solid var(--border);cursor:pointer" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'
           + '<td style="padding:10px 14px;color:var(--text);font-weight:500">' + (o.titulo || '—') + '</td>'
           + '<td style="padding:10px 14px;color:var(--text2)">' + (o.cidade || '—') + ' / ' + (o.microbacia || '—') + '</td>'
           + '<td style="padding:10px 14px;color:var(--text2);font-family:\'DM Mono\',monospace">' + (o.revisao || '—') + '</td>'
@@ -4137,9 +4290,561 @@ body {
         + '</tbody></table>';
     }
 
-    document.getElementById('orc-novo-btn').addEventListener('click', () => {
-      alert('Construtor de orçamento chega na Fase 2. Antes, precisamos confirmar que as tabelas de preço carregaram e o BDI está correto.');
+    // ── Novo orçamento (modal) ────────────────────────────────
+    async function openNewOrcModal() {
+      // Preenche selects de tabela e BDIs
+      const [{ data: tabs }, { data: bdis }] = await Promise.all([
+        window.sb.from('tabelas_preco').select('id, fonte, nome, data_ref, ativo').eq('ativo', true).order('fonte'),
+        window.sb.from('bdi_templates').select('id, nome, tipo').order('tipo'),
+      ]);
+      const selT = document.getElementById('orc-new-tabela');
+      selT.innerHTML = (tabs || []).map(t =>
+        `<option value="${t.id}">${t.fonte} — ${t.nome}</option>`
+      ).join('') || '<option value="">Nenhuma tabela vigente</option>';
+
+      const selO = document.getElementById('orc-new-bdi-obras');
+      const selM = document.getElementById('orc-new-bdi-materiais');
+      const opts = (tipo) => (bdis || []).filter(b => b.tipo === tipo).map(b =>
+        `<option value="${b.id}">${b.nome}</option>`
+      ).join('');
+      selO.innerHTML = opts('OBRAS') || '<option value="">Nenhum BDI Obras cadastrado</option>';
+      selM.innerHTML = opts('MATERIAIS') || '<option value="">Nenhum BDI Materiais cadastrado</option>';
+
+      document.getElementById('orc-new-titulo').value     = '';
+      document.getElementById('orc-new-codigo').value     = '';
+      document.getElementById('orc-new-cidade').value     = '';
+      document.getElementById('orc-new-uf').value         = 'PR';
+      document.getElementById('orc-new-sistema').value    = '';
+      document.getElementById('orc-new-microbacia').value = '';
+      document.getElementById('orc-new-revisao').value    = 'R00';
+      document.getElementById('orc-new-data').value       = new Date().toISOString().slice(0,10);
+      document.getElementById('orc-new-elaborador').value = '';
+      document.getElementById('orc-new-eng').value        = '';
+      document.getElementById('orc-new-crea').value       = '';
+      document.getElementById('orc-new-status').textContent = '';
+      document.getElementById('orc-new-modal').style.display = 'flex';
+    }
+
+    document.getElementById('orc-novo-btn').addEventListener('click', openNewOrcModal);
+
+    document.getElementById('orc-new-save').addEventListener('click', async () => {
+      const status = document.getElementById('orc-new-status');
+      status.style.color = 'var(--text3)';
+      const payload = {
+        titulo:          document.getElementById('orc-new-titulo').value.trim(),
+        codigo_documento:document.getElementById('orc-new-codigo').value.trim() || null,
+        cidade:          document.getElementById('orc-new-cidade').value.trim() || null,
+        uf:              document.getElementById('orc-new-uf').value.trim().toUpperCase() || null,
+        sistema:         document.getElementById('orc-new-sistema').value.trim() || null,
+        microbacia:      document.getElementById('orc-new-microbacia').value.trim() || null,
+        revisao:         document.getElementById('orc-new-revisao').value.trim() || null,
+        data_orcamento:  document.getElementById('orc-new-data').value || null,
+        elaborador:      document.getElementById('orc-new-elaborador').value.trim() || null,
+        eng_responsavel: document.getElementById('orc-new-eng').value.trim() || null,
+        eng_crea:        document.getElementById('orc-new-crea').value.trim() || null,
+        bdi_obras_id:    +document.getElementById('orc-new-bdi-obras').value || null,
+        bdi_materiais_id:+document.getElementById('orc-new-bdi-materiais').value || null,
+        status:          'rascunho',
+      };
+      const tabelaBaseId = +document.getElementById('orc-new-tabela').value || null;
+
+      if (!payload.titulo) {
+        status.textContent = 'Título é obrigatório.';
+        status.style.color = '#dc2626';
+        return;
+      }
+      const btn = document.getElementById('orc-new-save');
+      btn.disabled = true; btn.textContent = 'Criando...';
+      try {
+        const { data: orc, error } = await window.sb.from('orcamentos').insert(payload).select('*').single();
+        if (error) throw error;
+        // Guarda tabela base preferida na observação (schema não tem campo dedicado)
+        await window.sb.from('orcamentos').update({
+          observacoes: JSON.stringify({ tabela_base_id: tabelaBaseId }),
+        }).eq('id', orc.id);
+        orc.observacoes = JSON.stringify({ tabela_base_id: tabelaBaseId });
+        document.getElementById('orc-new-modal').style.display = 'none';
+        openOrcEditor(orc);
+      } catch (e) {
+        console.error(e);
+        status.textContent = 'Erro: ' + (e.message || e);
+        status.style.color = '#dc2626';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Criar e abrir';
+      }
     });
+
+    // ── Editor de orçamento ───────────────────────────────────
+    let _orcEditorCur = null;    // orcamento em edição
+    let _orcEditorItens = [];    // cache local dos itens
+    let _orcEditorBdis = {};     // { id: {faixas, tipo, nome} }
+    let _orcEditorTabelaBase = null; // id da tabela base
+
+    async function openOrcEditor(orc) {
+      _orcEditorCur = orc;
+      _orcEditorItens = [];
+      _orcEditorBdis = {};
+      _orcEditorTabelaBase = null;
+      try {
+        const obs = orc.observacoes ? JSON.parse(orc.observacoes) : {};
+        _orcEditorTabelaBase = obs.tabela_base_id || null;
+      } catch {}
+
+      // Esconde a lista de orçamentos, mostra o editor
+      document.getElementById('orc-sub-orcamentos').querySelectorAll(':scope > *').forEach(el => {
+        if (el.id !== 'orc-editor') el.style.display = 'none';
+      });
+      document.getElementById('orc-editor').style.display = '';
+
+      // Título + subtítulo
+      document.getElementById('orc-editor-titulo').textContent = orc.titulo || 'Sem título';
+      const sub = [orc.codigo_documento, orc.cidade, orc.microbacia, orc.revisao].filter(Boolean).join(' · ');
+      document.getElementById('orc-editor-sub').textContent = sub || '—';
+
+      // Carrega BDIs pra cálculo
+      const bdiIds = [orc.bdi_obras_id, orc.bdi_materiais_id].filter(Boolean);
+      if (bdiIds.length) {
+        const { data: bdis } = await window.sb.from('bdi_templates').select('*').in('id', bdiIds);
+        (bdis || []).forEach(b => { _orcEditorBdis[b.id] = b; });
+      }
+
+      // Carrega itens
+      const { data: itens, error } = await window.sb.from('orcamento_itens')
+        .select('*').eq('orcamento_id', orc.id).order('ordem');
+      if (error) { alert('Erro ao carregar itens: ' + error.message); return; }
+      _orcEditorItens = itens || [];
+      renderEditorTable();
+    }
+
+    function closeOrcEditor() {
+      document.getElementById('orc-editor').style.display = 'none';
+      document.getElementById('orc-sub-orcamentos').querySelectorAll(':scope > *').forEach(el => {
+        if (el.id !== 'orc-editor') el.style.display = '';
+      });
+      _orcEditorCur = null;
+      _orcEditorItens = [];
+      loadOrcamentos();
+    }
+    document.getElementById('orc-editor-back').addEventListener('click', closeOrcEditor);
+
+    // Calcula BDI efetivo para um custo direto (escolhe a faixa)
+    function bdiEfetivo(bdiTemplate, custoDireto) {
+      if (!bdiTemplate || !Array.isArray(bdiTemplate.faixas)) return 0;
+      const faixa = bdiTemplate.faixas.find(f => f.ate == null || custoDireto <= +f.ate) || bdiTemplate.faixas[bdiTemplate.faixas.length - 1];
+      return computeBdi(faixa);
+    }
+
+    function fmtMoney(v) {
+      if (v == null || isNaN(v)) return 'R$ 0,00';
+      return 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function fmtNum(v, dec) {
+      if (v == null || isNaN(v)) return '—';
+      return (+v).toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    }
+
+    function calcTotais() {
+      let custoDireto = 0;
+      for (const it of _orcEditorItens) {
+        const q = +it.quantidade || 0;
+        const v = +it.valor_unitario_snapshot || 0;
+        custoDireto += q * v;
+      }
+      // BDI efetivo por faixa — precisa do custo direto total
+      const bdiO = _orcEditorCur?.bdi_obras_id ? _orcEditorBdis[_orcEditorCur.bdi_obras_id] : null;
+      const bdiM = _orcEditorCur?.bdi_materiais_id ? _orcEditorBdis[_orcEditorCur.bdi_materiais_id] : null;
+      const bdiOVal = bdiO ? bdiEfetivo(bdiO, custoDireto) : 0;
+      const bdiMVal = bdiM ? bdiEfetivo(bdiM, custoDireto) : 0;
+
+      let precoTotal = 0, custoObras = 0, custoMateriais = 0;
+      for (const it of _orcEditorItens) {
+        const q = +it.quantidade || 0;
+        const v = +it.valor_unitario_snapshot || 0;
+        const c = q * v;
+        let b = 0;
+        if (it.tipo_bdi === 'MATERIAIS') { b = bdiMVal; custoMateriais += c; }
+        else if (it.tipo_bdi === 'NENHUM') { b = 0; }
+        else { b = bdiOVal; custoObras += c; }
+        precoTotal += c * (1 + b);
+      }
+      const bdiMedio = custoDireto > 0 ? (precoTotal / custoDireto - 1) : 0;
+      return { custoDireto, precoTotal, bdiMedio, count: _orcEditorItens.length, bdiOVal, bdiMVal };
+    }
+
+    function renderEditorTable() {
+      const tb = document.getElementById('orc-editor-tbody');
+      const tot = calcTotais();
+      document.getElementById('orc-tot-cd').textContent = fmtMoney(tot.custoDireto);
+      document.getElementById('orc-tot-pt').textContent = fmtMoney(tot.precoTotal);
+      document.getElementById('orc-tot-bdi').textContent = tot.bdiMedio > 0 ? (tot.bdiMedio * 100).toFixed(2) + '%' : '—';
+      document.getElementById('orc-tot-ct').textContent = tot.count;
+
+      if (!_orcEditorItens.length) {
+        tb.innerHTML = '<tr><td colspan="11" style="padding:40px;text-align:center;color:var(--text3);font-size:12px">Nenhum item. Busque acima e clique em adicionar, ou use <strong>+ Linha manual</strong>.</td></tr>';
+        return;
+      }
+      tb.innerHTML = _orcEditorItens.map((it, idx) => {
+        const q = +it.quantidade || 0;
+        const v = +it.valor_unitario_snapshot || 0;
+        const custo = q * v;
+        const bdi = it.tipo_bdi === 'NENHUM' ? 0
+                  : it.tipo_bdi === 'MATERIAIS' ? tot.bdiMVal
+                  : tot.bdiOVal;
+        const preco = custo * (1 + bdi);
+        const td = 'padding:6px 10px;border-bottom:1px solid var(--border);font-size:11px';
+        const tdR = td + ';text-align:right;font-family:\'DM Mono\',monospace';
+        return '<tr>'
+          + `<td style="${td};color:var(--text3)">${idx+1}</td>`
+          + `<td style="${td}"><span style="padding:1px 6px;border-radius:6px;background:var(--surface2);font-size:9px;font-weight:700;color:var(--text2)">${it.fonte_snapshot || 'MANUAL'}</span></td>`
+          + `<td style="${td};font-family:'DM Mono',monospace;color:var(--text2)">${it.codigo_snapshot || '—'}</td>`
+          + `<td style="${td};color:var(--text)">${(it.descricao_snapshot || '').replace(/</g,'&lt;')}</td>`
+          + `<td style="${td};text-align:center;color:var(--text2)">${it.unidade_snapshot || '—'}</td>`
+          + `<td style="${tdR}"><input type="number" step="0.0001" value="${q}" onchange="window.orcEditItemQty(${it.id}, this.value)" style="width:90px;padding:4px 6px;font-family:inherit;font-size:11px;text-align:right;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text)"/></td>`
+          + `<td style="${tdR};color:var(--text2)">${fmtMoney(v)}</td>`
+          + `<td style="${td};text-align:center"><select onchange="window.orcEditItemBdi(${it.id}, this.value)" style="padding:3px 6px;font-size:10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:inherit">`
+            + `<option value="OBRAS" ${it.tipo_bdi==='OBRAS'?'selected':''}>Obras</option>`
+            + `<option value="MATERIAIS" ${it.tipo_bdi==='MATERIAIS'?'selected':''}>Materiais</option>`
+            + `<option value="NENHUM" ${it.tipo_bdi==='NENHUM'?'selected':''}>Nenhum</option>`
+            + `</select></td>`
+          + `<td style="${tdR};color:var(--text)">${fmtMoney(custo)}</td>`
+          + `<td style="${tdR};color:#0f766e;font-weight:700">${fmtMoney(preco)}</td>`
+          + `<td style="${td};text-align:center"><button onclick="window.orcDelItem(${it.id})" style="background:none;border:1px solid #FCA5A5;color:#dc2626;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer">✕</button></td>`
+          + '</tr>';
+      }).join('');
+    }
+
+    window.orcEditItemQty = async function(itemId, value) {
+      const it = _orcEditorItens.find(x => x.id === itemId);
+      if (!it) return;
+      const q = parseFloat(String(value).replace(',', '.')) || 0;
+      it.quantidade = q;
+      await window.sb.from('orcamento_itens').update({ quantidade: q }).eq('id', itemId);
+      renderEditorTable();
+    };
+
+    window.orcEditItemBdi = async function(itemId, value) {
+      const it = _orcEditorItens.find(x => x.id === itemId);
+      if (!it) return;
+      it.tipo_bdi = value;
+      await window.sb.from('orcamento_itens').update({ tipo_bdi: value }).eq('id', itemId);
+      renderEditorTable();
+    };
+
+    window.orcDelItem = async function(itemId) {
+      if (!confirm('Remover este item do orçamento?')) return;
+      const { error } = await window.sb.from('orcamento_itens').delete().eq('id', itemId);
+      if (error) { alert('Erro: ' + error.message); return; }
+      _orcEditorItens = _orcEditorItens.filter(x => x.id !== itemId);
+      renderEditorTable();
+    };
+
+    // ── Busca de itens ────────────────────────────────────────
+    let _orcSearchTimer = null;
+    document.getElementById('orc-search-input').addEventListener('input', e => {
+      clearTimeout(_orcSearchTimer);
+      const term = e.target.value.trim();
+      if (!term) {
+        document.getElementById('orc-search-results').style.display = 'none';
+        return;
+      }
+      _orcSearchTimer = setTimeout(() => doSearch(term), 250);
+    });
+
+    async function doSearch(term) {
+      const fonteMode = document.getElementById('orc-search-fonte').value;
+      let q = window.sb.from('itens_tabela')
+        .select('id, codigo, descricao, unidade, valor_unitario, nivel, tabela_id, tabelas_preco(fonte, nome, data_ref)')
+        .not('valor_unitario', 'is', null)
+        .limit(30);
+
+      if (fonteMode === 'base' && _orcEditorTabelaBase) {
+        q = q.eq('tabela_id', _orcEditorTabelaBase);
+      }
+
+      // Tenta full-text; fallback para ilike se tsvector não achar
+      const { data: byText } = await q.textSearch('busca', term, { type: 'plain', config: 'portuguese' });
+      let results = byText;
+      if (!results || !results.length) {
+        let q2 = window.sb.from('itens_tabela')
+          .select('id, codigo, descricao, unidade, valor_unitario, nivel, tabela_id, tabelas_preco(fonte, nome, data_ref)')
+          .not('valor_unitario', 'is', null)
+          .or(`codigo.ilike.%${term}%,descricao.ilike.%${term}%`)
+          .limit(30);
+        if (fonteMode === 'base' && _orcEditorTabelaBase) q2 = q2.eq('tabela_id', _orcEditorTabelaBase);
+        const { data: byLike } = await q2;
+        results = byLike || [];
+      }
+      renderSearchResults(results);
+    }
+
+    function renderSearchResults(results) {
+      const el = document.getElementById('orc-search-results');
+      if (!results.length) {
+        el.innerHTML = '<div style="padding:14px;text-align:center;color:var(--text3);font-size:11px">Nenhum item encontrado</div>';
+        el.style.display = '';
+        return;
+      }
+      el.innerHTML = results.map(r => {
+        const fonte = r.tabelas_preco?.fonte || '—';
+        const td = 'padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px';
+        return `<div class="orc-search-row" data-id="${r.id}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:11px" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">`
+          + `<span style="padding:1px 6px;border-radius:6px;background:var(--surface2);font-size:9px;font-weight:700;color:var(--text3);white-space:nowrap">${fonte}</span>`
+          + `<span style="font-family:'DM Mono',monospace;color:var(--text3);min-width:85px">${r.codigo}</span>`
+          + `<span style="flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(r.descricao || '').replace(/</g,'&lt;')}</span>`
+          + `<span style="color:var(--text3);min-width:36px;text-align:right">${r.unidade || '—'}</span>`
+          + `<span style="font-family:'DM Mono',monospace;color:var(--text);min-width:90px;text-align:right">${fmtMoney(r.valor_unitario)}</span>`
+          + `<button onclick="event.stopPropagation();window.orcAddItem(${r.id})" style="background:var(--gray-900);color:white;border:none;border-radius:4px;padding:4px 10px;font-size:10px;cursor:pointer;font-weight:600">+ Add</button>`
+          + `</div>`;
+      }).join('');
+      el.style.display = '';
+    }
+
+    window.orcAddItem = async function(itemTabelaId) {
+      if (!_orcEditorCur) return;
+      // busca dados do item pra snapshot
+      const { data: item } = await window.sb.from('itens_tabela')
+        .select('*, tabelas_preco(fonte, data_ref)')
+        .eq('id', itemTabelaId).single();
+      if (!item) return;
+      const maxOrdem = _orcEditorItens.reduce((m, x) => Math.max(m, x.ordem || 0), 0);
+      const payload = {
+        orcamento_id: _orcEditorCur.id,
+        ordem: maxOrdem + 1,
+        item_tabela_id: item.id,
+        fonte_snapshot: item.tabelas_preco?.fonte || null,
+        codigo_snapshot: item.codigo,
+        descricao_snapshot: item.descricao,
+        unidade_snapshot: item.unidade,
+        valor_unitario_snapshot: item.valor_unitario,
+        data_ref_snapshot: item.tabelas_preco?.data_ref || null,
+        quantidade: 0,
+        tipo_bdi: 'OBRAS',
+      };
+      const { data: inserted, error } = await window.sb.from('orcamento_itens').insert(payload).select('*').single();
+      if (error) { alert('Erro: ' + error.message); return; }
+      _orcEditorItens.push(inserted);
+      renderEditorTable();
+      // limpa busca
+      document.getElementById('orc-search-input').value = '';
+      document.getElementById('orc-search-results').style.display = 'none';
+    };
+
+    document.getElementById('orc-add-custom').addEventListener('click', async () => {
+      if (!_orcEditorCur) return;
+      const desc = prompt('Descrição do item:');
+      if (!desc) return;
+      const un = prompt('Unidade (m, m², m³, ud, ...):') || '';
+      const val = parseFloat((prompt('Valor unitário (R$):') || '0').replace(',', '.')) || 0;
+      const maxOrdem = _orcEditorItens.reduce((m, x) => Math.max(m, x.ordem || 0), 0);
+      const payload = {
+        orcamento_id: _orcEditorCur.id,
+        ordem: maxOrdem + 1,
+        item_tabela_id: null,
+        fonte_snapshot: 'MANUAL',
+        codigo_snapshot: null,
+        descricao_snapshot: desc,
+        unidade_snapshot: un,
+        valor_unitario_snapshot: val,
+        data_ref_snapshot: new Date().toISOString().slice(0,10),
+        quantidade: 0,
+        tipo_bdi: 'OBRAS',
+      };
+      const { data: inserted, error } = await window.sb.from('orcamento_itens').insert(payload).select('*').single();
+      if (error) { alert('Erro: ' + error.message); return; }
+      _orcEditorItens.push(inserted);
+      renderEditorTable();
+    });
+
+    // Torna a linha de orçamento clicável na listagem
+    window.orcOpenOrcamento = async function(id) {
+      const { data, error } = await window.sb.from('orcamentos').select('*').eq('id', id).single();
+      if (error) { alert('Erro: ' + error.message); return; }
+      openOrcEditor(data);
+    };
+
+    // ── Export XLSX (MVP) ─────────────────────────────────────
+    document.getElementById('orc-editor-export').addEventListener('click', async () => {
+      if (!_orcEditorCur) return;
+      const btn = document.getElementById('orc-editor-export');
+      btn.disabled = true; btn.textContent = 'Exportando...';
+      try {
+        await exportOrcamentoXlsx(_orcEditorCur, _orcEditorItens);
+      } catch (e) {
+        alert('Erro ao exportar: ' + e.message);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Exportar XLSX';
+      }
+    });
+
+    async function exportOrcamentoXlsx(orc, itens) {
+      const ExcelJS = require('exceljs');
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'Nexus - 2S Engenharia';
+      wb.created = new Date();
+
+      const ws = wb.addWorksheet('Orçamento Sintético');
+      ws.columns = [
+        { width: 5 },   // ordem
+        { width: 14 },  // fonte
+        { width: 14 },  // código
+        { width: 55 },  // descrição
+        { width: 8 },   // unidade
+        { width: 12 },  // quant
+        { width: 14 },  // valor unit
+        { width: 14 },  // bdi
+        { width: 16 },  // preço c/bdi
+        { width: 16 },  // custo total
+        { width: 18 },  // preço total c/bdi
+      ];
+
+      // Header project info
+      const head = (label, val) => {
+        const r = ws.addRow([label, '', '', val || '—']);
+        ws.mergeCells(`D${r.number}:K${r.number}`);
+        r.getCell(1).font = { bold: true, size: 10, color: { argb: 'FF475569' } };
+        r.getCell(4).font = { size: 10 };
+        r.getCell(4).alignment = { horizontal: 'left' };
+      };
+      const title = ws.addRow(['ORÇAMENTO SINTÉTICO — NEXUS / 2S ENGENHARIA']);
+      ws.mergeCells(`A${title.number}:K${title.number}`);
+      title.getCell(1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+      title.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+      title.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+      title.height = 28;
+      ws.addRow([]);
+      head('Título:', orc.titulo);
+      head('Código doc.:', orc.codigo_documento);
+      head('Cidade/UF:', [orc.cidade, orc.uf].filter(Boolean).join(' / '));
+      head('Sistema:', orc.sistema);
+      head('Microbacia:', orc.microbacia);
+      head('Revisão:', orc.revisao);
+      head('Data:', orc.data_orcamento);
+      head('Elaborador:', orc.elaborador);
+      head('Eng. responsável:', [orc.eng_responsavel, orc.eng_crea].filter(Boolean).join(' — '));
+      ws.addRow([]);
+
+      // Cabeçalho dos itens
+      const hdr = ws.addRow([
+        '#', 'Fonte', 'Código', 'Descrição', 'Un.', 'Quant.', 'V. Unit. (R$)', 'BDI', 'P. Unit. c/BDI', 'Custo Total', 'Preço Total c/BDI'
+      ]);
+      hdr.eachCell(c => {
+        c.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+        c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        c.border = { bottom: { style: 'thin', color: { argb: 'FF64748B' } } };
+      });
+      hdr.height = 26;
+
+      // Totais e BDI efetivo
+      const custoDireto = itens.reduce((s, it) => s + (+it.quantidade || 0) * (+it.valor_unitario_snapshot || 0), 0);
+      const bdiO = orc.bdi_obras_id ? _orcEditorBdis[orc.bdi_obras_id] : null;
+      const bdiM = orc.bdi_materiais_id ? _orcEditorBdis[orc.bdi_materiais_id] : null;
+      const bdiOVal = bdiO ? bdiEfetivo(bdiO, custoDireto) : 0;
+      const bdiMVal = bdiM ? bdiEfetivo(bdiM, custoDireto) : 0;
+
+      let custoDirTotal = 0, precoTotal = 0;
+      itens.forEach((it, i) => {
+        const q = +it.quantidade || 0;
+        const v = +it.valor_unitario_snapshot || 0;
+        const c = q * v;
+        const bdi = it.tipo_bdi === 'NENHUM' ? 0 : it.tipo_bdi === 'MATERIAIS' ? bdiMVal : bdiOVal;
+        const pUnit = v * (1 + bdi);
+        const pTot = c * (1 + bdi);
+        custoDirTotal += c;
+        precoTotal += pTot;
+        const row = ws.addRow([
+          i + 1,
+          it.fonte_snapshot || 'MANUAL',
+          it.codigo_snapshot || '',
+          it.descricao_snapshot || '',
+          it.unidade_snapshot || '',
+          q,
+          v,
+          bdi,
+          pUnit,
+          c,
+          pTot,
+        ]);
+        row.getCell(6).numFmt = '#,##0.0000';
+        row.getCell(7).numFmt = 'R$ #,##0.00';
+        row.getCell(8).numFmt = '0.00%';
+        row.getCell(9).numFmt = 'R$ #,##0.00';
+        row.getCell(10).numFmt = 'R$ #,##0.00';
+        row.getCell(11).numFmt = 'R$ #,##0.00';
+        row.getCell(4).alignment = { wrapText: true, vertical: 'top' };
+        row.font = { size: 10 };
+      });
+
+      // Linha de totais
+      ws.addRow([]);
+      const tot = ws.addRow(['', '', '', 'TOTAL', '', '', '', '', '', custoDirTotal, precoTotal]);
+      tot.getCell(4).font = { bold: true, size: 11 };
+      tot.getCell(4).alignment = { horizontal: 'right' };
+      tot.getCell(10).numFmt = 'R$ #,##0.00';
+      tot.getCell(11).numFmt = 'R$ #,##0.00';
+      tot.getCell(10).font = { bold: true, size: 11 };
+      tot.getCell(11).font = { bold: true, size: 11, color: { argb: 'FF0F766E' } };
+      tot.getCell(11).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
+      tot.height = 22;
+
+      ws.views = [{ state: 'frozen', ySplit: 13 }];
+
+      // ─── BDI sheet ───
+      if (bdiO || bdiM) {
+        const wsB = wb.addWorksheet('BDI');
+        wsB.columns = [{ width: 40 }, { width: 15 }, { width: 15 }, { width: 15 }];
+        wsB.addRow(['COMPOSIÇÃO DE BDI — ACÓRDÃO 2622/2013 TCU']).getCell(1).font = { bold: true, size: 12 };
+        wsB.mergeCells('A1:D1');
+        wsB.addRow([]);
+        wsB.addRow(['Custo direto:', '', '', custoDireto]).getCell(4).numFmt = 'R$ #,##0.00';
+        wsB.addRow([]);
+
+        const writeBdi = (label, b, val) => {
+          if (!b) return;
+          const h = wsB.addRow([label + ' — ' + b.nome]);
+          h.getCell(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+          h.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+          wsB.mergeCells(`A${h.number}:D${h.number}`);
+          wsB.addRow(['BDI efetivo:', '', '', val]).getCell(4).numFmt = '0.0000%';
+          wsB.addRow(['Base de cálculo:', '', '', b.base_calculo || '—']);
+          wsB.addRow([]);
+          const hdr2 = wsB.addRow(['Sigla', 'Componente', '', 'Valor']);
+          hdr2.eachCell(c => { c.font = { bold: true, size: 10 }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }; });
+          // Faixa aplicável para o custo direto
+          const faixa = b.faixas.find(f => f.ate == null || custoDireto <= +f.ate) || b.faixas[b.faixas.length - 1];
+          const rows = [
+            ['AC', 'Administração Central', '', faixa.AC || 0],
+            ['SG', 'Seguro e Garantia', '', faixa.SG || 0],
+            ['R', 'Risco', '', faixa.R || 0],
+            ['DF', 'Despesas Financeiras', '', faixa.DF || 0],
+            ['L', 'Lucro', '', faixa.L || 0],
+            ['I', 'COFINS', '', faixa.COFINS || 0],
+            ['',  'PIS', '', faixa.PIS || 0],
+            ['',  'ISS', '', faixa.ISS || 0],
+            ['',  'CPRB', '', faixa.CPRB || 0],
+          ];
+          rows.forEach(r => {
+            const row = wsB.addRow(r);
+            row.getCell(4).numFmt = '0.00%';
+          });
+          wsB.addRow([]);
+        };
+        writeBdi('BDI 1', bdiO, bdiOVal);
+        writeBdi('BDI 2', bdiM, bdiMVal);
+      }
+
+      // Download via blob
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeName = (orc.titulo || 'Orcamento').replace(/[^\w\-]+/g, '_');
+      a.href = url;
+      a.download = `${safeName}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+    }
 
     // ── Init (chamado pelo switchTab) ─────────────────────────
     window.orcInit = function() {
