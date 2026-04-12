@@ -3695,6 +3695,50 @@ body {
       bounds.push([p.lat, p.lon]);
     }
 
+    // Desenha as redes (linhas conectando PVs de cada OSE) com label
+    const zone = 22;
+    data.forEach((r, idx) => {
+      const c = cls[idx];
+      const lineColor = c.hasErr ? '#dc2626' : c.hasTQ ? '#eab308' : '#16a34a';
+      const pvsWithCoords = (r.pvs || []).filter(pv => pv.coord_x && pv.coord_y);
+      if (pvsWithCoords.length < 2) return;
+
+      const latlngs = pvsWithCoords.map(pv => {
+        const ll = utmToLatLon(pv.coord_x, pv.coord_y, zone, true);
+        return [ll.lat, ll.lon];
+      }).filter(ll => !isNaN(ll[0]) && !isNaN(ll[1]));
+      if (latlngs.length < 2) return;
+
+      // Polyline da rede
+      const line = L.polyline(latlngs, {
+        color: lineColor, weight: 3, opacity: 0.7, dashArray: c.hasErr ? '6,4' : null,
+      }).addTo(_oseMap);
+      line.bindPopup(
+        '<div style="font-family:\'DM Mono\',monospace;font-size:11px">' +
+        '<strong>OSE-' + r.ose + '</strong> [' + c.status + ']<br>' +
+        'L: ' + (r.excel_L ? r.excel_L.toFixed(2) + ' m' : '—') + '<br>' +
+        'i: ' + (r.excel_i ? (r.excel_i*100).toFixed(3) + '%' : '—') + '<br>' +
+        'PVs: ' + r.pvs.length +
+        '</div>'
+      );
+      _oseMapMarkers.push(line);
+
+      // Label no ponto médio da linha
+      const midIdx = Math.floor(latlngs.length / 2);
+      const midLat = (latlngs[midIdx][0] + latlngs[Math.max(0, midIdx-1)][0]) / 2;
+      const midLon = (latlngs[midIdx][1] + latlngs[Math.max(0, midIdx-1)][1]) / 2;
+      const label = L.marker([midLat, midLon], {
+        icon: L.divIcon({
+          className: '',
+          html: '<div style="background:rgba(15,23,42,0.8);color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;font-family:\'DM Mono\',monospace;white-space:nowrap;border:1px solid ' + lineColor + '">OSE-' + r.ose + '</div>',
+          iconSize: null,
+          iconAnchor: [20, 8],
+        }),
+        interactive: false,
+      }).addTo(_oseMap);
+      _oseMapMarkers.push(label);
+    });
+
     // Ajusta zoom pra caber todos os pontos
     if (bounds.length) {
       _oseMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 17 });
