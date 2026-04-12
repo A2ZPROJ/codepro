@@ -4182,14 +4182,13 @@ body {
     }
 
     function computeBdi(faixa) {
-      // Fórmula: BDI = (((1+AC+SG+R)*(1+L)*(1+I)) / (1 - COFINS - PIS - ISS - CPRB)) - 1
-      const AC = +faixa.AC || 0, SG = +faixa.SG || 0, R = +faixa.R || 0;
-      const DF = +faixa.DF || 0, L = +faixa.L || 0;
+      // Fórmula Acórdão 2622/2013 TCU (mesma do modelo SANEPAR MOS):
+      // BDI = (((1+AC+SG+R) * (1+DF) * (1+L)) / (1 - COFINS - PIS - ISS - CPRB)) - 1
+      const AC = +faixa.AC || 0, SG = +faixa.SG || 0, R  = +faixa.R  || 0;
+      const DF = +faixa.DF || 0, L  = +faixa.L  || 0;
       const COFINS = +faixa.COFINS || 0, PIS = +faixa.PIS || 0;
       const ISS = +faixa.ISS || 0, CPRB = +faixa.CPRB || 0;
-      // Nota: DF normalmente entra em (1+AC+SG+R+DF), mas o modelo SANEPAR separa.
-      // Vou manter a fórmula do modelo: (1+AC+SG+R)*(1+L)*(1+I) / (1-imp)
-      const num = (1 + AC + SG + R) * (1 + L) * (1 + COFINS);
+      const num = (1 + AC + SG + R) * (1 + DF) * (1 + L);
       const den = (1 - COFINS - PIS - ISS - CPRB);
       if (den <= 0) return 0;
       return (num / den) - 1;
