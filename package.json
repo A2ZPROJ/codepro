@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "precompile": "npx electron scripts/compile-bytecode.js && node scripts/obfuscate-html.js",
+    "precompile": "node scripts/compile-bytecode.js && node scripts/obfuscate-html.js",
     "postrestore": "node scripts/restore-source.js",
     "build": "npm run precompile && electron-builder --win && npm run postrestore",
     "build:publish": "npm run precompile && electron-builder --win --publish always && npm run postrestore"
