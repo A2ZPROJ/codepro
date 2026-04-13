@@ -4304,6 +4304,7 @@ body {
         <button class="orc-subtab active" data-sub="tabelas" style="background:none;border:none;border-bottom:2.5px solid var(--gray-900);color:var(--text);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:-1px">Tabelas de Preço</button>
         <button class="orc-subtab" data-sub="bdi" style="background:none;border:none;border-bottom:2.5px solid transparent;color:var(--text3);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;margin-bottom:-1px">BDI</button>
         <button class="orc-subtab" data-sub="orcamentos" style="background:none;border:none;border-bottom:2.5px solid transparent;color:var(--text3);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;margin-bottom:-1px">Orçamentos</button>
+        <button class="orc-subtab" data-sub="checklist" style="background:none;border:none;border-bottom:2.5px solid transparent;color:var(--text3);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;margin-bottom:-1px">Checklist de Entrega</button>
       </div>
 
       <!-- ─── SUB: TABELAS DE PREÇO ─────────────────────────────── -->
@@ -4350,6 +4351,22 @@ body {
         </div>
         <div id="orc-orc-list" style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
           <div style="padding:40px;text-align:center;color:var(--text3);font-size:12px">Carregando...</div>
+        </div>
+      </div>
+
+      <!-- ─── SUB: CHECKLIST DE ENTREGA ─────────────────────── -->
+      <div class="orc-sub" id="orc-sub-checklist" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">Checklist de Entrega</div>
+          <div style="font-size:11px;color:var(--text3)">Documentos necessários para a entrega da bacia — marque conforme concluir</div>
+          <button id="orc-checklist-add" style="margin-left:auto;background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">+ Adicionar item</button>
+        </div>
+        <div id="orc-checklist-list" style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
+          <div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">Carregando...</div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button id="orc-checklist-template" style="background:var(--surface);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:7px 14px;font-family:inherit;font-size:11px;cursor:pointer">Carregar template padrão</button>
+          <button id="orc-checklist-export" style="background:var(--surface);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:7px 14px;font-family:inherit;font-size:11px;cursor:pointer">Exportar como PDF</button>
         </div>
       </div>
 
@@ -4481,6 +4498,7 @@ body {
         </div>
         <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
           <button onclick="document.getElementById('orc-new-modal').style.display='none'" style="background:var(--surface);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;cursor:pointer">Cancelar</button>
+          <button onclick="window.orcLoadTemplate()" style="background:var(--surface);color:#6b21a8;border:1.5px solid #6b21a8;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Usar template</button>
           <button id="orc-new-save" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 18px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Criar e abrir</button>
         </div>
       </div>
@@ -4602,6 +4620,7 @@ body {
       if (name === 'tabelas')    loadTabelas();
       if (name === 'bdi')        loadBdi();
       if (name === 'orcamentos') loadOrcamentos();
+      if (name === 'checklist')  loadChecklist();
     }
 
     document.querySelectorAll('.orc-subtab').forEach(b => {
@@ -6728,6 +6747,166 @@ body {
         btn.disabled = false; btn.textContent = 'Importar OSE';
       }
     });
+
+    // ── Init (chamado pelo switchTab) ─────────────────────────
+    // ── Checklist de Entrega ─────────────────────────────────
+    // Lista local (salva em config) — cada item tem: nome, status, responsável
+    let _checklistItems = [];
+
+    function loadChecklist() {
+      try {
+        const fs = require('fs'), path = require('path'), os = require('os');
+        const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.codepro', 'config.json'), 'utf8'));
+        _checklistItems = cfg.checklist || [];
+      } catch { _checklistItems = []; }
+      renderChecklist();
+    }
+
+    function saveChecklist() {
+      try {
+        const fs = require('fs'), path = require('path'), os = require('os');
+        const cfgPath = path.join(os.homedir(), '.codepro', 'config.json');
+        const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+        cfg.checklist = _checklistItems;
+        fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+      } catch {}
+    }
+
+    function renderChecklist() {
+      const el = document.getElementById('orc-checklist-list');
+      if (!_checklistItems.length) {
+        el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3);font-size:12px">Nenhum item. Clique em <strong>Carregar template padrão</strong> ou <strong>+ Adicionar item</strong>.</div>';
+        return;
+      }
+      const done = _checklistItems.filter(i => i.status === 'pronto').length;
+      const total = _checklistItems.length;
+      const pct = total > 0 ? Math.round(done / total * 100) : 0;
+      el.innerHTML =
+        '<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">' +
+        '<div style="flex:1;height:8px;background:var(--surface2);border-radius:99px;overflow:hidden"><div style="width:' + pct + '%;height:100%;background:#16a34a;border-radius:99px;transition:width .3s"></div></div>' +
+        '<span style="font-size:12px;font-weight:700;color:' + (pct === 100 ? '#16a34a' : 'var(--text)') + '">' + pct + '% (' + done + '/' + total + ')</span>' +
+        '</div>' +
+        _checklistItems.map(function(item, idx) {
+          const colors = { pronto: '#16a34a', pendente: '#f59e0b', revisao: '#6b21a8' };
+          const labels = { pronto: 'Pronto', pendente: 'Pendente', revisao: 'Em revisão' };
+          const bg = item.status === 'pronto' ? 'rgba(22,163,74,0.05)' : '';
+          return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);' + (bg ? 'background:' + bg : '') + '">' +
+            '<input type="checkbox" ' + (item.status === 'pronto' ? 'checked' : '') + ' onchange="window.orcChecklistToggle(' + idx + ',this.checked)" style="cursor:pointer;width:16px;height:16px;accent-color:#16a34a"/>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:12px;font-weight:600;color:var(--text);' + (item.status === 'pronto' ? 'text-decoration:line-through;opacity:.6' : '') + '">' + (item.nome || '').replace(/</g,'&lt;') + '</div>' +
+              (item.responsavel ? '<div style="font-size:10px;color:var(--text3)">' + item.responsavel.replace(/</g,'&lt;') + '</div>' : '') +
+            '</div>' +
+            '<select onchange="window.orcChecklistStatus(' + idx + ',this.value)" style="padding:4px 8px;font-size:10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:' + (colors[item.status] || 'var(--text2)') + ';font-weight:700;font-family:inherit;cursor:pointer">' +
+              '<option value="pendente" ' + (item.status === 'pendente' ? 'selected' : '') + '>Pendente</option>' +
+              '<option value="revisao" ' + (item.status === 'revisao' ? 'selected' : '') + '>Em revisão</option>' +
+              '<option value="pronto" ' + (item.status === 'pronto' ? 'selected' : '') + '>Pronto</option>' +
+            '</select>' +
+            '<button onclick="window.orcChecklistDel(' + idx + ')" style="background:none;border:1px solid #fca5a5;color:#dc2626;border-radius:4px;padding:3px 7px;font-size:10px;cursor:pointer">✕</button>' +
+          '</div>';
+        }).join('');
+    }
+
+    window.orcChecklistToggle = function(idx, checked) {
+      _checklistItems[idx].status = checked ? 'pronto' : 'pendente';
+      saveChecklist(); renderChecklist();
+    };
+    window.orcChecklistStatus = function(idx, val) {
+      _checklistItems[idx].status = val;
+      saveChecklist(); renderChecklist();
+    };
+    window.orcChecklistDel = function(idx) {
+      _checklistItems.splice(idx, 1);
+      saveChecklist(); renderChecklist();
+    };
+
+    document.getElementById('orc-checklist-add').addEventListener('click', () => {
+      const nome = prompt('Nome do documento/item:');
+      if (!nome) return;
+      const resp = prompt('Responsável (opcional):', '') || '';
+      _checklistItems.push({ nome, responsavel: resp, status: 'pendente' });
+      saveChecklist(); renderChecklist();
+    });
+
+    // Template padrão de entrega SANEPAR/Acciona
+    document.getElementById('orc-checklist-template').addEventListener('click', () => {
+      if (_checklistItems.length && !confirm('Isso vai substituir o checklist atual. Continuar?')) return;
+      _checklistItems = [
+        { nome: 'Memorial Descritivo e de Cálculo (MTG)', responsavel: '', status: 'pendente' },
+        { nome: 'Memorial de Cálculo Hidráulico (MC)', responsavel: '', status: 'pendente' },
+        { nome: 'Orçamento Sintético (OR)', responsavel: '', status: 'pendente' },
+        { nome: 'Planilha de Cálculo das OSEs', responsavel: '', status: 'pendente' },
+        { nome: 'DXF — Mapas de Redes (DE)', responsavel: '', status: 'pendente' },
+        { nome: 'DXF — Perfis das OSEs (DE)', responsavel: '', status: 'pendente' },
+        { nome: 'PDF — Mapas de Redes', responsavel: '', status: 'pendente' },
+        { nome: 'PDF — Perfis das OSEs', responsavel: '', status: 'pendente' },
+        { nome: 'Conferência OSE (Relatório de Erros)', responsavel: '', status: 'pendente' },
+        { nome: 'GRD — Guia de Remessa de Documentos', responsavel: '', status: 'pendente' },
+        { nome: 'ART registrada no CREA', responsavel: '', status: 'pendente' },
+        { nome: 'Levantamento topográfico', responsavel: '', status: 'pendente' },
+        { nome: 'Estudo populacional / vazões', responsavel: '', status: 'pendente' },
+      ];
+      saveChecklist(); renderChecklist();
+    });
+
+    // Export checklist como PDF
+    document.getElementById('orc-checklist-export').addEventListener('click', () => {
+      if (!_checklistItems.length) { alert('Checklist vazio.'); return; }
+      const pdfMake = require('pdfmake/build/pdfmake');
+      const pdfFonts = require('pdfmake/build/vfs_fonts');
+      pdfMake.vfs = pdfFonts.vfs || pdfFonts.pdfMake?.vfs;
+      const done = _checklistItems.filter(i => i.status === 'pronto').length;
+      const body = [[
+        { text: '#', style: 'thdr' }, { text: 'Documento', style: 'thdr' },
+        { text: 'Responsável', style: 'thdr' }, { text: 'Status', style: 'thdr' },
+      ]];
+      _checklistItems.forEach((it, i) => {
+        const sc = it.status === 'pronto' ? '#16a34a' : it.status === 'revisao' ? '#6b21a8' : '#f59e0b';
+        body.push([
+          { text: String(i + 1), alignment: 'center' }, it.nome || '',
+          it.responsavel || '—',
+          { text: it.status === 'pronto' ? 'PRONTO' : it.status === 'revisao' ? 'REVISÃO' : 'PENDENTE', color: sc, bold: true },
+        ]);
+      });
+      const doc = {
+        pageSize: 'A4', pageMargins: [40, 60, 40, 50],
+        content: [
+          { text: 'CHECKLIST DE ENTREGA', fontSize: 16, bold: true, color: '#0f172a', margin: [0, 0, 0, 4] },
+          { text: done + '/' + _checklistItems.length + ' concluídos (' + Math.round(done/_checklistItems.length*100) + '%)', fontSize: 10, color: '#64748b', margin: [0, 0, 0, 14] },
+          { table: { headerRows: 1, widths: [25, '*', 100, 60], body }, layout: { hLineWidth: () => 0.5, vLineWidth: () => 0, hLineColor: () => '#e2e8f0', paddingLeft: () => 6, paddingRight: () => 6, paddingTop: () => 4, paddingBottom: () => 4, fillColor: (i) => i === 0 ? '#0f172a' : null } },
+        ],
+        styles: { thdr: { fontSize: 9, bold: true, color: '#ffffff' } },
+        defaultStyle: { fontSize: 10, color: '#334155' },
+      };
+      pdfMake.createPdf(doc).download('Checklist_Entrega.pdf');
+    });
+
+    // ── Template de Projeto ───────────────────────────────────
+    // Ao criar novo orçamento, opção de copiar dados de um anterior
+    window.orcLoadTemplate = async function() {
+      if (!sbReady()) return;
+      const { data: orcs } = await window.sb.from('orcamentos')
+        .select('id, titulo, cidade, microbacia, revisao, elaborador, eng_responsavel, eng_crea, bdi_obras_id, bdi_materiais_id, observacoes')
+        .order('atualizado_em', { ascending: false }).limit(10);
+      if (!orcs || !orcs.length) { alert('Nenhum orçamento anterior encontrado.'); return; }
+      const opts = orcs.map((o, i) => (i+1) + '. ' + (o.titulo || '—') + ' (' + (o.cidade || '') + ' ' + (o.revisao || '') + ')').join('\n');
+      const pick = prompt('Escolha um orçamento como template (número):\n\n' + opts, '1');
+      if (!pick) return;
+      const idx = parseInt(pick) - 1;
+      if (idx < 0 || idx >= orcs.length) return;
+      const t = orcs[idx];
+      // Preenche os campos do modal de novo orçamento
+      if (document.getElementById('orc-new-cidade'))     document.getElementById('orc-new-cidade').value = t.cidade || '';
+      if (document.getElementById('orc-new-elaborador')) document.getElementById('orc-new-elaborador').value = t.elaborador || '';
+      if (document.getElementById('orc-new-eng'))        document.getElementById('orc-new-eng').value = t.eng_responsavel || '';
+      if (document.getElementById('orc-new-crea'))       document.getElementById('orc-new-crea').value = t.eng_crea || '';
+      if (t.bdi_obras_id && document.getElementById('orc-new-bdi-obras')) document.getElementById('orc-new-bdi-obras').value = t.bdi_obras_id;
+      if (t.bdi_materiais_id && document.getElementById('orc-new-bdi-materiais')) document.getElementById('orc-new-bdi-materiais').value = t.bdi_materiais_id;
+      try {
+        const obs = t.observacoes ? JSON.parse(t.observacoes) : {};
+        if (obs.tabela_base_id && document.getElementById('orc-new-tabela')) document.getElementById('orc-new-tabela').value = obs.tabela_base_id;
+      } catch {}
+      alert('✓ Dados do template "' + t.titulo + '" carregados nos campos. Ajuste o título, revisão e cidade, e clique em "Criar e abrir".');
+    };
 
     // ── Init (chamado pelo switchTab) ─────────────────────────
     window.orcInit = function() {
