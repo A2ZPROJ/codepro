@@ -3086,7 +3086,7 @@ body {
         </div>
 
         <!-- Filtro -->
-        <div id="ose-filter-row" style="display:none;margin-bottom:12px;display:none;gap:8px;align-items:center;flex-wrap:wrap">
+        <div id="ose-filter-row" style="display:none;margin-bottom:12px;gap:8px;align-items:center;flex-wrap:wrap">
           <input id="ose-filter" oninput="oseFilter()" placeholder="Filtrar por OSE..." style="padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;width:180px"/>
           <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer">
             <input type="checkbox" id="ose-only-errors" onchange="oseFilter()" style="cursor:pointer"> Mostrar apenas divergências
@@ -3772,8 +3772,8 @@ body {
 
   window.oseRenderMap = function(data) {
     const wrap = document.getElementById('ose-map-wrap');
-    // Coleta PVs com coordenadas
-    const points = [];
+    // Coleta PVs com coordenadas brutas (UTM) primeiro
+    const rawPts = [];
     const cls = data.map(r => window.electronAPI.classifyOse(r));
     const seen = new Set();
     data.forEach((r, idx) => {
@@ -3781,17 +3781,37 @@ body {
       for (const pv of (r.pvs || [])) {
         if (!pv.coord_x || !pv.coord_y || seen.has(pv.id)) continue;
         seen.add(pv.id);
-        // Detecta zona UTM pelo range de X (heurística: PR = zona 22)
-        const ll = utmToLatLon(pv.coord_x, pv.coord_y, autoZone, true);
-        if (isNaN(ll.lat) || isNaN(ll.lon) || Math.abs(ll.lat) > 90) continue;
-        points.push({
-          id: pv.id, lat: ll.lat, lon: ll.lon,
+        rawPts.push({
+          id: pv.id, coord_x: pv.coord_x, coord_y: pv.coord_y,
           ose: r.ose, status: c.status, hasErr: c.hasErr, hasTQ: c.hasTQ,
           ct: pv.excel_ct, cf: pv.excel_cf_pv, prof: pv.excel_prof_pv,
           diam: pv.excel_diam,
         });
       }
     });
+
+    if (!rawPts.length) { wrap.style.display = 'none'; return; }
+
+    // Detecta zona UTM antes de converter coordenadas
+    function detectUtmZone(pts) {
+      const xs = pts.map(p => p.coord_x).filter(x => x != null);
+      if (!xs.length) return 22;
+      const avgX = xs.reduce((a,b) => a+b, 0) / xs.length;
+      for (let z = 18; z <= 25; z++) {
+        if (avgX > 160000 && avgX < 840000) return z;
+      }
+      return 22;
+    }
+    const autoZone = detectUtmZone(rawPts);
+    console.log('[Mapa] Zona UTM detectada:', autoZone, '(baseado em', rawPts.length, 'PVs)');
+
+    // Converte UTM → lat/lon
+    const points = [];
+    for (const p of rawPts) {
+      const ll = utmToLatLon(p.coord_x, p.coord_y, autoZone, true);
+      if (isNaN(ll.lat) || isNaN(ll.lon) || Math.abs(ll.lat) > 90) continue;
+      points.push({ ...p, lat: ll.lat, lon: ll.lon });
+    }
 
     if (!points.length) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
@@ -3812,28 +3832,6 @@ body {
       redes:  L.layerGroup().addTo(_oseMap),
       labels: L.layerGroup().addTo(_oseMap),
     };
-
-    // Detecta zona UTM automaticamente pelo range de X dos PVs
-    // UTM zones no Brasil: 18-25. Central meridian = (zone-1)*6 - 180 + 3
-    // X ~170k=zona 21, ~500k=zona 22, ~830k=zona 23 (aprox)
-    function detectUtmZone(pts) {
-      const xs = pts.map(p => p.coord_x).filter(x => x != null);
-      if (!xs.length) return 22;
-      const avgX = xs.reduce((a,b) => a+b, 0) / xs.length;
-      // X no UTM vai de ~160k (borda oeste da zona) a ~840k (borda leste)
-      // Centro da zona = 500k. Se avgX < 300k, pode ser a zona anterior.
-      // Para o Brasil sul (PR/SC/RS): zonas 21 (CM -57°), 22 (CM -51°), 23 (CM -45°)
-      // Heurística: Y ~7.2M-7.5M = latitude -22 a -25 (PR)
-      // Tenta calcular a zona pela longitude implícita
-      for (let z = 18; z <= 25; z++) {
-        const cm = (z - 1) * 6 - 180 + 3; // central meridian
-        // Se X está perto de 500k nessa zona, é ela
-        if (avgX > 160000 && avgX < 840000) return z;
-      }
-      return 22; // fallback
-    }
-    const autoZone = detectUtmZone(points);
-    console.log('[Mapa] Zona UTM detectada:', autoZone, '(baseado em', points.length, 'PVs)');
 
     // Adiciona marcadores de PV com cotas permanentes (estilo CAD)
     const bounds = [];
