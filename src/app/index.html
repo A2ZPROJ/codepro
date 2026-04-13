@@ -6391,102 +6391,195 @@ body {
     });
 
     // ── Importar da Conferência OSE ─────────────────────────
-    // Usa o window._ose.data do último parse da aba Conferência e mostra
-    // um painel com os agregados (L total, n° PVs por faixa de prof, n° TLs,
-    // contagem de TQ). Usuário clica em "Aplicar" para criar linhas
-    // manuais ou sugerir códigos da tabela base.
+    // Quantitativos automáticos: calcula métricas detalhadas da conferência OSE
+    // e busca códigos SANEPAR correspondentes na tabela base do orçamento.
     document.getElementById('orc-editor-import-ose').addEventListener('click', async () => {
       if (!_orcEditorCur) return;
       const oseData = window._ose && window._ose.data;
       if (!oseData || !oseData.length) {
-        alert('Nenhum resultado de Conferência OSE carregado nesta sessão.\n\nAbra a aba "Conferência", rode a comparação DXF+Planilha, e depois volta aqui pra importar os agregados.');
+        alert('Nenhum resultado de Conferência OSE carregado.\n\nAbra a aba Conferência, rode a comparação, e volte aqui.');
         return;
       }
 
-      // Agrega métricas
-      const agg = {
-        oses_total: oseData.length,
-        L_mapa: 0, L_excel: 0, L_perfil: 0,
-        pvs_count: 0, tls_count: 0,
-        pvs_por_faixa: { '0-2': 0, '2-3': 0, '3-4': 0, '4+': 0 },
-        tqs_count: 0, tqs_soma: 0,
-      };
-      const seen = new Set();
-      for (const r of oseData) {
-        if (r.mapa_L)   agg.L_mapa   += r.mapa_L;
-        if (r.excel_L)  agg.L_excel  += r.excel_L;
-        if (r.perfil_L) agg.L_perfil += r.perfil_L;
-        for (const pv of (r.pvs || [])) {
-          const key = pv.id;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const isTL = /^TL/i.test(pv.id || '');
-          if (isTL) agg.tls_count++;
-          else      agg.pvs_count++;
-          const h = Math.max(pv.excel_prof_pv || 0, pv.excel_prof_chegada || 0, pv.mapa_h || 0, pv.perf_h || 0);
-          if (h > 0) {
-            if (h <= 2)      agg.pvs_por_faixa['0-2']++;
-            else if (h <= 3) agg.pvs_por_faixa['2-3']++;
-            else if (h <= 4) agg.pvs_por_faixa['3-4']++;
-            else             agg.pvs_por_faixa['4+']++;
-          }
-          if (pv.excel_has_tq) {
-            agg.tqs_count++;
-            if (pv.excel_tq) agg.tqs_soma += pv.excel_tq;
+      const btn = document.getElementById('orc-editor-import-ose');
+      btn.disabled = true; btn.textContent = 'Calculando...';
+
+      try {
+        // ── 1. Agrega métricas detalhadas ──
+        let Ltotal = 0;
+        const Lporf = { '0-2': 0, '2-3': 0, '3-4': 0, '4-5': 0, '5+': 0 };
+        let nPVs = 0, nTLs = 0, nTQ = 0, nLigacoes = 0;
+        const pvsPorf = { '0-2': 0, '2-3': 0, '3-4': 0, '4-5': 0, '5+': 0 };
+        const diams = {};
+        const seen = new Set();
+        let somaProf = 0, nProf = 0;
+        const larguraVala = 0.65; // m (DN150 padrão)
+
+        for (const r of oseData) {
+          const L = r.excel_L || r.mapa_L || 0;
+          Ltotal += L;
+          // Prof média do trecho
+          const profs = (r.pvs || []).map(p => p.excel_prof_pv).filter(v => v != null && v > 0);
+          const profMedia = profs.length ? profs.reduce((a, b) => a + b, 0) / profs.length : 0;
+          const fk = profMedia <= 2 ? '0-2' : profMedia <= 3 ? '2-3' : profMedia <= 4 ? '3-4' : profMedia <= 5 ? '4-5' : '5+';
+          Lporf[fk] += L;
+
+          for (const pv of (r.pvs || [])) {
+            if (seen.has(pv.id)) continue;
+            seen.add(pv.id);
+            const isTL = /^TL/i.test(pv.id);
+            if (isTL) nTLs++; else nPVs++;
+            const h = pv.excel_prof_pv || 0;
+            if (h > 0) { somaProf += h; nProf++; }
+            const fk2 = h <= 2 ? '0-2' : h <= 3 ? '2-3' : h <= 4 ? '3-4' : h <= 5 ? '4-5' : '5+';
+            pvsPorf[fk2]++;
+            if (pv.excel_has_tq) nTQ++;
+            if (pv.excel_diam) diams[pv.excel_diam] = (diams[pv.excel_diam] || 0) + 1;
           }
         }
+        nLigacoes = nPVs + nTLs; // aprox — cada PV/TL atende ligações
+        const profMedia = nProf > 0 ? somaProf / nProf : 1.5;
+        const dnPrincipal = Object.keys(diams).sort((a, b) => diams[b] - diams[a])[0] || '150';
+
+        // ── 2. Calcula volumes ──
+        const volEscTotal = Ltotal * larguraVala * profMedia;
+        const volEsc02 = Lporf['0-2'] * larguraVala * Math.min(profMedia, 2);
+        const volEsc23 = Lporf['2-3'] * larguraVala * 2.5;
+        const volEsc34 = Lporf['3-4'] * larguraVala * 3.5;
+        const volEsc45 = Lporf['4-5'] * larguraVala * 4.5;
+        const volReaterro = volEscTotal * 0.85; // ~85% do volume é reaterro
+        const areaRepPav = Ltotal * larguraVala; // m² de pavimento a repor
+
+        // ── 3. Monta lista de quantitativos com palavras-chave pra busca ──
+        const quantitativos = [
+          // Topografia e acompanhamento
+          { desc: 'Locação e nivelamento p/ assentamento de tubulação', un: 'm', qt: +Ltotal.toFixed(2), busca: 'locação nivelamento assentamento' },
+          { desc: 'Acompanhamento de assentamento de tubulação', un: 'm', qt: +Ltotal.toFixed(2), busca: 'acompanhamento assentamento tubulação' },
+          { desc: 'Cadastro de PV e tubulação', un: 'ud', qt: nPVs + nTLs, busca: 'cadastro poço visita tubulação' },
+          { desc: 'Locação da obra c/ equipamento topográfico', un: 'm²', qt: +(Ltotal * 1.5).toFixed(2), busca: 'locação obra equipamento topográfico' },
+          // Sinalização
+          { desc: 'Fita plástica de sinalização', un: 'm', qt: +(Ltotal * 2).toFixed(0), busca: 'fita plástica' },
+          { desc: 'Tapume em tela plástica', un: 'm', qt: +(Ltotal * 2).toFixed(0), busca: 'tapume tela plástica' },
+          // Escavação
+          { desc: 'Escavação solo, profundidade 0 a 2 m', un: 'm³', qt: +volEsc02.toFixed(2), busca: 'escavação solo profundidade 0 2' },
+          { desc: 'Escavação solo, profundidade 2 a 3 m', un: 'm³', qt: +volEsc23.toFixed(2), busca: 'escavação solo profundidade 2 3', skip: volEsc23 < 1 },
+          { desc: 'Escavação solo, profundidade 3 a 4 m', un: 'm³', qt: +volEsc34.toFixed(2), busca: 'escavação solo profundidade 3 4', skip: volEsc34 < 1 },
+          // Reaterro
+          { desc: 'Reaterro compactado mecânico', un: 'm³', qt: +(volReaterro * 0.75).toFixed(2), busca: 'reaterro compactado mecânico' },
+          { desc: 'Reaterro compactado manual', un: 'm³', qt: +(volReaterro * 0.25).toFixed(2), busca: 'reaterro compactado manual' },
+          // Transporte
+          { desc: 'Transporte de material excedente', un: 'm³xkm', qt: +((volEscTotal - volReaterro) * 5).toFixed(2), busca: 'transporte material excedente' },
+          // Tubulação
+          { desc: 'Tubo PVC JE DN ' + dnPrincipal, un: 'm', qt: +Ltotal.toFixed(2), busca: 'DN ' + dnPrincipal },
+          // PVs por faixa de profundidade
+          { desc: 'PV pré-moldado profundidade ≤ 2 m', un: 'ud', qt: pvsPorf['0-2'], busca: 'poço visita profundidade 2', skip: pvsPorf['0-2'] < 1 },
+          { desc: 'PV pré-moldado profundidade 2 a 3 m', un: 'ud', qt: pvsPorf['2-3'], busca: 'poço visita profundidade 3', skip: pvsPorf['2-3'] < 1 },
+          { desc: 'PV pré-moldado profundidade 3 a 4 m', un: 'ud', qt: pvsPorf['3-4'], busca: 'poço visita profundidade 4', skip: pvsPorf['3-4'] < 1 },
+          { desc: 'PV pré-moldado profundidade > 4 m', un: 'ud', qt: (pvsPorf['4-5'] || 0) + (pvsPorf['5+'] || 0), busca: 'poço visita profundidade 5', skip: (pvsPorf['4-5']||0) + (pvsPorf['5+']||0) < 1 },
+          // TLs
+          { desc: 'Terminal de Limpeza (TL)', un: 'ud', qt: nTLs, busca: 'terminal limpeza', skip: nTLs < 1 },
+          // Pavimento
+          { desc: 'Reposição de pavimento (piso)', un: 'm²', qt: +areaRepPav.toFixed(2), busca: 'piso concreto desempenado reposição' },
+          // Ligações
+          { desc: 'Ligação predial (ramal)', un: 'ud', qt: nLigacoes, busca: 'ligação predial passeio' },
+          // T.Q.
+          { desc: 'Tubo de queda / degrau', un: 'ud', qt: nTQ, busca: 'tubo queda degrau', skip: nTQ < 1 },
+        ].filter(q => !q.skip && q.qt > 0);
+
+        // ── 4. Busca códigos SANEPAR na tabela base ──
+        const inserts = [];
+        let ordem = _orcEditorItens.reduce((m, x) => Math.max(m, x.ordem || 0), 0);
+        const existingCodes = new Set(_orcEditorItens.map(x => x.codigo_snapshot));
+
+        for (const q of quantitativos) {
+          ordem++;
+          let matched = null;
+          // Tenta busca full-text na tabela base
+          if (_orcEditorTabelaBase) {
+            const { data: results } = await window.sb.from('itens_tabela')
+              .select('id, codigo, descricao, unidade, valor_unitario, tabelas_preco(fonte, data_ref)')
+              .eq('tabela_id', _orcEditorTabelaBase)
+              .not('valor_unitario', 'is', null)
+              .textSearch('busca', q.busca, { type: 'plain', config: 'portuguese' })
+              .limit(1);
+            if (results && results.length) matched = results[0];
+          }
+          // Fallback: ilike
+          if (!matched && _orcEditorTabelaBase) {
+            const words = q.busca.split(' ').filter(w => w.length > 2).slice(0, 2);
+            if (words.length) {
+              const { data: r2 } = await window.sb.from('itens_tabela')
+                .select('id, codigo, descricao, unidade, valor_unitario, tabelas_preco(fonte, data_ref)')
+                .eq('tabela_id', _orcEditorTabelaBase)
+                .not('valor_unitario', 'is', null)
+                .ilike('descricao', '%' + words.join('%') + '%')
+                .limit(1);
+              if (r2 && r2.length) matched = r2[0];
+            }
+          }
+
+          if (matched && !existingCodes.has(matched.codigo)) {
+            existingCodes.add(matched.codigo);
+            inserts.push({
+              orcamento_id: _orcEditorCur.id, ordem,
+              item_tabela_id: matched.id,
+              fonte_snapshot: matched.tabelas_preco?.fonte || 'SANEPAR',
+              codigo_snapshot: matched.codigo,
+              descricao_snapshot: matched.descricao,
+              unidade_snapshot: matched.unidade,
+              valor_unitario_snapshot: matched.valor_unitario,
+              data_ref_snapshot: matched.tabelas_preco?.data_ref || null,
+              quantidade: q.qt, tipo_bdi: 'OBRAS',
+              observacao: 'Auto: ' + q.desc,
+            });
+          } else {
+            inserts.push({
+              orcamento_id: _orcEditorCur.id, ordem,
+              item_tabela_id: null,
+              fonte_snapshot: 'OSE-AUTO',
+              codigo_snapshot: null,
+              descricao_snapshot: q.desc,
+              unidade_snapshot: q.un,
+              valor_unitario_snapshot: 0,
+              data_ref_snapshot: new Date().toISOString().slice(0, 10),
+              quantidade: q.qt, tipo_bdi: 'OBRAS',
+            });
+          }
+        }
+
+        if (!inserts.length) { alert('Nenhum quantitativo calculado.'); return; }
+
+        // Resumo antes de inserir
+        const nMatched = inserts.filter(i => i.fonte_snapshot !== 'OSE-AUTO').length;
+        const nManual = inserts.filter(i => i.fonte_snapshot === 'OSE-AUTO').length;
+        const resumo = `=== QUANTITATIVOS CALCULADOS ===\n\n` +
+          `Total de itens: ${inserts.length}\n` +
+          `  • Com código SANEPAR encontrado: ${nMatched}\n` +
+          `  • Sem match (manual — valor R$0): ${nManual}\n\n` +
+          `Métricas usadas:\n` +
+          `  L total: ${Ltotal.toFixed(2)} m | DN: ${dnPrincipal} mm\n` +
+          `  PVs: ${nPVs} | TLs: ${nTLs} | T.Q.: ${nTQ}\n` +
+          `  Vol. escavação: ${volEscTotal.toFixed(1)} m³\n` +
+          `  Largura de vala: ${larguraVala} m\n\n` +
+          `Adicionar ao orçamento?`;
+        if (!confirm(resumo)) return;
+
+        // Insere em chunks
+        const chunkSize = 50;
+        for (let i = 0; i < inserts.length; i += chunkSize) {
+          const chunk = inserts.slice(i, i + chunkSize);
+          const { data: ins, error } = await window.sb.from('orcamento_itens').insert(chunk).select('*');
+          if (error) throw error;
+          _orcEditorItens.push(...(ins || []));
+        }
+        renderEditorTable();
+        alert('✓ ' + inserts.length + ' itens adicionados (' + nMatched + ' com código SANEPAR, ' + nManual + ' manuais).\n\nRevise os itens marcados como "OSE-AUTO" e substitua por códigos da tabela base.');
+      } catch (e) {
+        console.error(e);
+        alert('Erro: ' + e.message);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Importar OSE';
       }
-
-      // Monta painel simples com alert — UX com modal dá muito mais trabalho
-      const resumo =
-        `=== RESUMO DA CONFERÊNCIA OSE ===\n\n` +
-        `Total de OSEs: ${agg.oses_total}\n` +
-        `L total (Mapa):    ${agg.L_mapa.toFixed(2)} m\n` +
-        `L total (Planilha): ${agg.L_excel.toFixed(2)} m\n` +
-        `L total (Perfil):  ${agg.L_perfil.toFixed(2)} m\n\n` +
-        `PVs (sem TL): ${agg.pvs_count}\n` +
-        `  • 0 a 2 m: ${agg.pvs_por_faixa['0-2']}\n` +
-        `  • 2 a 3 m: ${agg.pvs_por_faixa['2-3']}\n` +
-        `  • 3 a 4 m: ${agg.pvs_por_faixa['3-4']}\n` +
-        `  • > 4 m:   ${agg.pvs_por_faixa['4+']}\n\n` +
-        `TLs: ${agg.tls_count}\n` +
-        `Tubos de queda: ${agg.tqs_count} (soma = ${agg.tqs_soma.toFixed(3)} m)\n\n` +
-        `Deseja criar linhas manuais no orçamento com esses agregados?\n` +
-        `(Você vai poder editar os códigos/valores depois.)`;
-
-      if (!confirm(resumo)) return;
-
-      // Cria linhas MANUAIS com os agregados — o usuário edita depois
-      const ordemStart = _orcEditorItens.reduce((m, x) => Math.max(m, x.ordem || 0), 0);
-      const linhas = [
-        { desc: 'Extensão total de rede coletora (Mapa)',        un: 'm',  qt: +agg.L_mapa.toFixed(2),   val: 0 },
-        { desc: 'PVs profundidade ≤ 2 m',                        un: 'ud', qt: agg.pvs_por_faixa['0-2'], val: 0 },
-        { desc: 'PVs profundidade 2 a 3 m',                      un: 'ud', qt: agg.pvs_por_faixa['2-3'], val: 0 },
-        { desc: 'PVs profundidade 3 a 4 m',                      un: 'ud', qt: agg.pvs_por_faixa['3-4'], val: 0 },
-        { desc: 'PVs profundidade > 4 m',                        un: 'ud', qt: agg.pvs_por_faixa['4+'],  val: 0 },
-        { desc: 'Terminais de Limpeza (TL)',                     un: 'ud', qt: agg.tls_count,            val: 0 },
-        { desc: 'Tubos de queda / degraus (quantidade)',         un: 'ud', qt: agg.tqs_count,            val: 0 },
-      ].filter(l => l.qt > 0);
-
-      const payload = linhas.map((l, i) => ({
-        orcamento_id: _orcEditorCur.id,
-        ordem: ordemStart + i + 1,
-        item_tabela_id: null,
-        fonte_snapshot: 'MANUAL',
-        codigo_snapshot: null,
-        descricao_snapshot: l.desc,
-        unidade_snapshot: l.un,
-        valor_unitario_snapshot: l.val,
-        data_ref_snapshot: new Date().toISOString().slice(0,10),
-        quantidade: l.qt,
-        tipo_bdi: 'OBRAS',
-      }));
-
-      const { data: inserted, error } = await window.sb.from('orcamento_itens').insert(payload).select('*');
-      if (error) { alert('Erro: ' + error.message); return; }
-      _orcEditorItens.push(...(inserted || []));
-      renderEditorTable();
-      alert('✓ ' + (inserted || []).length + ' linhas adicionadas como MANUAL. Edite os valores unitários e, se quiser, troque por códigos da tabela base.');
     });
 
     // ── Init (chamado pelo switchTab) ─────────────────────────
