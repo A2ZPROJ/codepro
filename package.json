@@ -1,12 +1,12 @@
 {
   "name": "codepro",
-  "version": "2.9.2",
+  "version": "2.9.3",
   "description": "Nexus — Gestão de Projetos A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "precompile": "node scripts/compile-bytecode.js && node scripts/obfuscate-html.js",
+    "precompile": "electron scripts/compile-bytecode.js && node scripts/obfuscate-html.js",
     "postrestore": "node scripts/restore-source.js",
     "build": "npm run precompile && electron-builder --win && npm run postrestore",
     "build:publish": "npm run precompile && electron-builder --win --publish always && npm run postrestore"
