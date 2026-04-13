@@ -2472,6 +2472,7 @@ body {
       <button class="tab-btn" draggable="true" onclick="switchTab('conferencia',this)">Conferência</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('orcamento',this);setTimeout(()=>window.orcInit&&window.orcInit(),60);">Orçamento</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('renomear',this)">Renomear</button>
+      <button class="tab-btn" draggable="true" onclick="switchTab('planilhas-gis',this)">Planilhas GIS</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('perfil',this)">Perfil</button>
       <button class="tab-btn" draggable="true" id="auditTabBtn" style="display:none" onclick="switchTab('audit',this)">Auditoria</button>
       <button class="tab-btn" draggable="true" id="diretoriaTabBtn" onclick="switchTab('diretoria',this);setTimeout(()=>window.ddashInit&&window.ddashInit(),60);">Dashboard Diretoria</button>
@@ -7739,6 +7740,1145 @@ body {
       </div>
     </div>
   </div>
+
+  <!-- ── PLANILHAS GIS TAB ── -->
+  <div class="tab-content" id="tab-planilhas-gis">
+    <style>
+      #tab-planilhas-gis .gis-card{background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:16px}
+      #tab-planilhas-gis .gis-card-head{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+      #tab-planilhas-gis .gis-card-head h3{font-size:14px;font-weight:600;color:var(--text);margin:0}
+      #tab-planilhas-gis .gis-card-body{padding:16px 20px}
+      #tab-planilhas-gis .gis-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600}
+      #tab-planilhas-gis .gis-badge.red{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+      #tab-planilhas-gis .gis-badge.amber{background:#fffbeb;color:#d97706;border:1px solid #fde68a}
+      #tab-planilhas-gis .gis-badge.green{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}
+      #tab-planilhas-gis .gis-badge.blue{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe}
+      [data-theme="dark"] #tab-planilhas-gis .gis-badge.red{background:#450a0a;color:#fca5a5;border-color:#7f1d1d}
+      [data-theme="dark"] #tab-planilhas-gis .gis-badge.amber{background:#451a03;color:#fcd34d;border-color:#78350f}
+      [data-theme="dark"] #tab-planilhas-gis .gis-badge.green{background:#052e16;color:#86efac;border-color:#14532d}
+      [data-theme="dark"] #tab-planilhas-gis .gis-badge.blue{background:#172554;color:#93c5fd;border-color:#1e3a5f}
+      #tab-planilhas-gis .gis-tbl{width:100%;border-collapse:collapse;font-size:12px}
+      #tab-planilhas-gis .gis-tbl th{padding:8px 12px;text-align:left;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);background:var(--surface2);border-bottom:1px solid var(--border);position:sticky;top:0}
+      #tab-planilhas-gis .gis-tbl td{padding:7px 12px;border-bottom:1px solid var(--border);color:var(--text)}
+      #tab-planilhas-gis .gis-tbl tr:hover td{background:var(--surface2)}
+      #tab-planilhas-gis .gis-tbl .err-cell{font-weight:600}
+      #tab-planilhas-gis .gis-tbl .err-cell.red{color:#dc2626}
+      [data-theme="dark"] #tab-planilhas-gis .gis-tbl .err-cell.red{color:#fca5a5}
+      #tab-planilhas-gis .gis-tbl .err-cell.amber{color:#d97706}
+      [data-theme="dark"] #tab-planilhas-gis .gis-tbl .err-cell.amber{color:#fcd34d}
+      #tab-planilhas-gis .gis-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+      #tab-planilhas-gis .gis-stat{padding:14px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface2)}
+      #tab-planilhas-gis .gis-stat-num{font-size:24px;font-weight:700;line-height:1}
+      #tab-planilhas-gis .gis-stat-label{font-size:11px;color:var(--text3);margin-top:4px}
+      #tab-planilhas-gis .gis-filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+    </style>
+    <div style="padding:20px;max-width:1400px;margin:0 auto">
+
+      <!-- Seleção de arquivo -->
+      <div class="gis-card">
+        <div class="gis-card-head">
+          <h3>Planilhas GIS</h3>
+          <span style="font-size:11px;color:var(--text3)">Importar planilha GIS, auditar erros e gerar ROTINA</span>
+        </div>
+        <div class="gis-card-body">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <div style="font-size:12px;font-weight:600;color:var(--text2);width:100px;flex-shrink:0">Planilha GIS</div>
+            <input id="gis-file-path" readonly placeholder="Selecione a planilha GIS (.xls / .xlsx)..." style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface2);outline:none;min-width:0"/>
+            <button onclick="window.gisPick()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:7px 12px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0">Procurar</button>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <button id="gis-audit-btn" onclick="window.gisAudit()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:9px 24px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Auditar</button>
+            <button id="gis-export-btn" onclick="window.gisExportXLSX()" style="display:none;background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;cursor:pointer">Exportar Relatório XLSX</button>
+            <span id="gis-status" style="font-size:12px;color:var(--text3)"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resumo -->
+      <div id="gis-summary-section" style="display:none">
+        <div class="gis-summary-grid" id="gis-summary-grid"></div>
+      </div>
+
+      <!-- Filtros -->
+      <div id="gis-filter-section" style="display:none" class="gis-filter-bar">
+        <input id="gis-filter-ose" oninput="window.gisApplyFilter()" placeholder="Filtrar por OSE..." style="padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;width:180px"/>
+        <select id="gis-filter-type" onchange="window.gisApplyFilter()" style="padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none">
+          <option value="">Todos os tipos de erro</option>
+          <option value="formula_error">Erro de fórmula (#N/A)</option>
+          <option value="tq_nomenclatura">TQ- deveria ser PV-</option>
+          <option value="tl_deveria_pv">TL com h > 1.30m</option>
+          <option value="prof_rasa">Profundidade < 1.10m</option>
+          <option value="prof_negativa">Profundidade negativa</option>
+          <option value="decl_baixa">Declividade baixa</option>
+          <option value="contra_declive">Contra-declive</option>
+        </select>
+        <select id="gis-filter-polygon" onchange="window.gisApplyFilter()" style="padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none">
+          <option value="">Todos os polígonos</option>
+        </select>
+        <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="checkbox" id="gis-only-errors" onchange="window.gisApplyFilter()" style="cursor:pointer"> Apenas com erros
+        </label>
+        <span id="gis-filter-count" style="margin-left:auto;font-size:11px;color:var(--text3)"></span>
+      </div>
+
+      <!-- Tabela de resultados -->
+      <div id="gis-results-section" style="display:none" class="gis-card">
+        <div class="gis-card-head">
+          <h3>Erros Encontrados</h3>
+          <span id="gis-err-count" class="gis-badge red">0</span>
+        </div>
+        <div style="overflow:auto;max-height:70vh">
+          <table class="gis-tbl">
+            <thead>
+              <tr>
+                <th style="width:60px">Linha</th>
+                <th style="width:100px">OSE</th>
+                <th style="width:90px">Trecho</th>
+                <th style="width:80px">Coluna</th>
+                <th style="width:170px">Tipo</th>
+                <th>Valor Atual</th>
+                <th>Motivo</th>
+              </tr>
+            </thead>
+            <tbody id="gis-err-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tabela resumo por OSE -->
+      <div id="gis-ose-section" style="display:none" class="gis-card">
+        <div class="gis-card-head">
+          <h3>Resumo por OSE</h3>
+          <span id="gis-ose-count" class="gis-badge blue">0</span>
+        </div>
+        <div style="overflow:auto;max-height:50vh">
+          <table class="gis-tbl">
+            <thead>
+              <tr>
+                <th>OSE</th>
+                <th style="text-align:center">Trechos</th>
+                <th style="text-align:center">Erros</th>
+                <th style="width:80px;text-align:center">Polígono</th>
+                <th>Tipos de Erro</th>
+                <th style="text-align:center">Status</th>
+              </tr>
+            </thead>
+            <tbody id="gis-ose-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Mapa GIS -->
+      <div id="gis-map-section" style="display:none" class="gis-card">
+        <div class="gis-card-head" style="flex-wrap:wrap;gap:8px">
+          <h3>Mapa da Rede</h3>
+          <div style="display:flex;align-items:center;gap:6px">
+            <select id="gis-map-poly" onchange="window.gisMapRender()" style="padding:4px 8px;font-family:inherit;font-size:11px;border:1px solid var(--border);border-radius:4px;color:var(--text);background:var(--surface2);outline:none">
+              <option value="">Selecione um polígono</option>
+            </select>
+            <span id="gis-map-count" style="font-size:10px;color:var(--text3)"></span>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;font-size:10px">
+            <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;display:inline-block"></span> OK</span>
+            <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:50%;background:#dc2626;display:inline-block"></span> Erro</span>
+            <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block"></span> Alerta</span>
+            <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" checked onchange="window.gisMapToggleLayer('pvs',this.checked)" style="cursor:pointer"> PVs</label>
+            <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" checked onchange="window.gisMapToggleLayer('redes',this.checked)" style="cursor:pointer"> Redes</label>
+            <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" id="gis-map-labels-cb" onchange="window.gisMapToggleLayer('labels',this.checked)" style="cursor:pointer"> Labels</label>
+            <button id="gis-map-theme-btn" onclick="window.gisMapToggleTheme()" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;color:var(--text2);font-family:inherit;font-weight:600">Escuro</button>
+          </div>
+        </div>
+        <div id="gis-map" style="height:500px;width:100%"></div>
+      </div>
+
+      <!-- Gerar Planilhas por Polígono -->
+      <div id="gis-gerar-section" style="display:none" class="gis-card">
+        <div class="gis-card-head">
+          <h3>Gerar Planilhas por Polígono</h3>
+          <span style="font-size:11px;color:var(--text3)">Cria uma planilha ROTINA para cada polígono selecionado</span>
+        </div>
+        <div class="gis-card-body">
+          <!-- Pasta de saída -->
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <div style="font-size:12px;font-weight:600;color:var(--text2);width:110px;flex-shrink:0">Pasta de saída</div>
+            <input id="gis-output-folder" readonly placeholder="Selecione a pasta onde salvar as planilhas..." style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface2);outline:none;min-width:0"/>
+            <button onclick="window.gisPickOutputFolder()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:7px 12px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0">Procurar</button>
+          </div>
+          <!-- Cidade -->
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <div style="font-size:12px;font-weight:600;color:var(--text2);width:110px;flex-shrink:0">Cidade</div>
+            <input id="gis-cidade" value="UBIRATÃ" style="width:200px;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface2);outline:none"/>
+          </div>
+          <!-- Seleção de polígonos -->
+          <div style="margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div style="font-size:12px;font-weight:600;color:var(--text2)">Polígonos</div>
+              <button onclick="window.gisSelectAllPolys(true)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:3px 10px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit">Selecionar todos</button>
+              <button onclick="window.gisSelectAllPolys(false)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:3px 10px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit">Limpar</button>
+            </div>
+            <div id="gis-poly-checkboxes" style="display:flex;flex-wrap:wrap;gap:6px;max-height:140px;overflow-y:auto;padding:8px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)"></div>
+          </div>
+          <!-- Gerar -->
+          <div style="display:flex;gap:10px;align-items:center">
+            <button id="gis-gerar-btn" onclick="window.gisGerarLote()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:9px 24px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Gerar Planilhas</button>
+            <span id="gis-gerar-status" style="font-size:12px;color:var(--text3)"></span>
+          </div>
+          <!-- Progress -->
+          <div id="gis-gerar-progress" style="display:none;margin-top:12px">
+            <div style="background:var(--surface2);border-radius:6px;height:6px;overflow:hidden">
+              <div id="gis-gerar-bar" style="height:100%;background:var(--accent);border-radius:6px;transition:width .3s;width:0%"></div>
+            </div>
+            <div id="gis-gerar-log" style="margin-top:8px;max-height:200px;overflow-y:auto;font-size:11px;font-family:'DM Mono',monospace;color:var(--text2);padding:8px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+  // ── PLANILHAS GIS ──
+  (function(){
+    'use strict';
+    const xlsx = require('xlsx');
+
+    // Constantes do oseStatus.js
+    const H_MIN = 1.10;
+    const TL_MAX_H = 1.30;
+    const DECL_MIN_SHALLOW = 0.01;
+    const DECL_MIN_DEEP = 0.0055;
+    const DECL_DEPTH_LIMIT = 3.0;
+    const DECL_EPS = 5e-5;
+
+    const ERROR_LABELS = {
+      formula_error: 'Erro de fórmula',
+      tq_nomenclatura: 'TQ- deveria PV-',
+      tl_deveria_pv: 'TL h > 1.30m',
+      prof_rasa: 'Prof. < 1.10m',
+      prof_negativa: 'Prof. negativa',
+      decl_baixa: 'Decliv. baixa',
+      contra_declive: 'Contra-declive',
+    };
+    const ERROR_COLORS = {
+      formula_error: 'red', tq_nomenclatura: 'red', tl_deveria_pv: 'red',
+      prof_rasa: 'amber', prof_negativa: 'red', decl_baixa: 'amber', contra_declive: 'red',
+    };
+
+    let gisData = null;   // { rows, errors, oses, polygons, filePath }
+
+    // ── Pick file ──
+    window.gisPick = async () => {
+      if (!window.electronAPI || typeof window.electronAPI.selectFile !== 'function') {
+        alert('API não disponível. Reinstale o Nexus.');
+        return;
+      }
+      const p = await window.electronAPI.selectFile([{ name: 'Excel', extensions: ['xls','xlsx'] }]);
+      if (p) document.getElementById('gis-file-path').value = p;
+    };
+
+    // ── Cell helpers ──
+    function cellVal(ws, r, c) {
+      const addr = xlsx.utils.encode_cell({ r, c });
+      const cell = ws[addr];
+      if (!cell) return { val: null, type: null, error: false };
+      if (cell.t === 'e') return { val: cell.w || '#N/A', type: 'error', error: true };
+      return { val: cell.v, type: cell.t, error: false };
+    }
+    function cellStr(ws, r, c) {
+      const { val } = cellVal(ws, r, c);
+      return (val != null && val !== '') ? String(val) : '';
+    }
+    function cellNum(ws, r, c) {
+      const { val } = cellVal(ws, r, c);
+      return (typeof val === 'number') ? val : null;
+    }
+
+    // ── Column map (0-indexed) ──
+    const COL = {
+      OSE1a: 5,    // F
+      OSE: 6,      // G
+      tipo_pv: 7,  // H
+      tipo_tubo: 8,// I
+      pv_mont: 9,  // J
+      px_x: 10,    // K
+      px_y: 11,    // L
+      pv_jus: 12,  // M
+      terr_mont: 13,// N
+      terr_jus: 14, // O
+      proj_mont: 15,// P
+      proj_jus: 16, // Q
+      prof_mont: 17,// R
+      prof_jus: 18, // S
+      compr: 19,    // T
+      material: 20, // U
+      diam: 21,     // V
+    };
+
+    // ── Detect polygon column ──
+    function findPolygonCol(ws, ref) {
+      // Check headers row 0 for "POLIGONO" or "poligono"
+      for (let c = 26; c < Math.min(ref.e.c + 1, 50); c++) {
+        const h = cellStr(ws, 0, c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (h.includes('poligono') || h.includes('polygon')) return c;
+      }
+      // No fallback — only detect by explicit header to avoid false positives
+      return -1;
+    }
+
+    // ── Detect end of main data (before auxiliary block) ──
+    function findMainDataEnd(ws, ref) {
+      // Main data has col M (pv_jus) filled; aux block doesn't
+      // Scan backwards from end
+      for (let r = ref.e.r; r >= 1; r--) {
+        const jus = cellStr(ws, r, COL.pv_jus);
+        if (jus) return r;
+      }
+      return ref.e.r;
+    }
+
+    // ── AUDIT ──
+    window.gisAudit = () => {
+      const filePath = document.getElementById('gis-file-path').value;
+      if (!filePath) { alert('Selecione uma planilha GIS primeiro.'); return; }
+
+      const st = document.getElementById('gis-status');
+      st.textContent = 'Carregando...';
+      st.style.color = 'var(--text3)';
+
+      setTimeout(() => {
+        try {
+          const wb = xlsx.readFile(filePath, { cellFormula: false, cellNF: false, cellStyles: false });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const ref = xlsx.utils.decode_range(ws['!ref']);
+
+          const lastMainRow = findMainDataEnd(ws, ref);
+          const polyCol = findPolygonCol(ws, ref);
+
+          const errors = [];
+          const oseMap = {};   // ose1a -> { trechos, errors, polygon }
+          const polygons = new Set();
+
+          for (let r = 1; r <= lastMainRow; r++) {
+            const ose = cellStr(ws, r, COL.OSE);
+            const ose1a = cellStr(ws, r, COL.OSE1a);
+            if (!ose && !ose1a) continue;
+
+            const rowNum = r + 1; // 1-indexed for user
+            const poly = polyCol >= 0 ? cellVal(ws, r, polyCol).val : null;
+            const polyStr = poly != null ? String(Math.round(Number(poly))) : '';
+            if (polyStr && polyStr !== 'NaN') polygons.add(polyStr);
+
+            // OSE summary
+            if (ose1a) {
+              if (!oseMap[ose1a]) oseMap[ose1a] = { trechos: 0, errors: 0, polygon: polyStr, errorTypes: new Set() };
+              oseMap[ose1a].trechos++;
+              if (!oseMap[ose1a].polygon && polyStr) oseMap[ose1a].polygon = polyStr;
+            }
+
+            const pvMont = cellVal(ws, r, COL.pv_mont);
+            const pvJus = cellVal(ws, r, COL.pv_jus);
+            const profMont = cellNum(ws, r, COL.prof_mont);
+            const profJus = cellNum(ws, r, COL.prof_jus);
+            const projMont = cellNum(ws, r, COL.proj_mont);
+            const projJus = cellNum(ws, r, COL.proj_jus);
+            const compr = cellNum(ws, r, COL.compr);
+
+            const addErr = (type, col, colName, value, motivo) => {
+              errors.push({ row: rowNum, ose, ose1a, trecho: ose1a, col: colName, type, value: String(value ?? ''), motivo, polygon: polyStr });
+              if (oseMap[ose1a]) { oseMap[ose1a].errors++; oseMap[ose1a].errorTypes.add(type); }
+            };
+
+            // 1. Formula errors — scan all relevant columns
+            for (const [name, ci] of Object.entries(COL)) {
+              const cv = cellVal(ws, r, ci);
+              if (cv.error) {
+                addErr('formula_error', ci, name.toUpperCase(), cv.val, 'Erro de fórmula — lookup sem resultado');
+              }
+            }
+
+            // 2. TQ- nomenclatura
+            if (!pvMont.error && typeof pvMont.val === 'string' && pvMont.val.startsWith('TQ-')) {
+              addErr('tq_nomenclatura', COL.pv_mont, 'J (pv_mont)', pvMont.val, 'Nomenclatura incorreta — "TQ-" deveria ser "PV-"');
+            }
+            if (!pvJus.error && typeof pvJus.val === 'string' && pvJus.val.startsWith('TQ-')) {
+              addErr('tq_nomenclatura', COL.pv_jus, 'M (pv_jus)', pvJus.val, 'Nomenclatura incorreta — "TQ-" deveria ser "PV-"');
+            }
+
+            // 3. TL com h > 1.30
+            if (!pvMont.error && typeof pvMont.val === 'string' && pvMont.val.toUpperCase().startsWith('TL') && profMont != null && profMont > TL_MAX_H) {
+              addErr('tl_deveria_pv', COL.pv_mont, 'J (pv_mont)', pvMont.val, 'TL com h=' + profMont.toFixed(3) + 'm > ' + TL_MAX_H + 'm — deveria ser PV');
+            }
+            if (!pvJus.error && typeof pvJus.val === 'string' && pvJus.val.toUpperCase().startsWith('TL') && profJus != null && profJus > TL_MAX_H) {
+              addErr('tl_deveria_pv', COL.pv_jus, 'M (pv_jus)', pvJus.val, 'TL com h=' + profJus.toFixed(3) + 'm > ' + TL_MAX_H + 'm — deveria ser PV');
+            }
+
+            // 4. Profundidade < 1.10 (rasa)
+            if (profMont != null && profMont >= 0 && profMont < H_MIN) {
+              addErr('prof_rasa', COL.prof_mont, 'R (prof_mont)', profMont.toFixed(3), 'Profundidade ' + profMont.toFixed(3) + 'm < ' + H_MIN + 'm mínimo');
+            }
+            if (profJus != null && profJus >= 0 && profJus < H_MIN) {
+              addErr('prof_rasa', COL.prof_jus, 'S (prof_jus)', profJus.toFixed(3), 'Profundidade ' + profJus.toFixed(3) + 'm < ' + H_MIN + 'm mínimo');
+            }
+
+            // 5. Profundidade negativa
+            if (profMont != null && profMont < 0) {
+              addErr('prof_negativa', COL.prof_mont, 'R (prof_mont)', profMont.toFixed(4), 'Profundidade negativa — cota projetada acima do terreno');
+            }
+            if (profJus != null && profJus < 0) {
+              addErr('prof_negativa', COL.prof_jus, 'S (prof_jus)', profJus.toFixed(4), 'Profundidade negativa — cota projetada acima do terreno');
+            }
+
+            // 6. Declividade baixa
+            if (compr != null && compr > 0 && projMont != null && projJus != null) {
+              const desnivel = projMont - projJus;
+              const decl = Math.abs(desnivel) / compr;
+              const maxH = Math.max(profMont || 0, profJus || 0);
+
+              if (maxH <= DECL_DEPTH_LIMIT) {
+                if (decl < DECL_MIN_SHALLOW - DECL_EPS) {
+                  addErr('decl_baixa', COL.compr, 'P→Q (decliv.)', (decl * 100).toFixed(2) + '%',
+                    'Declividade ' + (decl * 100).toFixed(2) + '% < 1,00% (h_max=' + maxH.toFixed(2) + 'm ≤ 3m)');
+                }
+              } else {
+                if (decl < DECL_MIN_DEEP - DECL_EPS) {
+                  addErr('decl_baixa', COL.compr, 'P→Q (decliv.)', (decl * 100).toFixed(2) + '%',
+                    'Declividade ' + (decl * 100).toFixed(2) + '% < 0,55% (h_max=' + maxH.toFixed(2) + 'm > 3m)');
+                }
+              }
+
+              // 7. Contra-declive
+              if (desnivel < -0.001) {
+                addErr('contra_declive', COL.proj_mont, 'P→Q (decliv.)', 'Δ=' + Math.abs(desnivel).toFixed(3) + 'm',
+                  'Contra-declive — proj_mont=' + projMont.toFixed(3) + ' < proj_jus=' + projJus.toFixed(3));
+              }
+            }
+          }
+
+          // Store results
+          gisData = {
+            filePath,
+            totalRows: lastMainRow,
+            errors,
+            oseMap,
+            polygons: [...polygons].sort((a, b) => Number(a) - Number(b)),
+            polyCol,
+          };
+
+          renderSummary();
+          renderFilters();
+          renderErrors(errors);
+          renderOseSummary();
+
+          st.textContent = lastMainRow + ' linhas analisadas — ' + errors.length + ' problemas encontrados';
+          st.style.color = errors.length ? '#dc2626' : '#16a34a';
+
+          document.getElementById('gis-export-btn').style.display = '';
+
+        } catch (e) {
+          st.textContent = 'Erro: ' + e.message;
+          st.style.color = '#dc2626';
+          console.error('GIS Audit error:', e);
+        }
+
+        // Sempre mostrar seções pós-auditoria (mesmo com erro parcial)
+        if (gisData) {
+          try {
+            renderPolyCheckboxes();
+            document.getElementById('gis-gerar-section').style.display = '';
+          } catch (e2) { console.error('GIS renderPoly error:', e2); }
+          try {
+            renderGisMap();
+          } catch (e3) { console.error('GIS renderMap error:', e3); }
+        }
+      }, 50);
+    };
+
+    // ── Render summary cards ──
+    function renderSummary() {
+      const d = gisData;
+      const counts = {};
+      for (const e of d.errors) counts[e.type] = (counts[e.type] || 0) + 1;
+
+      const grid = document.getElementById('gis-summary-grid');
+      const items = [
+        { num: d.totalRows, label: 'Linhas analisadas', color: 'var(--text)' },
+        { num: Object.keys(d.oseMap).length, label: 'OSEs', color: 'var(--text)' },
+        { num: d.errors.length, label: 'Problemas totais', color: '#dc2626' },
+      ];
+      for (const [key, label] of Object.entries(ERROR_LABELS)) {
+        if (counts[key]) items.push({ num: counts[key], label, color: ERROR_COLORS[key] === 'red' ? '#dc2626' : '#d97706' });
+      }
+
+      grid.innerHTML = items.map(i => `
+        <div class="gis-stat">
+          <div class="gis-stat-num" style="color:${i.color}">${i.num.toLocaleString('pt-BR')}</div>
+          <div class="gis-stat-label">${i.label}</div>
+        </div>
+      `).join('');
+      document.getElementById('gis-summary-section').style.display = '';
+    }
+
+    // ── Render filters ──
+    function renderFilters() {
+      const sel = document.getElementById('gis-filter-polygon');
+      sel.innerHTML = '<option value="">Todos os polígonos</option>' +
+        gisData.polygons.map(p => `<option value="${p}">Polígono ${p}</option>`).join('');
+      document.getElementById('gis-filter-section').style.display = '';
+    }
+
+    // ── Apply filter ──
+    window.gisApplyFilter = () => {
+      if (!gisData) return;
+      const oseF = document.getElementById('gis-filter-ose').value.trim().toLowerCase();
+      const typeF = document.getElementById('gis-filter-type').value;
+      const polyF = document.getElementById('gis-filter-polygon').value;
+      const onlyErr = document.getElementById('gis-only-errors').checked;
+
+      let filtered = gisData.errors;
+      if (oseF) filtered = filtered.filter(e => (e.ose || '').toLowerCase().includes(oseF) || (e.ose1a || '').toLowerCase().includes(oseF));
+      if (typeF) filtered = filtered.filter(e => e.type === typeF);
+      if (polyF) filtered = filtered.filter(e => e.polygon === polyF);
+
+      renderErrors(filtered);
+      renderOseSummary(oseF, polyF, onlyErr);
+
+      document.getElementById('gis-filter-count').textContent =
+        filtered.length + ' de ' + gisData.errors.length + ' erros';
+    };
+
+    // ── Render error table ──
+    function renderErrors(errs) {
+      const tbody = document.getElementById('gis-err-tbody');
+      document.getElementById('gis-err-count').textContent = errs.length;
+      document.getElementById('gis-results-section').style.display = '';
+
+      if (!errs.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum erro encontrado</td></tr>';
+        return;
+      }
+
+      // Limit rendering for performance
+      const limit = 500;
+      const show = errs.slice(0, limit);
+      tbody.innerHTML = show.map(e => {
+        const cls = ERROR_COLORS[e.type] || 'red';
+        return `<tr>
+          <td style="font-family:'DM Mono',monospace;font-size:11px">${e.row}</td>
+          <td style="font-weight:600">${esc(e.ose)}</td>
+          <td>${esc(e.trecho)}</td>
+          <td style="font-family:'DM Mono',monospace;font-size:11px">${esc(e.col)}</td>
+          <td><span class="gis-badge ${cls}">${ERROR_LABELS[e.type] || e.type}</span></td>
+          <td class="err-cell ${cls}" style="font-family:'DM Mono',monospace;font-size:11px">${esc(e.value)}</td>
+          <td style="font-size:11px;color:var(--text2)">${esc(e.motivo)}</td>
+        </tr>`;
+      }).join('');
+
+      if (errs.length > limit) {
+        tbody.innerHTML += `<tr><td colspan="7" style="text-align:center;padding:12px;color:var(--text3);font-size:11px">... e mais ${errs.length - limit} erros (exporte o XLSX para ver todos)</td></tr>`;
+      }
+    }
+
+    // ── Render OSE summary ──
+    function renderOseSummary(oseF, polyF, onlyErr) {
+      if (!gisData) return;
+      const tbody = document.getElementById('gis-ose-tbody');
+      document.getElementById('gis-ose-section').style.display = '';
+
+      let entries = Object.entries(gisData.oseMap);
+      if (oseF) entries = entries.filter(([k]) => k.toLowerCase().includes(oseF));
+      if (polyF) entries = entries.filter(([, v]) => v.polygon === polyF);
+      if (onlyErr) entries = entries.filter(([, v]) => v.errors > 0);
+
+      document.getElementById('gis-ose-count').textContent = entries.length;
+
+      entries.sort((a, b) => {
+        const na = a[0].replace(/[^\d]/g, '').padStart(6, '0');
+        const nb = b[0].replace(/[^\d]/g, '').padStart(6, '0');
+        return na.localeCompare(nb);
+      });
+
+      const limit = 300;
+      const show = entries.slice(0, limit);
+      tbody.innerHTML = show.map(([ose, d]) => {
+        const status = d.errors > 0 ? '<span class="gis-badge red">ERRO</span>' : '<span class="gis-badge green">OK</span>';
+        const types = [...d.errorTypes].map(t => ERROR_LABELS[t] || t).join(', ');
+        return `<tr>
+          <td style="font-weight:600">${esc(ose)}</td>
+          <td style="text-align:center">${d.trechos}</td>
+          <td style="text-align:center;font-weight:600;color:${d.errors ? '#dc2626' : 'var(--text3)'}">${d.errors}</td>
+          <td style="text-align:center">${d.polygon || '—'}</td>
+          <td style="font-size:11px;color:var(--text2)">${types || '—'}</td>
+          <td style="text-align:center">${status}</td>
+        </tr>`;
+      }).join('');
+
+      if (entries.length > limit) {
+        tbody.innerHTML += `<tr><td colspan="6" style="text-align:center;padding:12px;color:var(--text3);font-size:11px">... e mais ${entries.length - limit}</td></tr>`;
+      }
+    }
+
+    // ── Export XLSX ──
+    window.gisExportXLSX = async () => {
+      if (!gisData || !gisData.errors.length) return;
+      const ExcelJS = require('exceljs');
+      const wbOut = new ExcelJS.Workbook();
+
+      // Sheet 1: Erros detalhados
+      const ws1 = wbOut.addWorksheet('Erros');
+      ws1.columns = [
+        { header: 'Linha', key: 'row', width: 8 },
+        { header: 'OSE', key: 'ose', width: 14 },
+        { header: 'Trecho', key: 'trecho', width: 12 },
+        { header: 'Polígono', key: 'polygon', width: 10 },
+        { header: 'Coluna', key: 'col', width: 14 },
+        { header: 'Tipo', key: 'type', width: 20 },
+        { header: 'Valor Atual', key: 'value', width: 18 },
+        { header: 'Motivo', key: 'motivo', width: 50 },
+      ];
+      // Header style
+      ws1.getRow(1).eachCell(c => { c.font = { bold: true, size: 10 }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }; });
+
+      for (const e of gisData.errors) {
+        const r = ws1.addRow({ row: e.row, ose: e.ose, trecho: e.trecho, polygon: e.polygon, col: e.col, type: ERROR_LABELS[e.type] || e.type, value: e.value, motivo: e.motivo });
+        if (ERROR_COLORS[e.type] === 'red') r.getCell('type').font = { color: { argb: 'FFDC2626' }, bold: true, size: 10 };
+        else if (ERROR_COLORS[e.type] === 'amber') r.getCell('type').font = { color: { argb: 'FFD97706' }, bold: true, size: 10 };
+      }
+
+      // Sheet 2: Resumo por OSE
+      const ws2 = wbOut.addWorksheet('Resumo OSE');
+      ws2.columns = [
+        { header: 'OSE', key: 'ose', width: 14 },
+        { header: 'Trechos', key: 'trechos', width: 10 },
+        { header: 'Erros', key: 'errors', width: 10 },
+        { header: 'Polígono', key: 'polygon', width: 10 },
+        { header: 'Tipos de Erro', key: 'types', width: 50 },
+        { header: 'Status', key: 'status', width: 10 },
+      ];
+      ws2.getRow(1).eachCell(c => { c.font = { bold: true, size: 10 }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }; });
+
+      for (const [ose, d] of Object.entries(gisData.oseMap).sort((a, b) => a[0].localeCompare(b[0]))) {
+        const r = ws2.addRow({ ose, trechos: d.trechos, errors: d.errors, polygon: d.polygon, types: [...d.errorTypes].map(t => ERROR_LABELS[t]).join(', '), status: d.errors ? 'ERRO' : 'OK' });
+        if (d.errors) { r.getCell('status').font = { color: { argb: 'FFDC2626' }, bold: true }; r.getCell('errors').font = { color: { argb: 'FFDC2626' }, bold: true }; }
+        else r.getCell('status').font = { color: { argb: 'FF16A34A' }, bold: true };
+      }
+
+      ws1.autoFilter = { from: 'A1', to: 'H1' };
+      ws2.autoFilter = { from: 'A1', to: 'F1' };
+
+      const buf = await wbOut.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'auditoria_gis.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+      document.getElementById('gis-status').textContent = 'Relatório exportado: auditoria_gis.xlsx';
+    };
+
+    // ── Pick output folder ──
+    window.gisPickOutputFolder = async () => {
+      if (!window.electronAPI || typeof window.electronAPI.selectFolder !== 'function') {
+        alert('API não disponível. Reinstale o Nexus.');
+        return;
+      }
+      const p = await window.electronAPI.selectFolder();
+      if (p) document.getElementById('gis-output-folder').value = p;
+    };
+
+    // ── Select/deselect all polygon checkboxes ──
+    window.gisSelectAllPolys = (state) => {
+      document.querySelectorAll('#gis-poly-checkboxes input[type=checkbox]').forEach(cb => cb.checked = state);
+    };
+
+    // ── Render polygon checkboxes (called after audit) ──
+    function renderPolyCheckboxes() {
+      const container = document.getElementById('gis-poly-checkboxes');
+      const gerarBtn = document.getElementById('gis-gerar-btn');
+      if (!gisData || !gisData.polygons.length) {
+        container.innerHTML = '<span style="color:var(--text3);font-size:11px">Nenhum polígono encontrado — a planilha precisa ter uma coluna com header "POLIGONO"</span>';
+        gerarBtn.disabled = true;
+        gerarBtn.style.opacity = '0.5';
+        return;
+      }
+      gerarBtn.disabled = false;
+      gerarBtn.style.opacity = '1';
+      // Count rows per polygon
+      const polyCounts = {};
+      for (const [ose, d] of Object.entries(gisData.oseMap)) {
+        if (d.polygon) polyCounts[d.polygon] = (polyCounts[d.polygon] || 0) + d.trechos;
+      }
+      container.innerHTML = gisData.polygons.map(p => {
+        const cnt = polyCounts[p] || 0;
+        return `<label style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:4px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:12px;white-space:nowrap">
+          <input type="checkbox" value="${p}" style="cursor:pointer"> Poly ${p} <span style="font-size:10px;color:var(--text3)">(${cnt})</span>
+        </label>`;
+      }).join('');
+    }
+
+    // ── Build one ROTINA workbook for a polygon ──
+    async function buildRotinaForPoly(ws, ref, lastMain, polyCol, polyVal, cidade) {
+      const ExcelJS = require('exceljs');
+      const fs = require('fs');
+
+      const rows = [];
+      const oseSet = new Set();
+      for (let r = 1; r <= lastMain; r++) {
+        const pv = cellVal(ws, r, polyCol).val;
+        const pStr = pv != null ? String(Math.round(Number(pv))) : '';
+        if (pStr !== polyVal) continue;
+
+        const rowData = {};
+        for (let c = 0; c <= ref.e.c; c++) {
+          const addr = xlsx.utils.encode_cell({ r, c });
+          if (ws[addr]) rowData[c] = ws[addr].v;
+        }
+        rows.push(rowData);
+        const ose1a = cellStr(ws, r, COL.OSE1a);
+        if (ose1a) oseSet.add(ose1a);
+      }
+
+      if (!rows.length) return { rows: 0, oses: 0 };
+
+      const wbOut = new ExcelJS.Workbook();
+      const wsOut = wbOut.addWorksheet('ROTINA');
+
+      // Headers
+      const headers = [];
+      for (let c = 0; c <= ref.e.c; c++) headers.push(cellStr(ws, 0, c));
+      const extraHeaders = { 29: 'numero da OSE', 30: 'CIDADE', 31: 'DATA', 32: 'ESCALA', 33: 'TRECHO_DA_OSE', 34: 'SUB BACIA' };
+      for (const [ci, h] of Object.entries(extraHeaders)) headers[Number(ci)] = h;
+      wsOut.addRow(headers);
+      wsOut.getRow(1).eachCell(c => { c.font = { bold: true, size: 10 }; });
+
+      // Data rows
+      const today = new Date().toISOString().slice(0, 10);
+      for (const rd of rows) {
+        const vals = [];
+        for (let c = 0; c <= ref.e.c; c++) vals.push(rd[c] != null ? rd[c] : '');
+        vals[29] = rd[COL.OSE1a] || '';
+        vals[30] = cidade;
+        vals[31] = today;
+        vals[33] = rd[COL.OSE] || '';
+        wsOut.addRow(vals);
+      }
+
+      // Final block: unique OSEs
+      const sortedOses = [...oseSet].sort((a, b) => {
+        const na = a.replace(/[^\d]/g, '').padStart(6, '0');
+        const nb = b.replace(/[^\d]/g, '').padStart(6, '0');
+        return na.localeCompare(nb);
+      });
+      for (const ose of sortedOses) {
+        const emptyRow = new Array(ref.e.c + 1).fill('');
+        emptyRow[29] = ose;
+        emptyRow[30] = cidade;
+        emptyRow[31] = today;
+        wsOut.addRow(emptyRow);
+      }
+
+      return { wb: wbOut, rows: rows.length, oses: sortedOses.length };
+    }
+
+    // ── Gerar ROTINA em lote ──
+    window.gisGerarLote = async () => {
+      if (!gisData) { alert('Faça a auditoria primeiro.'); return; }
+      const folder = document.getElementById('gis-output-folder').value;
+      if (!folder) { alert('Selecione a pasta de saída.'); return; }
+      const cidade = document.getElementById('gis-cidade').value.trim() || 'UBIRATÃ';
+
+      const checkboxes = document.querySelectorAll('#gis-poly-checkboxes input[type=checkbox]:checked');
+      const selectedPolys = [...checkboxes].map(cb => cb.value);
+      if (!selectedPolys.length) { alert('Selecione pelo menos um polígono.'); return; }
+
+      const st = document.getElementById('gis-gerar-status');
+      const bar = document.getElementById('gis-gerar-bar');
+      const log = document.getElementById('gis-gerar-log');
+      const progress = document.getElementById('gis-gerar-progress');
+      const btn = document.getElementById('gis-gerar-btn');
+
+      progress.style.display = '';
+      log.innerHTML = '';
+      bar.style.width = '0%';
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+      st.textContent = 'Gerando...';
+      st.style.color = 'var(--text3)';
+
+      const addLog = (msg, color) => {
+        log.innerHTML += '<div style="color:' + (color || 'var(--text2)') + '">' + msg + '</div>';
+        log.scrollTop = log.scrollHeight;
+      };
+
+      try {
+        const fs = require('fs');
+        const pathMod = require('path');
+        addLog('Lendo planilha GIS...');
+        const wb = xlsx.readFile(gisData.filePath, { cellFormula: false });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const ref = xlsx.utils.decode_range(ws['!ref']);
+        const lastMain = findMainDataEnd(ws, ref);
+        const polyCol = gisData.polyCol;
+
+        // Get base name from source file
+        const srcName = pathMod.basename(gisData.filePath, pathMod.extname(gisData.filePath));
+
+        let totalFiles = 0;
+        let totalRows = 0;
+
+        for (let i = 0; i < selectedPolys.length; i++) {
+          const poly = selectedPolys[i];
+          const pct = Math.round(((i + 1) / selectedPolys.length) * 100);
+          bar.style.width = pct + '%';
+
+          addLog('Polígono ' + poly + '...');
+          const result = await buildRotinaForPoly(ws, ref, lastMain, polyCol, poly, cidade);
+
+          if (!result.rows) {
+            addLog('  Polígono ' + poly + ': nenhuma linha — pulado', '#d97706');
+            continue;
+          }
+
+          const fileName = srcName + '_POLY' + poly.padStart(2, '0') + '.xlsx';
+          const filePath = pathMod.join(folder, fileName);
+          const buf = await result.wb.xlsx.writeBuffer();
+          fs.writeFileSync(filePath, Buffer.from(buf));
+
+          totalFiles++;
+          totalRows += result.rows;
+          addLog('  ' + fileName + ' — ' + result.rows + ' linhas, ' + result.oses + ' OSEs', '#16a34a');
+        }
+
+        bar.style.width = '100%';
+        st.textContent = totalFiles + ' planilhas geradas (' + totalRows.toLocaleString('pt-BR') + ' linhas total) em ' + folder;
+        st.style.color = '#16a34a';
+        addLog('');
+        addLog('Concluído: ' + totalFiles + ' arquivos salvos em ' + folder, '#16a34a');
+
+      } catch (e) {
+        st.textContent = 'Erro: ' + e.message;
+        st.style.color = '#dc2626';
+        addLog('ERRO: ' + e.message, '#dc2626');
+        console.error('GIS batch error:', e);
+      } finally {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+      }
+    };
+
+    // ── Gerar ROTINA individual (botão do filtro) ──
+    window.gisGerarRotina = async () => {
+      if (!gisData) return;
+      const polyF = document.getElementById('gis-filter-polygon').value;
+      if (!polyF) { alert('Selecione um polígono no filtro antes de gerar a ROTINA.'); return; }
+      const cidade = document.getElementById('gis-cidade')?.value?.trim() || 'UBIRATÃ';
+      const st = document.getElementById('gis-status');
+      st.textContent = 'Gerando ROTINA para polígono ' + polyF + '...';
+
+      try {
+        const wb = xlsx.readFile(gisData.filePath, { cellFormula: false });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const ref = xlsx.utils.decode_range(ws['!ref']);
+        const lastMain = findMainDataEnd(ws, ref);
+        const result = await buildRotinaForPoly(ws, ref, lastMain, gisData.polyCol, polyF, cidade);
+
+        if (!result.rows) { st.textContent = 'Nenhuma linha para polígono ' + polyF; return; }
+
+        const buf = await result.wb.xlsx.writeBuffer();
+        const pathMod = require('path');
+        const srcName = pathMod.basename(gisData.filePath, pathMod.extname(gisData.filePath));
+        const defaultName = srcName + '_POLY' + polyF.padStart(2, '0') + '.xlsx';
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = defaultName;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+        st.textContent = result.rows + ' linhas + ' + result.oses + ' OSEs — exportado: ' + defaultName;
+        st.style.color = '#16a34a';
+      } catch (e) {
+        st.textContent = 'Erro: ' + e.message;
+        st.style.color = '#dc2626';
+      }
+    };
+
+    // ── MAPA GIS ──
+    let _gisMap = null, _gisMapMarkers = [], _gisMapTile = null;
+    let _gisMapLayers = {};
+    let _gisMapCache = null; // { pvs, networks, utmZone } — pre-processed once
+    const _gisMapTiles = {
+      light: { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', attr: '&copy; OSM &copy; CARTO', sub: 'abcd' },
+      dark:  { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',  attr: '&copy; OSM &copy; CARTO', sub: 'abcd' },
+    };
+    let _gisMapTheme = 'light';
+    const _gisCanvasRenderer = L.canvas({ padding: 0.5 });
+
+    function gisUtmToLatLon(x, y, zone, south) {
+      const k0 = 0.9996, a = 6378137, e = 0.081819191, e2 = e * e;
+      const e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+      const M = south ? (y - 10000000) / k0 : y / k0;
+      const mu = M / (a * (1 - e2/4 - 3*e2*e2/64));
+      const phi1 = mu + (3*e1/2 - 27*e1*e1*e1/32)*Math.sin(2*mu)
+                      + (21*e1*e1/16 - 55*e1*e1*e1*e1/32)*Math.sin(4*mu)
+                      + (151*e1*e1*e1/96)*Math.sin(6*mu);
+      const sp = Math.sin(phi1), cp = Math.cos(phi1), tp = sp/cp;
+      const N1 = a / Math.sqrt(1 - e2*sp*sp);
+      const T1 = tp*tp, C1 = (e2/(1-e2))*cp*cp, R1 = a*(1-e2)/Math.pow(1-e2*sp*sp,1.5);
+      const D = (x - 500000) / (N1 * k0);
+      const lat = phi1 - (N1*tp/R1)*(D*D/2 - (5+3*T1+10*C1-4*C1*C1-9*e2/(1-e2))*D*D*D*D/24);
+      const lon0 = ((zone - 1) * 6 - 180 + 3) * Math.PI / 180;
+      const lon = lon0 + (D - (1+2*T1+C1)*D*D*D/6) / cp;
+      return { lat: lat * 180 / Math.PI, lon: lon * 180 / Math.PI };
+    }
+
+    window.gisMapToggleTheme = function() {
+      _gisMapTheme = _gisMapTheme === 'light' ? 'dark' : 'light';
+      const btn = document.getElementById('gis-map-theme-btn');
+      if (btn) btn.textContent = _gisMapTheme === 'light' ? 'Escuro' : 'Claro';
+      if (_gisMap && _gisMapTile) {
+        _gisMap.removeLayer(_gisMapTile);
+        const t = _gisMapTiles[_gisMapTheme];
+        _gisMapTile = L.tileLayer(t.url, { maxZoom: 22, maxNativeZoom: 19, attribution: t.attr, subdomains: t.sub }).addTo(_gisMap);
+      }
+    };
+
+    window.gisMapToggleLayer = function(name, show) {
+      if (_gisMapLayers[name]) {
+        if (show) _gisMap.addLayer(_gisMapLayers[name]);
+        else _gisMap.removeLayer(_gisMapLayers[name]);
+      }
+    };
+
+    // Pre-process map data once (called after audit)
+    function buildGisMapCache() {
+      if (!gisData) return;
+      const wb = xlsx.readFile(gisData.filePath, { cellFormula: false, cellNF: false, cellStyles: false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const ref = xlsx.utils.decode_range(ws['!ref']);
+      const lastMain = findMainDataEnd(ws, ref);
+      const polyCol = gisData.polyCol;
+
+      const errByRow = {};
+      for (const e of gisData.errors) {
+        if (!errByRow[e.row]) errByRow[e.row] = { hasError: false, hasWarning: false };
+        if (ERROR_COLORS[e.type] === 'red') errByRow[e.row].hasError = true;
+        else errByRow[e.row].hasWarning = true;
+      }
+
+      const allXs = [];
+      for (let r = 1; r <= lastMain; r++) {
+        const x = cellNum(ws, r, COL.px_x);
+        if (x != null) allXs.push(x);
+      }
+      const avgX = allXs.length ? allXs.reduce((a, b) => a + b, 0) / allXs.length : 500000;
+      // Detecta zona UTM: X < 400k indica borda oeste (pode ser zona anterior)
+      // PR/SC/RS: zona 22 (CM -51°). X ~300k = margem oeste da zona 22.
+      // Se X médio > 500k em zona 22, pode ser zona 21 com X alto, mas raro.
+      // Heurística: zona 22 para projetos no Paraná (default seguro).
+      const utmZone = 22;
+
+      const pvs = {};      // pvId -> { lat, lon, hasError, hasWarning, oses, ct, cf, prof, diam, polygon }
+      const networks = [];
+
+      for (let r = 1; r <= lastMain; r++) {
+        const rowNum = r + 1;
+        const ose = cellStr(ws, r, COL.OSE);
+        const ose1a = cellStr(ws, r, COL.OSE1a);
+        const pvMontId = cellStr(ws, r, COL.pv_mont);
+        const pvJusId = cellStr(ws, r, COL.pv_jus);
+        const x = cellNum(ws, r, COL.px_x);
+        const y = cellNum(ws, r, COL.px_y);
+        const re = errByRow[rowNum];
+        const polyRaw = polyCol >= 0 ? cellVal(ws, r, polyCol).val : null;
+        const polyNum = Number(polyRaw);
+        const polyStr = (polyRaw != null && !isNaN(polyNum)) ? String(Math.round(polyNum)) : (typeof polyRaw === 'string' && polyRaw.trim() ? polyRaw.trim() : '');
+
+        if (pvMontId && x != null && y != null) {
+          const ll = gisUtmToLatLon(x, y, utmZone, true);
+          if (!isNaN(ll.lat) && Math.abs(ll.lat) < 90) {
+            if (!pvs[pvMontId]) {
+              pvs[pvMontId] = {
+                lat: ll.lat, lon: ll.lon, hasError: false, hasWarning: false, oses: new Set(),
+                ct: cellNum(ws, r, COL.terr_mont), cf: cellNum(ws, r, COL.proj_mont),
+                prof: cellNum(ws, r, COL.prof_mont),
+                diam: cellNum(ws, r, COL.diam) ? Math.round(cellNum(ws, r, COL.diam) * 1000) : null,
+                polygon: polyStr,
+              };
+            }
+            pvs[pvMontId].oses.add(ose1a);
+            if (re && re.hasError) pvs[pvMontId].hasError = true;
+            if (re && re.hasWarning) pvs[pvMontId].hasWarning = true;
+          }
+        }
+
+        const xJus = cellNum(ws, r, 24);
+        const yJus = cellNum(ws, r, 25);
+        if (x != null && y != null && xJus != null && yJus != null) {
+          const ll0 = gisUtmToLatLon(x, y, utmZone, true);
+          const ll1 = gisUtmToLatLon(xJus, yJus, utmZone, true);
+          if (!isNaN(ll0.lat) && !isNaN(ll1.lat)) {
+            const projMont = cellNum(ws, r, COL.proj_mont);
+            const projJus = cellNum(ws, r, COL.proj_jus);
+            const compr = cellNum(ws, r, COL.compr);
+            const diam = cellNum(ws, r, COL.diam);
+            networks.push({
+              ose, ose1a, pvMontId, pvJusId, polygon: polyStr,
+              lat0: ll0.lat, lon0: ll0.lon, lat1: ll1.lat, lon1: ll1.lon,
+              hasError: re ? re.hasError : false, hasWarning: re ? re.hasWarning : false,
+              compr, diam: diam ? Math.round(diam * 1000) : null,
+              decl: compr > 0 && projMont != null && projJus != null ? Math.abs(projMont - projJus) / compr : null,
+            });
+          }
+        }
+      }
+
+      _gisMapCache = { pvs, networks };
+
+      // Populate map polygon filter
+      const sel = document.getElementById('gis-map-poly');
+      if (gisData.polygons.length) {
+        sel.innerHTML = '<option value="">Selecione um polígono</option>' +
+          gisData.polygons.map(p => '<option value="' + p + '">Polígono ' + p + '</option>').join('') +
+          '<option value="__all__">Todos os polígonos</option>';
+      } else {
+        sel.innerHTML = '<option value="__all__">Todos</option>';
+      }
+    }
+
+    // Render map for selected polygon (lightweight — called on filter change)
+    window.gisMapRender = function() {
+      if (!_gisMapCache) return;
+      const wrap = document.getElementById('gis-map-section');
+      const polyVal = document.getElementById('gis-map-poly').value;
+      if (!polyVal) {
+        document.getElementById('gis-map-count').textContent = 'Selecione um polígono para carregar o mapa';
+        return;
+      }
+      const showAll = polyVal === '__all__';
+
+      // Filter networks by polygon, then collect PV IDs that belong to those networks
+      const filteredNets = _gisMapCache.networks.filter(n => showAll || n.polygon === polyVal);
+      const pvIdsInNets = new Set();
+      for (const n of filteredNets) { pvIdsInNets.add(n.pvMontId); pvIdsInNets.add(n.pvJusId); }
+      const filteredPvs = Object.entries(_gisMapCache.pvs).filter(([id, p]) => showAll ? true : pvIdsInNets.has(id) || p.polygon === polyVal);
+
+      document.getElementById('gis-map-count').textContent = filteredPvs.length + ' PVs, ' + filteredNets.length + ' trechos';
+
+      if (!filteredPvs.length) return;
+      wrap.style.display = '';
+
+      // Init map
+      if (!_gisMap) {
+        _gisMap = L.map('gis-map', { scrollWheelZoom: true, zoomControl: true, maxZoom: 30, minZoom: 2, preferCanvas: true });
+        const t = _gisMapTiles[_gisMapTheme];
+        _gisMapTile = L.tileLayer(t.url, { maxZoom: 22, maxNativeZoom: 19, attribution: t.attr, subdomains: t.sub }).addTo(_gisMap);
+      }
+
+      // Clear previous
+      _gisMapMarkers.forEach(m => _gisMap.removeLayer(m));
+      _gisMapMarkers = [];
+      Object.values(_gisMapLayers).forEach(lg => { if (lg) _gisMap.removeLayer(lg); });
+      _gisMapLayers = {
+        pvs:    L.layerGroup().addTo(_gisMap),
+        redes:  L.layerGroup().addTo(_gisMap),
+        labels: L.layerGroup(),  // NOT added by default — labels off for performance
+      };
+      // Sync checkbox
+      const labelsCb = document.getElementById('gis-map-labels-cb');
+      if (labelsCb && labelsCb.checked) _gisMap.addLayer(_gisMapLayers.labels);
+
+      const bounds = [];
+
+      // PV markers (canvas-rendered CircleMarker — very fast)
+      for (const [id, p] of filteredPvs) {
+        const color = p.hasError ? '#dc2626' : p.hasWarning ? '#f59e0b' : '#16a34a';
+        const radius = /^TL/i.test(id) ? 4 : 6;
+
+        const marker = L.circleMarker([p.lat, p.lon], {
+          radius, fillColor: color, color: '#fff', weight: 1, opacity: 1, fillOpacity: 0.9,
+          renderer: _gisCanvasRenderer,
+        }).addTo(_gisMapLayers.pvs);
+
+        const ctTxt = p.ct != null ? p.ct.toFixed(3) : '—';
+        const cfTxt = p.cf != null ? p.cf.toFixed(3) : '—';
+        const profTxt = p.prof != null ? p.prof.toFixed(2) : '—';
+        const status = p.hasError ? 'ERRO' : p.hasWarning ? 'ALERTA' : 'OK';
+
+        marker.bindPopup(
+          '<div style="font-family:\'DM Mono\',monospace;font-size:11px;line-height:1.6;min-width:130px">' +
+          '<div style="font-size:13px;font-weight:800;border-bottom:2px solid ' + color + ';padding-bottom:3px;margin-bottom:3px">' + esc(id) + ' <span style="color:' + color + ';font-size:9px">[' + status + ']</span></div>' +
+          '<span style="color:#64748b">OSEs:</span> ' + [...p.oses].join(', ') + '<br>' +
+          '<span style="color:#1e40af;font-weight:600">CT:</span>' + ctTxt +
+          ' <span style="color:#b91c1c;font-weight:600">CF:</span>' + cfTxt +
+          ' <span style="color:#6b21a8;font-weight:600">h:</span>' + profTxt + 'm' +
+          (p.diam ? ' <span style="color:#64748b">DN:</span>' + p.diam + 'mm' : '') +
+          '</div>', { maxWidth: 260 }
+        );
+
+        // Lightweight label — just ID + prof
+        const pvLabel = L.marker([p.lat, p.lon], {
+          icon: L.divIcon({
+            className: 'ose-pv-box',
+            html: '<div style="background:rgba(0,0,0,.7);color:#fff;padding:1px 4px;border-radius:3px;font:600 8px/1.3 \'DM Mono\',monospace;white-space:nowrap;pointer-events:none;border-left:2px solid ' + color + '">' + esc(id) + ' <span style="color:#94a3b8">' + profTxt + '</span></div>',
+            iconSize: [0, 0],
+            iconAnchor: [-8, 4],
+          }),
+          interactive: false,
+        }).addTo(_gisMapLayers.labels);
+
+        _gisMapMarkers.push(marker, pvLabel);
+        bounds.push([p.lat, p.lon]);
+      }
+
+      // Network lines (canvas polylines)
+      for (const net of filteredNets) {
+        const lineColor = net.hasError ? '#dc2626' : net.hasWarning ? '#f59e0b' : '#16a34a';
+        const line = L.polyline([[net.lat0, net.lon0], [net.lat1, net.lon1]], {
+          color: lineColor, weight: 2.5, opacity: 0.7,
+          dashArray: net.hasError ? '6,4' : null,
+          renderer: _gisCanvasRenderer,
+        }).addTo(_gisMapLayers.redes);
+
+        const Ltxt = net.compr != null ? net.compr.toFixed(2) + 'm' : '—';
+        const itxt = net.decl != null ? (net.decl * 100).toFixed(2) + '%' : '—';
+        line.bindPopup(
+          '<div style="font-family:\'DM Mono\',monospace;font-size:11px">' +
+          '<strong>' + esc(net.ose) + '</strong><br>' +
+          esc(net.pvMontId) + ' → ' + esc(net.pvJusId) + '<br>' +
+          'L:' + Ltxt + ' i:' + itxt + (net.diam ? ' DN' + net.diam : '') +
+          '</div>'
+        );
+        _gisMapMarkers.push(line);
+      }
+
+      if (bounds.length) {
+        setTimeout(() => {
+          _gisMap.invalidateSize();
+          _gisMap.fitBounds(bounds, { padding: [30, 30] });
+        }, 200);
+      }
+    };
+
+    // Called after audit — builds cache + shows section
+    function renderGisMap() {
+      if (!gisData) return;
+      buildGisMapCache();
+      document.getElementById('gis-map-section').style.display = '';
+      // If no polygons, auto-select "Todos" and render immediately
+      if (!gisData.polygons.length) {
+        document.getElementById('gis-map-poly').value = '__all__';
+        setTimeout(() => window.gisMapRender(), 100);
+      } else {
+        document.getElementById('gis-map-count').textContent = 'Selecione um polígono para carregar o mapa';
+      }
+    }
+
+    function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  })();
+  </script>
 
 <!-- ── PREVIEW MODAL (GRD + Projetos) ── -->
 <div class="modal-overlay" id="grdPreviewModal" onclick="if(event.target===this)window.closeGrdPreview()" style="z-index:1100">
