@@ -3900,7 +3900,11 @@ body {
 
     // Ajusta zoom pra caber todos os pontos
     if (bounds.length) {
-      _oseMap.fitBounds(bounds, { padding: [30, 30] });
+      // Força recalcular o tamanho (container pode ter sido hidden antes)
+      setTimeout(function() {
+        _oseMap.invalidateSize();
+        _oseMap.fitBounds(bounds, { padding: [30, 30] });
+      }, 200);
     }
   };
 
