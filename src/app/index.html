@@ -132,17 +132,41 @@
     const initials = displayName.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
     document.getElementById('topbarAvatar').textContent = initials;
     if (isAdmin) document.getElementById('adminTabBtn').style.display = '';
-    if (!window._canCreate) {
-      const genBtn = document.querySelector('.tab-btn[onclick*="generator"]');
-      if (genBtn) genBtn.style.display = 'none';
-    }
-    // Role "visualizador": esconde todas as outras abas, só deixa Dashboard Diretoria
-    if (userRole === 'visualizador') {
+
+    // Permissões de abas por usuário
+    const TAB_MAP = {
+      generator: 'Cadastrar Código', history: 'Histórico', dashboard: 'Dashboard',
+      projects: 'Projetos', grd: 'GRD', verificar: 'Verificar Projeto',
+      conferencia: 'Conferência', orcamento: 'Orçamento', renomear: 'Renomear',
+      'planilhas-gis': 'Planilhas GIS', perfil: 'Perfil', diretoria: 'Dash Diretoria',
+    };
+    window._TAB_MAP = TAB_MAP;
+    const allTabKeys = Object.keys(TAB_MAP);
+    const userTabs = currentUser.allowed_tabs;
+    // master sem restrição; se allowed_tabs null/vazio = todas as abas
+    if (isAdmin || !userTabs || !userTabs.length) {
+      // Mostrar todas
       document.querySelectorAll('.tab-bar-inner .tab-btn').forEach(btn => {
-        if (btn.id !== 'diretoriaTabBtn') btn.style.display = 'none';
+        if (btn.id === 'adminTabBtn' || btn.id === 'auditTabBtn') return;
+        btn.style.display = '';
       });
-      const dBtn = document.getElementById('diretoriaTabBtn');
-      if (dBtn) { dBtn.click(); }
+    } else {
+      // Aplicar restrições
+      document.querySelectorAll('.tab-bar-inner .tab-btn').forEach(btn => {
+        if (btn.id === 'adminTabBtn' || btn.id === 'auditTabBtn') return;
+        const onclick = btn.getAttribute('onclick') || '';
+        const match = onclick.match(/switchTab\('([^']+)'/);
+        if (match) {
+          const tabId = match[1];
+          btn.style.display = userTabs.includes(tabId) ? '' : 'none';
+        }
+      });
+      // Se a aba ativa não está permitida, abrir a primeira permitida
+      const firstAllowed = userTabs[0];
+      if (firstAllowed) {
+        const firstBtn = document.querySelector(`.tab-btn[onclick*="switchTab('${firstAllowed}'"]`);
+        if (firstBtn) firstBtn.click();
+      }
     }
     buildApp();
     loadCodes();
@@ -1244,9 +1268,16 @@
         <option value="criador"${u.role==='criador'?' selected':''}>Editor</option>
         <option value="master"${u.role==='master'?' selected':''}>Master</option>
       </select>`:'<span style="font-size:11px;color:var(--text3)">(você)</span>';
-    return `<div class="admin-row">
+    const userTabs = u.allowed_tabs || [];
+    const tabMap = window._TAB_MAP || {};
+    const tabsHtml = !isMe ? Object.entries(tabMap).map(([k, label]) => {
+      const checked = !userTabs.length || userTabs.includes(k) ? ' checked' : '';
+      return `<label style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--text2);cursor:pointer;white-space:nowrap"><input type="checkbox" value="${k}"${checked} onchange="updateUserTabs('${u.id}')" data-uid="${u.id}" class="tab-perm-cb" style="cursor:pointer">${label}</label>`;
+    }).join(' ') : '';
+
+    return `<div class="admin-row" style="flex-wrap:wrap">
       <div class="user-avatar">${(u.nome||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</div>
-      <div class="user-info">
+      <div class="user-info" style="min-width:200px">
         <div class="user-name">${u.nome} ${roleTag} ${isMe?'<span style="font-size:10px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:8px;margin-left:2px">você</span>':''}</div>
         <div class="user-email">${u.empresa||'—'} · Criado em ${dtCriado} · Válido até: ${expiryInfo}</div>
         <div class="user-email" style="margin-top:2px">Código: ${codeInfo}</div>
@@ -1256,11 +1287,20 @@
         ${!isMe?`<button class="action-btn" onclick="renewLicense('${u.id}','${u.license_expires||''}')">Renovar</button>`:''}
         ${!isMe?`<button class="action-btn danger" onclick="removeUser('${u.id}')">Excluir</button>`:''}
       </div>
+      ${tabsHtml?`<div style="width:100%;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center"><span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">Abas:</span>${tabsHtml}</div>`:''}
     </div>`;
   }
 
   window.changeUserRole=async(id,role)=>{await sb.from('usuarios').update({role}).eq('id',id);window.loadAdminPanel();};
   window.removeUser=async(id)=>{if(!confirm('Excluir este usuário?'))return;await sb.from('usuarios').delete().eq('id',id);window.loadAdminPanel();};
+  window.updateUserTabs=async(id)=>{
+    const cbs=document.querySelectorAll(`.tab-perm-cb[data-uid="${id}"]`);
+    const all=[...cbs];
+    const checked=all.filter(cb=>cb.checked).map(cb=>cb.value);
+    // Se todos marcados, salvar null (sem restrição)
+    const tabs=checked.length===all.length?null:checked;
+    await sb.from('usuarios').update({allowed_tabs:tabs}).eq('id',id);
+  };
 
   window.loadAudit=async()=>{
     const el=document.getElementById('auditList'); if(!el)return;
@@ -1546,10 +1586,12 @@
     btn.disabled = true; btn.textContent = 'Criando...';
 
     const code = genAccessCode();
+    const allowedTabs = [...document.querySelectorAll('#newUserTabs input[type=checkbox]:checked')].map(cb => cb.value);
     const { error } = await sb.from('usuarios').insert({
       nome: name, empresa: empresa, role: role,
       license_expires: expires, access_code: code,
       ativo: true, ultimo_acesso: null,
+      allowed_tabs: allowedTabs.length ? allowedTabs : null,
     });
 
     btn.disabled = false; btn.textContent = 'Criar usuário';
@@ -2859,6 +2901,23 @@ body {
             <div>
               <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Licença válida até</div>
               <input id="newUserExpires" type="date" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+          </div>
+          <div style="margin-bottom:12px">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Abas permitidas <span style="font-weight:400;text-transform:none;letter-spacing:0">(vazio = todas)</span></div>
+            <div id="newUserTabs" style="display:flex;flex-wrap:wrap;gap:6px">
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="generator" style="cursor:pointer"> Cadastrar Código</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="history" style="cursor:pointer"> Histórico</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="dashboard" style="cursor:pointer"> Dashboard</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="projects" style="cursor:pointer"> Projetos</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="grd" style="cursor:pointer"> GRD</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="verificar" style="cursor:pointer"> Verificar Projeto</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="conferencia" style="cursor:pointer"> Conferência</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="orcamento" style="cursor:pointer"> Orçamento</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="renomear" style="cursor:pointer"> Renomear</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="planilhas-gis" style="cursor:pointer"> Planilhas GIS</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="perfil" style="cursor:pointer"> Perfil</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="diretoria" style="cursor:pointer"> Dash Diretoria</label>
             </div>
           </div>
           <button id="createUserBtn" onclick="createUser()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius);padding:10px 24px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,.3)">Criar usuário</button>
