@@ -8964,14 +8964,21 @@ body {
     }
 
     // ────────────────────────────────────────────────
-    // FIX AFOGAMENTOS — abaixa a saída de cada PV afogado até ≤ min(CF_chegadas),
-    // preserva a declividade original de cada trecho, cascateia pela rede até convergir.
+    // FIX ALL — corrige TUDO iterativamente até convergir:
+    //   Pass 1: h_min (prof ≥ 1,10m) — abaixa proj_mont / proj_jus quando acima do teto
+    //   Pass 2: contra-declive + i_mín (≥1%) — abaixa proj_jus até atingir i=I_MIN
+    //   Pass 3: afogamento (saída > min CF chegadas) — abaixa saída preservando i
+    //   Todas as operações SÓ abaixam cotas (monótona) → converge.
+    //   A cada iteração reconstrói o grafo porque cotas mudaram e podem cascatear.
+    //   Máx 100 iterações.
     // ────────────────────────────────────────────────
-    async function _fixAfogamentos(fmeta) {
+    async function _fixAll(fmeta) {
       const pathMod = require('path');
       const H_MIN = 1.10;
+      const I_MIN = 0.01; // 1%
       const TOL = 1e-3;
-      const MAX_ITERS = 50;
+      const TOL_I = 1e-6;
+      const MAX_ITERS = 100;
 
       const wb = xlsx.readFile(fmeta.path, { cellFormula:false, cellNF:false, cellStyles:false });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -8986,18 +8993,15 @@ body {
         const mont = str(r, C.pv_mont);
         const jus  = str(r, C.pv_jus);
         if (!mont || !jus) continue;
-        const projMont = num(r, C.proj_mont);
-        const projJus  = num(r, C.proj_jus);
-        const compr    = num(r, C.compr);
-        const iOrig = (compr && compr > 0 && projMont != null && projJus != null)
-                      ? (projMont - projJus) / compr : 0;
         edges.push({
           row: r,
           ose1a: str(r, C.OSE1a),
           mont, jus,
           terrMont: num(r, C.terr_mont),
           terrJus:  num(r, C.terr_jus),
-          projMont, projJus, compr, iOrig,
+          projMont: num(r, C.proj_mont),
+          projJus:  num(r, C.proj_jus),
+          compr:    num(r, C.compr),
           modified: false,
         });
       }
@@ -9009,19 +9013,52 @@ body {
       }
 
       const log = [];
-      let totalFixed = 0;
+      const totals = { hMin:0, contraDecl:0, declMin:0, afogado:0 };
       let iter;
+
       for (iter = 0; iter < MAX_ITERS; iter++) {
+        let iterChanges = 0;
+
+        // ── Pass 1: h_min violado ──
+        for (const e of edges) {
+          if (e.terrMont != null && e.projMont != null) {
+            const cfMax = e.terrMont - H_MIN;
+            if (e.projMont > cfMax + TOL) {
+              log.push({ iter:iter+1, tipo:'H_MIN', row:e.row+1, ose:e.ose1a, trecho:`${e.mont}→${e.jus}`, campo:'proj_mont', oldV:e.projMont, newV:cfMax, obs:`terr=${e.terrMont.toFixed(3)}` });
+              e.projMont = cfMax; e.modified = true; iterChanges++; totals.hMin++;
+            }
+          }
+          if (e.terrJus != null && e.projJus != null) {
+            const cfMax = e.terrJus - H_MIN;
+            if (e.projJus > cfMax + TOL) {
+              log.push({ iter:iter+1, tipo:'H_MIN', row:e.row+1, ose:e.ose1a, trecho:`${e.mont}→${e.jus}`, campo:'proj_jus', oldV:e.projJus, newV:cfMax, obs:`terr=${e.terrJus.toFixed(3)}` });
+              e.projJus = cfMax; e.modified = true; iterChanges++; totals.hMin++;
+            }
+          }
+        }
+
+        // ── Pass 2: contra-declive + i_mín (abaixa proj_jus) ──
+        for (const e of edges) {
+          if (e.projMont == null || e.projJus == null || !e.compr || e.compr <= 0) continue;
+          const i = (e.projMont - e.projJus) / e.compr;
+          if (i >= I_MIN - TOL_I) continue;
+          const newJus = e.projMont - I_MIN * e.compr;
+          const tipo = i < 0 ? 'CONTRA_DECLIVE' : 'DECL_MIN';
+          log.push({ iter:iter+1, tipo, row:e.row+1, ose:e.ose1a, trecho:`${e.mont}→${e.jus}`, campo:'proj_jus', oldV:e.projJus, newV:newJus, obs:`i=${(i*100).toFixed(3)}% → ${(I_MIN*100).toFixed(2)}%` });
+          e.projJus = newJus; e.modified = true; iterChanges++;
+          if (i < 0) totals.contraDecl++; else totals.declMin++;
+        }
+
+        // ── Pass 3: afogamento ──
         const inE = {}, outE = {};
         for (const e of edges) {
           (outE[e.mont] = outE[e.mont]||[]).push(e);
           (inE[e.jus]  = inE[e.jus]||[]).push(e);
         }
-        let iterFixed = 0;
         for (const pv of Object.keys(outE)) {
           const chegadas = inE[pv] || [];
           if (!chegadas.length) continue;
-          const cfsCheg = chegadas.map(e => e.projJus).filter(v => v != null);
+          const cfsCheg = chegadas.map(x => x.projJus).filter(v => v != null);
           if (!cfsCheg.length) continue;
           const minCheg = Math.min(...cfsCheg);
           for (const s of outE[pv]) {
@@ -9030,49 +9067,42 @@ body {
             const ct = ctByPv[pv];
             const cfMax = ct != null ? ct - H_MIN : Infinity;
             const newMont = Math.min(minCheg, cfMax);
-            const oldMont = s.projMont;
-            const oldJus  = s.projJus;
-            const newJus  = (s.compr && s.compr > 0) ? (newMont - s.iOrig * s.compr) : (oldJus != null ? oldJus - (oldMont - newMont) : null);
-            s.projMont = newMont;
-            s.projJus  = newJus;
-            s.modified = true;
-            log.push({
-              iter: iter+1, row: s.row+1, ose: s.ose1a, pv,
-              oldMont, newMont, oldJus, newJus,
-              delta: oldMont - newMont,
-              minCheg
-            });
-            iterFixed++;
+            const oldMont = s.projMont, oldJus = s.projJus;
+            // Preserva declividade atual do trecho (só abaixa)
+            const iNow = (s.compr && s.compr > 0 && oldJus != null) ? (oldMont - oldJus) / s.compr : 0;
+            const newJus = (s.compr && s.compr > 0) ? (newMont - iNow * s.compr) : (oldJus != null ? oldJus - (oldMont - newMont) : null);
+            log.push({ iter:iter+1, tipo:'PV_AFOGADO', row:s.row+1, ose:s.ose1a, trecho:`${s.mont}→${s.jus}`, campo:'proj_mont', oldV:oldMont, newV:newMont, obs:`${pv}: min(chegadas)=${minCheg.toFixed(3)}` });
+            if (newJus != null && oldJus != null && Math.abs(newJus - oldJus) > TOL) {
+              log.push({ iter:iter+1, tipo:'PV_AFOGADO_CASC', row:s.row+1, ose:s.ose1a, trecho:`${s.mont}→${s.jus}`, campo:'proj_jus', oldV:oldJus, newV:newJus, obs:`preserva i=${(iNow*100).toFixed(3)}%` });
+            }
+            s.projMont = newMont; s.projJus = newJus; s.modified = true;
+            iterChanges++; totals.afogado++;
           }
         }
-        totalFixed += iterFixed;
-        if (!iterFixed) break;
+
+        if (!iterChanges) break;
       }
 
       // Aplica modificações no ws
       let cellsChanged = 0;
       for (const e of edges) {
         if (!e.modified) continue;
-        ws[xlsx.utils.encode_cell({r:e.row, c:C.proj_mont})] = { v: e.projMont, t:'n' };
-        ws[xlsx.utils.encode_cell({r:e.row, c:C.proj_jus})]  = { v: e.projJus,  t:'n' };
-        if (e.terrMont != null) ws[xlsx.utils.encode_cell({r:e.row, c:C.prof_mont})] = { v: e.terrMont - e.projMont, t:'n' };
-        if (e.terrJus  != null) ws[xlsx.utils.encode_cell({r:e.row, c:C.prof_jus})]  = { v: e.terrJus  - e.projJus,  t:'n' };
+        if (e.projMont != null) ws[xlsx.utils.encode_cell({r:e.row, c:C.proj_mont})] = { v: e.projMont, t:'n' };
+        if (e.projJus  != null) ws[xlsx.utils.encode_cell({r:e.row, c:C.proj_jus})]  = { v: e.projJus,  t:'n' };
+        if (e.terrMont != null && e.projMont != null) ws[xlsx.utils.encode_cell({r:e.row, c:C.prof_mont})] = { v: e.terrMont - e.projMont, t:'n' };
+        if (e.terrJus  != null && e.projJus  != null) ws[xlsx.utils.encode_cell({r:e.row, c:C.prof_jus})]  = { v: e.terrJus  - e.projJus,  t:'n' };
         cellsChanged += 4;
       }
 
-      // Sheet de log
-      const logRows = [['Iter','Linha','OSE','PV/PIT','proj_mont antigo','proj_mont novo','Δ mont','proj_jus antigo','proj_jus novo','min CF chegadas']];
-      for (const l of log) logRows.push([l.iter, l.row, l.ose, l.pv, l.oldMont, l.newMont, l.delta.toFixed(3), l.oldJus, l.newJus, l.minCheg]);
+      // Log sheet
+      const logRows = [['Iter','Tipo','Linha','OSE','Trecho','Campo','Valor antigo','Valor novo','Obs']];
+      for (const l of log) logRows.push([l.iter, l.tipo, l.row, l.ose, l.trecho, l.campo, l.oldV, l.newV, l.obs||'']);
       xlsx.utils.book_append_sheet(wb, xlsx.utils.aoa_to_sheet(logRows), 'Log_Ajustes');
 
-      // Re-valida e adiciona sheet
+      // Re-validação final
       const validation = _validateNetwork(ws, C, lastMain, fmeta.path);
-      // Remove sheet Validacao antiga se existe (herdada do _CORRIGIDO) antes de reescrever
       const idxOld = wb.SheetNames.indexOf('Validacao');
-      if (idxOld >= 0) {
-        delete wb.Sheets['Validacao'];
-        wb.SheetNames.splice(idxOld, 1);
-      }
+      if (idxOld >= 0) { delete wb.Sheets['Validacao']; wb.SheetNames.splice(idxOld, 1); }
       xlsx.utils.book_append_sheet(wb, _validationToSheet(validation), 'Validacao');
 
       // Salva _AJUSTADO
@@ -9081,21 +9111,22 @@ body {
       const outPath = pathMod.join(dir, base + '_AJUSTADO.xlsx');
       xlsx.writeFile(wb, outPath);
 
-      return { outPath, totalFixed, iterations: iter, cellsChanged, validation };
+      const totalFixed = totals.hMin + totals.contraDecl + totals.declMin + totals.afogado;
+      return { outPath, totalFixed, totals, iterations: iter, cellsChanged, validation };
     }
 
-    // Handler do botão "Ajustar Afogamentos" (roda em todos os arquivos com afogamento)
-    window.gisAjustarAfogamentos = async () => {
+    // Handler do botão "Ajustar Tudo" — roda fix completo em todos os arquivos
+    window.gisAjustarTudo = async () => {
       if (!gisData || !gisData.files) return;
-      _gisOpenProgress('Ajustando afogamentos...');
+      _gisOpenProgress('Ajustando rede (fix iterativo até convergir)...');
       try {
         const results = [];
         for (let fi = 0; fi < gisData.files.length; fi++) {
           const fmeta = gisData.files[fi];
           _gisProgress((fi / gisData.files.length) * 100, '[' + (fi+1) + '/' + gisData.files.length + '] ' + _basename(fmeta.path));
           await _yield();
-          const r = await _fixAfogamentos(fmeta);
-          results.push({ path: r.outPath, v: r.validation, hasOriginal: true, fixStats: { totalFixed: r.totalFixed, iterations: r.iterations, cellsChanged: r.cellsChanged } });
+          const r = await _fixAll(fmeta);
+          results.push({ path: r.outPath, v: r.validation, hasOriginal: true, fixStats: { totalFixed: r.totalFixed, totals: r.totals, iterations: r.iterations, cellsChanged: r.cellsChanged } });
         }
         _gisProgress(100, 'Concluído');
         await new Promise(r => setTimeout(r, 200));
@@ -9192,13 +9223,22 @@ body {
         </div>`;
       }).join('');
 
-      const totalAfogados = results.reduce((a, r) => a + r.v.counts.pvAfogado, 0);
-      const fixBtn = totalAfogados > 0
-        ? `<button onclick="window.gisAjustarAfogamentos()" style="background:#ea580c;color:white;border:none;border-radius:6px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;margin-right:10px" title="Abaixa saídas afogadas preservando declividade, cascateia pela rede, gera _AJUSTADO.xlsx">🔧 Ajustar ${totalAfogados} afogamento(s)</button>`
+      const totalProblemas = results.reduce((a, r) => a + r.v.counts.pvAfogado + r.v.counts.contraDecl + r.v.counts.declMultipla + r.v.counts.hBaixo, 0);
+      const fixBtn = totalProblemas > 0
+        ? `<button onclick="window.gisAjustarTudo()" style="background:#ea580c;color:white;border:none;border-radius:6px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;margin-right:10px" title="Fix iterativo até convergir: h_min, contra-declive, i_mín, afogamento. Cada ajuste só ABAIXA cotas (CT nunca muda). Gera _AJUSTADO.xlsx.">🔧 Ajustar Tudo (${totalProblemas} issue${totalProblemas>1?'s':''})</button>`
         : '';
       const fixSummary = results.some(r => r.fixStats)
         ? `<div style="margin:0 0 14px;padding:10px 14px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:12px;color:#92400e">
-             ✓ Ajustes aplicados: ${results.map(r => r.fixStats ? `${_basename(r.path)} — ${r.fixStats.totalFixed} fix em ${r.fixStats.iterations} iterações` : '').filter(Boolean).join(' · ')}
+             ✓ Ajustes aplicados: ${results.map(r => {
+               if (!r.fixStats) return '';
+               const t = r.fixStats.totals || {};
+               const parts = [];
+               if (t.hMin) parts.push(`${t.hMin} h_min`);
+               if (t.contraDecl) parts.push(`${t.contraDecl} contra-decl`);
+               if (t.declMin) parts.push(`${t.declMin} i<1%`);
+               if (t.afogado) parts.push(`${t.afogado} afogamento`);
+               return `${_basename(r.path)} — ${r.fixStats.totalFixed} fix (${parts.join(' · ')}) em ${r.fixStats.iterations} iterações`;
+             }).filter(Boolean).join('<br>')}
            </div>`
         : '';
 
