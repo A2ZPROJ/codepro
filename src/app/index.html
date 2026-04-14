@@ -7828,6 +7828,10 @@ body {
       #tab-planilhas-gis .gis-stat-num{font-size:24px;font-weight:700;line-height:1}
       #tab-planilhas-gis .gis-stat-label{font-size:11px;color:var(--text3);margin-top:4px}
       #tab-planilhas-gis .gis-filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+      .sbb-label{background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.2);border-radius:4px;padding:1px 6px;font:700 11px/1.3 'DM Mono',monospace;color:#111;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+      [data-theme="dark"] .sbb-label{background:rgba(15,23,42,.85);color:#fff;border-color:rgba(255,255,255,.2)}
+      /* Sem background no marker do Leaflet — só o texto */
+      .ose-name-label, .gis-arrow, .ose-pv-box { background:transparent !important; border:none !important; }
     </style>
     <div style="padding:20px;max-width:1400px;margin:0 auto">
 
@@ -7838,14 +7842,26 @@ body {
           <span style="font-size:11px;color:var(--text3)">Importar planilha GIS, auditar erros e gerar ROTINA</span>
         </div>
         <div class="gis-card-body">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-            <div style="font-size:12px;font-weight:600;color:var(--text2);width:100px;flex-shrink:0">Planilha GIS</div>
-            <input id="gis-file-path" readonly placeholder="Selecione a planilha GIS (.xls / .xlsx)..." style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface2);outline:none;min-width:0"/>
-            <button onclick="window.gisPick()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:7px 12px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0">Procurar</button>
+          <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px">
+            <div style="font-size:12px;font-weight:600;color:var(--text2);width:100px;flex-shrink:0;padding-top:8px">Planilhas GIS</div>
+            <div style="flex:1;min-width:0">
+              <div id="gis-files-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px"></div>
+              <button onclick="window.gisPick()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:6px 12px;font-family:inherit;font-size:11px;font-weight:500;cursor:pointer">+ Adicionar planilha (.xls/.xlsx)</button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px">
+            <div style="font-size:12px;font-weight:600;color:var(--text2);width:100px;flex-shrink:0;padding-top:8px">Shapefiles <span style="font-weight:400;color:var(--text3)">(opc.)</span></div>
+            <div style="flex:1;min-width:0">
+              <div id="gis-shapes-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px"></div>
+              <button onclick="window.gisShapePick()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:6px 12px;font-family:inherit;font-size:11px;font-weight:500;cursor:pointer">+ Adicionar shapefile (.shp)</button>
+            </div>
           </div>
           <div style="display:flex;gap:10px;align-items:center">
             <button id="gis-audit-btn" onclick="window.gisAudit()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:9px 24px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Auditar</button>
             <button id="gis-export-btn" onclick="window.gisExportXLSX()" style="display:none;background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;cursor:pointer">Exportar Relatório XLSX</button>
+            <button id="gis-normalize-btn" onclick="window.gisNormalizePreview()" style="display:none;background:#fef3c7;color:#92400e;border:1.5px solid #fcd34d;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:11px;cursor:pointer" title="Avançado: só normaliza polígonos sem corrigir cotas">Normalizar Polígonos (avançado)</button>
+            <button id="gis-corrigir-btn" onclick="window.gisCorrigirTudo()" style="display:none;background:#16a34a;color:white;border:none;border-radius:6px;padding:9px 20px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">⚙ Corrigir Tudo</button>
+            <button id="gis-perfil-btn" onclick="window.gisPerfilOpen()" style="display:none;background:#2563eb;color:white;border:none;border-radius:6px;padding:9px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">📈 Visualizar Perfil</button>
             <span id="gis-status" style="font-size:12px;color:var(--text3)"></span>
           </div>
         </div>
@@ -7929,10 +7945,12 @@ body {
       <div id="gis-map-section" style="display:none" class="gis-card">
         <div class="gis-card-head" style="flex-wrap:wrap;gap:8px">
           <h3>Mapa da Rede</h3>
-          <div style="display:flex;align-items:center;gap:6px">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <select id="gis-map-poly" onchange="window.gisMapRender()" style="padding:4px 8px;font-family:inherit;font-size:11px;border:1px solid var(--border);border-radius:4px;color:var(--text);background:var(--surface2);outline:none">
               <option value="">Selecione um polígono</option>
             </select>
+            <input id="gis-map-ose-filter" oninput="window.gisMapRender()" placeholder="Filtrar OSE (ex: TR-014)" style="padding:4px 8px;font-family:inherit;font-size:11px;border:1px solid var(--border);border-radius:4px;color:var(--text);background:var(--surface2);outline:none;width:160px"/>
+            <button onclick="document.getElementById('gis-map-ose-filter').value='';window.gisMapRender()" style="background:transparent;border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;color:var(--text3);font-family:inherit">×</button>
             <span id="gis-map-count" style="font-size:10px;color:var(--text3)"></span>
           </div>
           <div style="margin-left:auto;display:flex;gap:8px;align-items:center;font-size:10px">
@@ -7940,8 +7958,12 @@ body {
             <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:50%;background:#dc2626;display:inline-block"></span> Erro</span>
             <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block"></span> Alerta</span>
             <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" checked onchange="window.gisMapToggleLayer('pvs',this.checked)" style="cursor:pointer"> PVs</label>
+            <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" id="gis-map-pits-cb" onchange="window.gisMapToggleLayer('pits',this.checked)" style="cursor:pointer"> PITs</label>
             <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" checked onchange="window.gisMapToggleLayer('redes',this.checked)" style="cursor:pointer"> Redes</label>
-            <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" id="gis-map-labels-cb" onchange="window.gisMapToggleLayer('labels',this.checked)" style="cursor:pointer"> Labels</label>
+            <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" id="gis-map-arrows-cb" checked onchange="window.gisMapToggleLayer('arrows',this.checked)" style="cursor:pointer"> Setas</label>
+            <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" id="gis-map-polys-cb" checked onchange="window.gisMapToggleLayer('polys',this.checked)" style="cursor:pointer"> Polígonos</label>
+            <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" id="gis-map-osenames-cb" checked onchange="window.gisMapToggleLayer('oseNames',this.checked)" style="cursor:pointer"> Nomes OSE</label>
+            <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" id="gis-map-labels-cb" onchange="window.gisMapToggleLayer('labels',this.checked)" style="cursor:pointer"> Labels PV</label>
             <button id="gis-map-theme-btn" onclick="window.gisMapToggleTheme()" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;color:var(--text2);font-family:inherit;font-weight:600">Escuro</button>
           </div>
         </div>
@@ -8021,17 +8043,149 @@ body {
       prof_rasa: 'amber', prof_negativa: 'red', decl_baixa: 'amber', contra_declive: 'red',
     };
 
-    let gisData = null;   // { rows, errors, oses, polygons, filePath }
+    let gisData = null;   // { files, errors, oseMap, polygons, useShape, allPolys }
 
-    // ── Pick file ──
+    // Estado: múltiplas planilhas e shapefiles
+    let _gisFiles = [];   // [path, ...]
+    let _gisShapes = [];  // [{path, polys}, ...]
+
+    function _basename(p) { return p.split(/[\\/]/).pop(); }
+
+    function _renderGisFiles() {
+      const el = document.getElementById('gis-files-list');
+      if (!el) return;
+      if (!_gisFiles.length) {
+        el.innerHTML = '<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0">Nenhuma planilha selecionada</div>';
+        return;
+      }
+      el.innerHTML = _gisFiles.map((p, i) => `
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;font-size:11px">
+          <span style="color:var(--text2);font-family:'DM Mono',monospace;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p)}">${esc(_basename(p))}</span>
+          <button onclick="window.gisRemoveFile(${i})" style="background:transparent;border:none;color:#dc2626;font-size:14px;cursor:pointer;padding:0 4px;line-height:1">×</button>
+        </div>`).join('');
+    }
+    function _renderGisShapes() {
+      const el = document.getElementById('gis-shapes-list');
+      if (!el) return;
+      if (!_gisShapes.length) {
+        el.innerHTML = '<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0">Nenhum shapefile (classificação via coluna POLIGONO)</div>';
+        return;
+      }
+      el.innerHTML = _gisShapes.map((s, i) => `
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;font-size:11px">
+          <span style="color:var(--text2);font-family:'DM Mono',monospace;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(s.path)}">${esc(_basename(s.path))} <span style="color:var(--text3)">(${s.polys.length} SBBs)</span></span>
+          <button onclick="window.gisRemoveShape(${i})" style="background:transparent;border:none;color:#dc2626;font-size:14px;cursor:pointer;padding:0 4px;line-height:1">×</button>
+        </div>`).join('');
+    }
+
+    // ── Pick planilha (acumula no array) ──
     window.gisPick = async () => {
       if (!window.electronAPI || typeof window.electronAPI.selectFile !== 'function') {
         alert('API não disponível. Reinstale o Nexus.');
         return;
       }
       const p = await window.electronAPI.selectFile([{ name: 'Excel', extensions: ['xls','xlsx'] }]);
-      if (p) document.getElementById('gis-file-path').value = p;
+      if (!p) return;
+      if (_gisFiles.includes(p)) { alert('Esta planilha já foi adicionada.'); return; }
+      _gisFiles.push(p);
+      _renderGisFiles();
     };
+    window.gisRemoveFile = (i) => {
+      _gisFiles.splice(i, 1);
+      _renderGisFiles();
+    };
+
+    // ── Pick shapefile (acumula; carrega ao adicionar) ──
+    window.gisShapePick = async () => {
+      if (!window.electronAPI || typeof window.electronAPI.selectFile !== 'function') return;
+      const p = await window.electronAPI.selectFile([{ name: 'Shapefile', extensions: ['shp'] }]);
+      if (!p) return;
+      if (_gisShapes.find(s => s.path === p)) { alert('Este shapefile já foi adicionado.'); return; }
+      try {
+        const loaded = await loadShapefile(p);
+        _gisShapes.push(loaded);
+        _renderGisShapes();
+      } catch (e) {
+        alert('Erro ao carregar shapefile: ' + e.message);
+        console.error(e);
+      }
+    };
+    window.gisRemoveShape = (i) => {
+      _gisShapes.splice(i, 1);
+      _renderGisShapes();
+    };
+
+    // Render inicial das listas (vazias) — chamado quando script carrega
+    setTimeout(() => { try { _renderGisFiles(); _renderGisShapes(); } catch(e){} }, 0);
+
+    // Point-in-polygon (ray casting) — espera coords do anel como [x,y]
+    function _ringContains(x, y, ring) {
+      let inside = false;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const xi = ring[i][0], yi = ring[i][1];
+        const xj = ring[j][0], yj = ring[j][1];
+        if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+          inside = !inside;
+        }
+      }
+      return inside;
+    }
+    function _polyContains(x, y, poly) {
+      if (!poly.length || !_ringContains(x, y, poly[0])) return false;
+      for (let i = 1; i < poly.length; i++) if (_ringContains(x, y, poly[i])) return false; // hole
+      return true;
+    }
+    function _geomContains(x, y, geom) {
+      if (!geom) return false;
+      if (geom.type === 'Polygon') return _polyContains(x, y, geom.coordinates);
+      if (geom.type === 'MultiPolygon') {
+        for (const p of geom.coordinates) if (_polyContains(x, y, p)) return true;
+      }
+      return false;
+    }
+    function _bboxOf(geom) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      const visit = (ring) => {
+        for (const pt of ring) {
+          if (pt[0] < minX) minX = pt[0];
+          if (pt[0] > maxX) maxX = pt[0];
+          if (pt[1] < minY) minY = pt[1];
+          if (pt[1] > maxY) maxY = pt[1];
+        }
+      };
+      if (geom.type === 'Polygon') geom.coordinates.forEach(visit);
+      else if (geom.type === 'MultiPolygon') for (const p of geom.coordinates) p.forEach(visit);
+      return [minX, minY, maxX, maxY];
+    }
+    async function loadShapefile(shpPath) {
+      const shapefile = require('shapefile');
+      const polys = [];
+      const src = await shapefile.open(shpPath);
+      while (true) {
+        const r = await src.read();
+        if (r.done) break;
+        const f = r.value;
+        const sbb = f.properties && (f.properties.SBB || f.properties.sbb || f.properties.Sbb);
+        if (sbb == null) continue;
+        polys.push({ sbb: String(sbb), geom: f.geometry, bbox: _bboxOf(f.geometry) });
+      }
+      return { polys, path: shpPath };
+    }
+    function _classifyPoint(x, y, polys) {
+      for (const p of polys) {
+        const [mnx, mny, mxx, mxy] = p.bbox;
+        if (x < mnx || x > mxx || y < mny || y > mxy) continue;
+        if (_geomContains(x, y, p.geom)) return p.sbb;
+      }
+      return null;
+    }
+    // Cor por SBB (paleta determinística por hash do nome)
+    function _sbbColor(sbb) {
+      let h = 0;
+      for (let i = 0; i < sbb.length; i++) h = (h * 31 + sbb.charCodeAt(i)) | 0;
+      const hue = Math.abs(h) % 360;
+      return 'hsl(' + hue + ', 70%, 45%)';
+    }
 
     // ── Cell helpers ──
     function cellVal(ws, r, c) {
@@ -8050,42 +8204,70 @@ body {
       return (typeof val === 'number') ? val : null;
     }
 
-    // ── Column map (0-indexed) ──
-    const COL = {
-      OSE1a: 5,    // F
-      OSE: 6,      // G
-      tipo_pv: 7,  // H
-      tipo_tubo: 8,// I
-      pv_mont: 9,  // J
-      px_x: 10,    // K
-      px_y: 11,    // L
-      pv_jus: 12,  // M
-      terr_mont: 13,// N
-      terr_jus: 14, // O
-      proj_mont: 15,// P
-      proj_jus: 16, // Q
-      prof_mont: 17,// R
-      prof_jus: 18, // S
-      compr: 19,    // T
-      material: 20, // U
-      diam: 21,     // V
+    // ── Column map: detectado dinamicamente do header (row 1) ──
+    // Inicia com fallback fixo (compatível com layout antigo) e é sobrescrito por detectCols()
+    let COL = {
+      OSE1a: 5, OSE: 6, tipo_pv: 7, tipo_tubo: 8, pv_mont: 9, px_x: 10, px_y: 11,
+      pv_jus: 12, terr_mont: 13, terr_jus: 14, proj_mont: 15, proj_jus: 16,
+      prof_mont: 17, prof_jus: 18, compr: 19, material: 20, diam: 21,
     };
+
+    // Aliases por campo — mapeia headers reais (lowercase, sem acento) para chave do COL
+    const COL_ALIASES = {
+      OSE1a:     ['ose1a'],
+      OSE:       ['ose'],
+      tipo_pv:   ['tipo_pv'],
+      tipo_tubo: ['tipo_tubo'],
+      pv_mont:   ['pv_mont1', 'pv_mont'],
+      px_x:      ['px_x'],
+      px_y:      ['px_y'],
+      pv_jus:    ['pv_jus'],
+      terr_mont: ['terr_mont'],
+      terr_jus:  ['terr_jus'],
+      proj_mont: ['proj_mont'],
+      proj_jus:  ['proj_jus'],
+      prof_mont: ['prof_mont'],
+      prof_jus:  ['prof_jus'],
+      compr:     ['compr', 'comprimento'],
+      material:  ['material'],
+      diam:      ['diam', 'diametro'],
+      end_x:     ['end_zz', 'end_x', 'endx', 'pv_jus_x'],
+      end_y:     ['end_y', 'endy', 'pv_jus_y'],
+    };
+
+    // Detecta colunas pelo header da row 1; campos não encontrados ficam como -1
+    function detectCols(ws, ref) {
+      const map = {};
+      for (let c = 0; c <= ref.e.c; c++) {
+        const h = cellStr(ws, 0, c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        if (!h) continue;
+        for (const [key, names] of Object.entries(COL_ALIASES)) {
+          if (names.includes(h) && map[key] == null) { map[key] = c; break; }
+        }
+      }
+      // Marca não encontrados como -1 (para checagem explícita no caller)
+      for (const key of Object.keys(COL_ALIASES)) {
+        if (map[key] == null) map[key] = -1;
+      }
+      return map;
+    }
 
     // ── Detect polygon column ──
     function findPolygonCol(ws, ref) {
-      // Check headers row 0 for "POLIGONO" or "poligono"
-      for (let c = 26; c < Math.min(ref.e.c + 1, 50); c++) {
-        const h = cellStr(ws, 0, c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        if (h.includes('poligono') || h.includes('polygon')) return c;
+      // Prioriza SBB (arquivos normalizados) sobre POLIGONO (numérico da SANEPAR)
+      let sbbCol = -1, polyGenCol = -1;
+      for (let c = 26; c < Math.min(ref.e.c + 1, 55); c++) {
+        const h = cellStr(ws, 0, c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        if (h === 'sbb' || h === 'sub bacia' || h === 'sub-bacia' || h === 'subbacia') { sbbCol = c; break; }
+        if ((h.includes('poligono') || h.includes('polygon')) && polyGenCol < 0) polyGenCol = c;
       }
-      // No fallback — only detect by explicit header to avoid false positives
-      return -1;
+      return sbbCol >= 0 ? sbbCol : polyGenCol;
     }
 
     // ── Detect end of main data (before auxiliary block) ──
     function findMainDataEnd(ws, ref) {
-      // Main data has col M (pv_jus) filled; aux block doesn't
-      // Scan backwards from end
+      // Main data has pv_jus filled; aux block doesn't
+      if (COL.pv_jus < 0) return ref.e.r; // sem coluna detectada, varre tudo
       for (let r = ref.e.r; r >= 1; r--) {
         const jus = cellStr(ws, r, COL.pv_jus);
         if (jus) return r;
@@ -8094,26 +8276,38 @@ body {
     }
 
     // ── AUDIT ──
-    window.gisAudit = () => {
-      const filePath = document.getElementById('gis-file-path').value;
-      if (!filePath) { alert('Selecione uma planilha GIS primeiro.'); return; }
+    window.gisAudit = async () => {
+      if (!_gisFiles.length) { alert('Adicione ao menos uma planilha GIS.'); return; }
 
       const st = document.getElementById('gis-status');
       st.textContent = 'Carregando...';
       st.style.color = 'var(--text3)';
 
-      setTimeout(() => {
-        try {
-          const wb = xlsx.readFile(filePath, { cellFormula: false, cellNF: false, cellStyles: false });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const ref = xlsx.utils.decode_range(ws['!ref']);
-
-          const lastMainRow = findMainDataEnd(ws, ref);
-          const polyCol = findPolygonCol(ws, ref);
+      await new Promise(r => setTimeout(r, 30));
+      try {
+          // União de todos os polígonos dos shapes carregados
+          const useShape = _gisShapes.length > 0;
+          const allPolys = useShape ? _gisShapes.flatMap(s => s.polys) : [];
 
           const errors = [];
-          const oseMap = {};   // ose1a -> { trechos, errors, polygon }
+          const oseMap = {};   // ose1a -> { trechos, errors, polygon, errorTypes, polyCount, polyRows }
           const polygons = new Set();
+          const filesMeta = [];  // [{path, lastMainRow, polyCol, COL}, ...]
+
+          for (let fi = 0; fi < _gisFiles.length; fi++) {
+            const filePath = _gisFiles[fi];
+            st.textContent = 'Lendo ' + (fi + 1) + '/' + _gisFiles.length + ': ' + _basename(filePath) + '...';
+            await new Promise(r => setTimeout(r, 10));
+
+            const wb = xlsx.readFile(filePath, { cellFormula: false, cellNF: false, cellStyles: false });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const ref = xlsx.utils.decode_range(ws['!ref']);
+
+            // Detecta colunas (cada planilha pode ter layout próprio)
+            COL = detectCols(ws, ref);
+            const lastMainRow = findMainDataEnd(ws, ref);
+            const polyCol = useShape ? -1 : findPolygonCol(ws, ref);
+            filesMeta.push({ path: filePath, lastMainRow, polyCol, cols: { ...COL } });
 
           for (let r = 1; r <= lastMainRow; r++) {
             const ose = cellStr(ws, r, COL.OSE);
@@ -8121,15 +8315,34 @@ body {
             if (!ose && !ose1a) continue;
 
             const rowNum = r + 1; // 1-indexed for user
-            const poly = polyCol >= 0 ? cellVal(ws, r, polyCol).val : null;
-            const polyStr = poly != null ? String(Math.round(Number(poly))) : '';
-            if (polyStr && polyStr !== 'NaN') polygons.add(polyStr);
+            let polyStr = '';
+            if (useShape) {
+              const x = COL.px_x >= 0 ? cellNum(ws, r, COL.px_x) : null;
+              const y = COL.px_y >= 0 ? cellNum(ws, r, COL.px_y) : null;
+              if (x != null && y != null) {
+                const sbb = _classifyPoint(x, y, allPolys);
+                if (sbb) polyStr = sbb;
+              }
+            } else if (polyCol >= 0) {
+              const poly = cellVal(ws, r, polyCol).val;
+              const polyStr0 = poly != null ? String(Math.round(Number(poly))) : '';
+              if (polyStr0 && polyStr0 !== 'NaN') polyStr = polyStr0;
+            }
+            if (polyStr) polygons.add(polyStr);
 
-            // OSE summary
+            // OSE summary (acumula entre arquivos)
             if (ose1a) {
-              if (!oseMap[ose1a]) oseMap[ose1a] = { trechos: 0, errors: 0, polygon: polyStr, errorTypes: new Set() };
+              if (!oseMap[ose1a]) oseMap[ose1a] = {
+                trechos: 0, errors: 0, polygon: polyStr, errorTypes: new Set(),
+                polyCount: {}, polyRows: {}
+              };
               oseMap[ose1a].trechos++;
               if (!oseMap[ose1a].polygon && polyStr) oseMap[ose1a].polygon = polyStr;
+              if (polyStr) {
+                oseMap[ose1a].polyCount[polyStr] = (oseMap[ose1a].polyCount[polyStr] || 0) + 1;
+                if (!oseMap[ose1a].polyRows[polyStr]) oseMap[ose1a].polyRows[polyStr] = [];
+                oseMap[ose1a].polyRows[polyStr].push({ path: filePath, row: r });
+              }
             }
 
             const pvMont = cellVal(ws, r, COL.pv_mont);
@@ -8141,7 +8354,7 @@ body {
             const compr = cellNum(ws, r, COL.compr);
 
             const addErr = (type, col, colName, value, motivo) => {
-              errors.push({ row: rowNum, ose, ose1a, trecho: ose1a, col: colName, type, value: String(value ?? ''), motivo, polygon: polyStr });
+              errors.push({ row: rowNum, ose, ose1a, trecho: ose1a, col: colName, type, value: String(value ?? ''), motivo, polygon: polyStr, filePath, fileBase: _basename(filePath) });
               if (oseMap[ose1a]) { oseMap[ose1a].errors++; oseMap[ose1a].errorTypes.add(type); }
             };
 
@@ -8153,36 +8366,42 @@ body {
               }
             }
 
+            // Helper: rótulo dinâmico "X (campo)" baseado na coluna real
+            const colLabel = (campo) => {
+              const ci = COL[campo];
+              return (ci != null && ci >= 0) ? xlsx.utils.encode_col(ci) + ' (' + campo + ')' : campo;
+            };
+
             // 2. TQ- nomenclatura
             if (!pvMont.error && typeof pvMont.val === 'string' && pvMont.val.startsWith('TQ-')) {
-              addErr('tq_nomenclatura', COL.pv_mont, 'J (pv_mont)', pvMont.val, 'Nomenclatura incorreta — "TQ-" deveria ser "PV-"');
+              addErr('tq_nomenclatura', COL.pv_mont, colLabel('pv_mont'), pvMont.val, 'Nomenclatura incorreta — "TQ-" deveria ser "PV-"');
             }
             if (!pvJus.error && typeof pvJus.val === 'string' && pvJus.val.startsWith('TQ-')) {
-              addErr('tq_nomenclatura', COL.pv_jus, 'M (pv_jus)', pvJus.val, 'Nomenclatura incorreta — "TQ-" deveria ser "PV-"');
+              addErr('tq_nomenclatura', COL.pv_jus, colLabel('pv_jus'), pvJus.val, 'Nomenclatura incorreta — "TQ-" deveria ser "PV-"');
             }
 
             // 3. TL com h > 1.30
             if (!pvMont.error && typeof pvMont.val === 'string' && pvMont.val.toUpperCase().startsWith('TL') && profMont != null && profMont > TL_MAX_H) {
-              addErr('tl_deveria_pv', COL.pv_mont, 'J (pv_mont)', pvMont.val, 'TL com h=' + profMont.toFixed(3) + 'm > ' + TL_MAX_H + 'm — deveria ser PV');
+              addErr('tl_deveria_pv', COL.pv_mont, colLabel('pv_mont'), pvMont.val, 'TL com h=' + profMont.toFixed(3) + 'm > ' + TL_MAX_H + 'm — deveria ser PV');
             }
             if (!pvJus.error && typeof pvJus.val === 'string' && pvJus.val.toUpperCase().startsWith('TL') && profJus != null && profJus > TL_MAX_H) {
-              addErr('tl_deveria_pv', COL.pv_jus, 'M (pv_jus)', pvJus.val, 'TL com h=' + profJus.toFixed(3) + 'm > ' + TL_MAX_H + 'm — deveria ser PV');
+              addErr('tl_deveria_pv', COL.pv_jus, colLabel('pv_jus'), pvJus.val, 'TL com h=' + profJus.toFixed(3) + 'm > ' + TL_MAX_H + 'm — deveria ser PV');
             }
 
             // 4. Profundidade < 1.10 (rasa)
             if (profMont != null && profMont >= 0 && profMont < H_MIN) {
-              addErr('prof_rasa', COL.prof_mont, 'R (prof_mont)', profMont.toFixed(3), 'Profundidade ' + profMont.toFixed(3) + 'm < ' + H_MIN + 'm mínimo');
+              addErr('prof_rasa', COL.prof_mont, colLabel('prof_mont'), profMont.toFixed(3), 'Profundidade ' + profMont.toFixed(3) + 'm < ' + H_MIN + 'm mínimo');
             }
             if (profJus != null && profJus >= 0 && profJus < H_MIN) {
-              addErr('prof_rasa', COL.prof_jus, 'S (prof_jus)', profJus.toFixed(3), 'Profundidade ' + profJus.toFixed(3) + 'm < ' + H_MIN + 'm mínimo');
+              addErr('prof_rasa', COL.prof_jus, colLabel('prof_jus'), profJus.toFixed(3), 'Profundidade ' + profJus.toFixed(3) + 'm < ' + H_MIN + 'm mínimo');
             }
 
             // 5. Profundidade negativa
             if (profMont != null && profMont < 0) {
-              addErr('prof_negativa', COL.prof_mont, 'R (prof_mont)', profMont.toFixed(4), 'Profundidade negativa — cota projetada acima do terreno');
+              addErr('prof_negativa', COL.prof_mont, colLabel('prof_mont'), profMont.toFixed(4), 'Profundidade negativa — cota projetada acima do terreno');
             }
             if (profJus != null && profJus < 0) {
-              addErr('prof_negativa', COL.prof_jus, 'S (prof_jus)', profJus.toFixed(4), 'Profundidade negativa — cota projetada acima do terreno');
+              addErr('prof_negativa', COL.prof_jus, colLabel('prof_jus'), profJus.toFixed(4), 'Profundidade negativa — cota projetada acima do terreno');
             }
 
             // 6. Declividade baixa
@@ -8193,32 +8412,45 @@ body {
 
               if (maxH <= DECL_DEPTH_LIMIT) {
                 if (decl < DECL_MIN_SHALLOW - DECL_EPS) {
-                  addErr('decl_baixa', COL.compr, 'P→Q (decliv.)', (decl * 100).toFixed(2) + '%',
+                  addErr('decl_baixa', COL.compr, 'decliv.', (decl * 100).toFixed(2) + '%',
                     'Declividade ' + (decl * 100).toFixed(2) + '% < 1,00% (h_max=' + maxH.toFixed(2) + 'm ≤ 3m)');
                 }
               } else {
                 if (decl < DECL_MIN_DEEP - DECL_EPS) {
-                  addErr('decl_baixa', COL.compr, 'P→Q (decliv.)', (decl * 100).toFixed(2) + '%',
+                  addErr('decl_baixa', COL.compr, 'decliv.', (decl * 100).toFixed(2) + '%',
                     'Declividade ' + (decl * 100).toFixed(2) + '% < 0,55% (h_max=' + maxH.toFixed(2) + 'm > 3m)');
                 }
               }
 
               // 7. Contra-declive
               if (desnivel < -0.001) {
-                addErr('contra_declive', COL.proj_mont, 'P→Q (decliv.)', 'Δ=' + Math.abs(desnivel).toFixed(3) + 'm',
+                addErr('contra_declive', COL.proj_mont, 'decliv.', 'Δ=' + Math.abs(desnivel).toFixed(3) + 'm',
                   'Contra-declive — proj_mont=' + projMont.toFixed(3) + ' < proj_jus=' + projJus.toFixed(3));
               }
             }
           }
+          } // ← fim do loop externo for (let fi = 0; fi < _gisFiles.length; fi++)
+
+          // Sort dos polígonos: numérico se todos forem números, senão alfabético
+          const polyArr = [...polygons];
+          const allNum = polyArr.length > 0 && polyArr.every(p => !isNaN(Number(p)));
+          polyArr.sort(allNum ? ((a, b) => Number(a) - Number(b)) : ((a, b) => String(a).localeCompare(String(b))));
+
+          const totalRows = filesMeta.reduce((a, f) => a + f.lastMainRow, 0);
+          const polyAvailableGlobal = useShape || filesMeta.some(f => f.polyCol >= 0);
 
           // Store results
           gisData = {
-            filePath,
-            totalRows: lastMainRow,
+            files: filesMeta,
+            filePath: filesMeta[0] ? filesMeta[0].path : null,  // back-compat para funções legadas
+            totalRows,
             errors,
             oseMap,
-            polygons: [...polygons].sort((a, b) => Number(a) - Number(b)),
-            polyCol,
+            polygons: polyArr,
+            polyCol: filesMeta[0] ? filesMeta[0].polyCol : -1,
+            useShape,
+            allPolys,
+            polyAvailableGlobal,
           };
 
           renderSummary();
@@ -8226,10 +8458,41 @@ body {
           renderErrors(errors);
           renderOseSummary();
 
-          st.textContent = lastMainRow + ' linhas analisadas — ' + errors.length + ' problemas encontrados';
-          st.style.color = errors.length ? '#dc2626' : '#16a34a';
+          const splits = polyAvailableGlobal ? computeSplitOses() : [];
+          const splitTotal = splits.reduce((a, s) => a + s.movedCount, 0);
+
+          let statusMsg = filesMeta.length + ' planilha(s) · ' + totalRows + ' linhas · ' + errors.length + ' problemas';
+          if (useShape) {
+            statusMsg += ' · SBB via ' + _gisShapes.length + ' shape(s) (' + allPolys.length + ' polígonos) · ' + splits.length + ' OSEs divididas';
+          } else if (!polyAvailableGlobal) {
+            statusMsg += ' · ⚠ coluna POLIGONO ausente em todas as planilhas';
+          } else {
+            statusMsg += ' · POLIGONO via coluna · ' + splits.length + ' OSEs divididas';
+          }
+
+          st.textContent = statusMsg;
+          st.style.color = errors.length ? '#dc2626' : (polyAvailableGlobal ? '#16a34a' : '#d97706');
 
           document.getElementById('gis-export-btn').style.display = '';
+          // Botão "Corrigir Tudo" — só faz sentido se há erros corrigíveis
+          const corrBtn = document.getElementById('gis-corrigir-btn');
+          if (corrBtn) corrBtn.style.display = errors.length ? '' : 'none';
+          const perfilBtn = document.getElementById('gis-perfil-btn');
+          if (perfilBtn) perfilBtn.style.display = '';
+
+          // Botão Normalizar Polígonos
+          const normBtn = document.getElementById('gis-normalize-btn');
+          if (normBtn) {
+            if (polyAvailableGlobal && splits.length) {
+              normBtn.style.display = 'inline-flex';
+              normBtn.style.alignItems = 'center';
+              normBtn.style.padding = '10px 20px';
+              normBtn.style.fontSize = '13px';
+              normBtn.textContent = '⚙ Normalizar Polígonos (' + splits.length + ' OSEs · ' + splitTotal + ' linhas)';
+            } else {
+              normBtn.style.display = 'none';
+            }
+          }
 
         } catch (e) {
           st.textContent = 'Erro: ' + e.message;
@@ -8247,7 +8510,927 @@ body {
             renderGisMap();
           } catch (e3) { console.error('GIS renderMap error:', e3); }
         }
-      }, 50);
+    };
+
+    // ── FASE 1: Normalização de polígonos ──
+    // Detecta OSEs divididas entre polígonos e calcula plano de reatribuição
+    function computeSplitOses() {
+      if (!gisData) return [];
+      const splits = [];
+      for (const [ose1a, info] of Object.entries(gisData.oseMap)) {
+        if (!info.polyCount) continue;
+        const polys = Object.keys(info.polyCount);
+        if (polys.length <= 1) continue;
+        // Majoritário: maior count; tiebreak = menor número de polígono
+        let majPoly = polys[0];
+        for (const p of polys) {
+          if (info.polyCount[p] > info.polyCount[majPoly] ||
+              (info.polyCount[p] === info.polyCount[majPoly] && Number(p) < Number(majPoly))) {
+            majPoly = p;
+          }
+        }
+        const movedRows = [];
+        for (const p of polys) {
+          if (p === majPoly) continue;
+          for (const r of (info.polyRows[p] || [])) movedRows.push({ row: r, fromPoly: p });
+        }
+        splits.push({
+          ose1a,
+          polyCount: info.polyCount,
+          majPoly,
+          movedRows,
+          movedCount: movedRows.length,
+        });
+      }
+      splits.sort((a, b) => b.movedCount - a.movedCount);
+      return splits;
+    }
+
+    // Modal de preview
+    window.gisNormalizePreview = () => {
+      if (!gisData) { alert('Faça a auditoria primeiro.'); return; }
+      const splits = computeSplitOses();
+      if (!splits.length) { alert('Nenhuma OSE dividida — nada a normalizar.'); return; }
+
+      const useShape = !!gisData.useShape;
+      const polyPrefix = useShape ? '' : 'POLY ';
+      const totalMoved = splits.reduce((a, s) => a + s.movedCount, 0);
+      const rows = splits.map(s => {
+        const detail = Object.entries(s.polyCount)
+          .sort((a, b) => Number(b[1]) - Number(a[1]))
+          .map(([p, n]) => `${polyPrefix}${p}=${n}`).join(' + ');
+        return `<tr>
+          <td style="font-weight:600">${esc(s.ose1a)}</td>
+          <td style="font-family:'DM Mono',monospace;font-size:11px">${esc(detail)}</td>
+          <td style="text-align:center"><span class="gis-badge green">${polyPrefix}${esc(s.majPoly)}</span></td>
+          <td style="text-align:center;font-weight:600;color:#dc2626">${s.movedCount}</td>
+        </tr>`;
+      }).join('');
+
+      const html = `
+        <div id="gis-norm-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)window.gisNormalizeClose()">
+          <div style="background:var(--surface);border-radius:10px;max-width:900px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+            <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+              <h3 style="margin:0;font-size:15px;color:var(--text)">Normalizar Polígonos — Preview</h3>
+              <span class="gis-badge blue">${splits.length} OSEs · ${totalMoved} linhas</span>
+              <button onclick="window.gisNormalizeClose()" style="margin-left:auto;background:none;border:none;font-size:22px;color:var(--text3);cursor:pointer;line-height:1;padding:0 4px">×</button>
+            </div>
+            <div style="padding:14px 24px;font-size:12px;color:var(--text2);background:var(--surface2);border-bottom:1px solid var(--border)">
+              Cada OSE listada será inteiramente reatribuída ao polígono <strong>majoritário</strong> (maior número de linhas).
+              Em caso de empate, vence o polígono de menor número.
+              A planilha original <strong>não será modificada</strong> — uma cópia será salva como <code>{nome}_NORMALIZADO.xlsx</code>.
+            </div>
+            <div style="overflow:auto;flex:1">
+              <table class="gis-tbl">
+                <thead>
+                  <tr>
+                    <th>OSE</th>
+                    <th>Distribuição atual</th>
+                    <th style="text-align:center;width:130px">Novo polígono</th>
+                    <th style="text-align:center;width:120px">Linhas movidas</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+            <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;align-items:center">
+              <span id="gis-norm-status" style="font-size:12px;color:var(--text3);margin-right:auto"></span>
+              <button onclick="window.gisNormalizeClose()" style="background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 18px;font-family:inherit;font-size:12px;cursor:pointer">Cancelar</button>
+              <button id="gis-norm-apply-btn" onclick="window.gisApplyNormalize()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:9px 22px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Aplicar e salvar</button>
+            </div>
+          </div>
+        </div>`;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = html;
+      document.body.appendChild(wrap.firstElementChild);
+    };
+
+    window.gisNormalizeClose = () => {
+      const ov = document.getElementById('gis-norm-overlay');
+      if (ov) ov.remove();
+    };
+
+    // Aplica plano: gera 1 _NORMALIZADO.xlsx por planilha origem
+    window.gisApplyNormalize = async () => {
+      if (!gisData) return;
+      const splits = computeSplitOses();
+      if (!splits.length) return;
+
+      // Fecha modal de preview e abre overlay de progresso
+      window.gisNormalizeClose && window.gisNormalizeClose();
+      _gisOpenProgress('Normalizando polígonos...');
+      await _yield();
+
+      try {
+        const pathMod = require('path');
+        const useShape = !!gisData.useShape;
+        const polyLabel = useShape ? 'SBB' : 'Polígono';
+
+        // Decide o "polígono final" por OSE (majoritário entre todas as linhas/arquivos)
+        const finalByOse = {};
+        for (const [ose1a, info] of Object.entries(gisData.oseMap)) {
+          const polys = Object.keys(info.polyCount || {});
+          if (!polys.length) continue;
+          let f = polys[0];
+          for (const p of polys) if (info.polyCount[p] > info.polyCount[f]) f = p;
+          finalByOse[ose1a] = f;
+        }
+
+        // Por arquivo: agrupa as células a alterar
+        const totalsByFile = {};  // path -> {cells, outPath}
+        const savedFiles = [];
+        const totalFiles = gisData.files.length;
+
+        for (let fi = 0; fi < totalFiles; fi++) {
+          const fmeta = gisData.files[fi];
+          const filePath = fmeta.path;
+          _gisProgress((fi/totalFiles)*100, '[' + (fi+1) + '/' + totalFiles + '] ' + _basename(filePath) + ' — lendo...');
+          await _yield();
+          const wb = xlsx.readFile(filePath, { cellFormula: false, cellNF: false, cellStyles: false });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const ref = xlsx.utils.decode_range(ws['!ref']);
+          let polyCol = fmeta.polyCol;
+
+          // Em modo shape: garante coluna "SBB" no fim da planilha (cria se não existir)
+          if (useShape) {
+            let sbbCol = -1;
+            for (let c = 0; c <= ref.e.c; c++) {
+              const h = (ws[xlsx.utils.encode_cell({ r: 0, c })] || {}).v;
+              if (h && String(h).trim().toUpperCase() === 'SBB') { sbbCol = c; break; }
+            }
+            if (sbbCol < 0) {
+              sbbCol = ref.e.c + 1;
+              ws[xlsx.utils.encode_cell({ r: 0, c: sbbCol })] = { v: 'SBB', t: 's' };
+              ws['!ref'] = xlsx.utils.encode_range({ s: ref.s, e: { r: ref.e.r, c: sbbCol } });
+            }
+            polyCol = sbbCol;
+          }
+
+          let cellsChanged = 0;
+          // Para cada OSE, percorre suas linhas neste arquivo e escreve o polígono final
+          for (const [ose1a, info] of Object.entries(gisData.oseMap)) {
+            const finalPoly = finalByOse[ose1a];
+            if (!finalPoly) continue;
+            for (const [poly, items] of Object.entries(info.polyRows || {})) {
+              for (const it of items) {
+                if (it.path !== filePath) continue;
+                // Em modo coluna: só altera o que está fora do majoritário
+                if (!useShape && poly === finalPoly) continue;
+                const addr = xlsx.utils.encode_cell({ r: it.row, c: polyCol });
+                if (useShape) {
+                  ws[addr] = { v: finalPoly, t: 's' };
+                } else {
+                  const cell = ws[addr] || {};
+                  cell.v = isNaN(Number(finalPoly)) ? finalPoly : Number(finalPoly);
+                  cell.t = isNaN(Number(finalPoly)) ? 's' : 'n';
+                  delete cell.w; delete cell.f;
+                  ws[addr] = cell;
+                }
+                cellsChanged++;
+              }
+            }
+          }
+
+          // Sheet de log com as linhas afetadas neste arquivo
+          const logRows = [['OSE', polyLabel + ' Original', 'Distribuição', polyLabel + ' Novo', 'Linha XLSX']];
+          for (const s of splits) {
+            const detail = Object.entries(s.polyCount)
+              .sort((a, b) => Number(b[1]) - Number(a[1]))
+              .map(([p, n]) => p + ': ' + n).join(' | ');
+            for (const m of s.movedRows) {
+              if (m.path !== filePath) continue;
+              logRows.push([s.ose1a, m.fromPoly, detail, s.majPoly, m.row + 1]);
+            }
+          }
+          if (logRows.length > 1) {
+            const logSheet = xlsx.utils.aoa_to_sheet(logRows);
+            xlsx.utils.book_append_sheet(wb, logSheet, 'Log Normalizacao');
+          }
+
+          _gisProgress(((fi+0.9)/totalFiles)*100, 'Salvando ' + _basename(filePath) + '...');
+          await _yield();
+          const dir = pathMod.dirname(filePath);
+          const base = pathMod.basename(filePath, pathMod.extname(filePath));
+          const outPath = pathMod.join(dir, base + '_NORMALIZADO.xlsx');
+          xlsx.writeFile(wb, outPath);
+          savedFiles.push({ path: outPath, cells: cellsChanged });
+          _gisProgressLog('✓ ' + _basename(outPath) + ' (' + cellsChanged + ' células)');
+        }
+
+        _gisProgress(100, 'Concluído!');
+        await new Promise(r => setTimeout(r, 400));
+        _gisCloseProgress();
+
+        const totalCells = savedFiles.reduce((a, f) => a + f.cells, 0);
+        alert(totalCells + ' células alteradas em ' + savedFiles.length + ' arquivo(s).\n\n' +
+          savedFiles.map(s => '• ' + s.path).join('\n'));
+        console.log('Arquivos gerados:', savedFiles);
+      } catch (e) {
+        console.error('Normalize error:', e);
+        _gisCloseProgress();
+        alert('Erro: ' + e.message);
+      }
+    };
+
+    // ────────────────────────────────────────────────
+    // Overlay de progresso (reutilizável)
+    // ────────────────────────────────────────────────
+    function _gisOpenProgress(title) {
+      _gisCloseProgress();
+      const html = `
+        <div id="gis-prog-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center">
+          <div style="background:var(--surface);border-radius:10px;padding:24px;min-width:480px;max-width:600px;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+            <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:14px">${esc(title)}</div>
+            <div id="gis-prog-msg" style="font-size:12px;color:var(--text2);margin-bottom:10px;font-family:'DM Mono',monospace">Iniciando...</div>
+            <div style="background:var(--surface2);border-radius:6px;height:10px;overflow:hidden;border:1px solid var(--border)">
+              <div id="gis-prog-bar" style="height:100%;background:linear-gradient(90deg,#16a34a,#22c55e);border-radius:6px;transition:width .25s;width:0%"></div>
+            </div>
+            <div id="gis-prog-pct" style="font-size:11px;color:var(--text3);text-align:right;margin-top:6px;font-family:'DM Mono',monospace">0%</div>
+            <div id="gis-prog-log" style="margin-top:10px;max-height:160px;overflow-y:auto;font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;background:var(--surface2);padding:8px;border-radius:4px;border:1px solid var(--border);display:none"></div>
+          </div>
+        </div>`;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = html;
+      document.body.appendChild(wrap.firstElementChild);
+    }
+    function _gisProgress(pct, msg) {
+      const bar = document.getElementById('gis-prog-bar');
+      const pctEl = document.getElementById('gis-prog-pct');
+      const msgEl = document.getElementById('gis-prog-msg');
+      if (bar) bar.style.width = Math.max(0, Math.min(100, pct)).toFixed(1) + '%';
+      if (pctEl) pctEl.textContent = pct.toFixed(1) + '%';
+      if (msg && msgEl) msgEl.textContent = msg;
+    }
+    function _gisProgressLog(line) {
+      const log = document.getElementById('gis-prog-log');
+      if (!log) return;
+      log.style.display = '';
+      const div = document.createElement('div');
+      div.textContent = line;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+    function _gisCloseProgress() {
+      const ov = document.getElementById('gis-prog-overlay');
+      if (ov) ov.remove();
+    }
+    const _yield = () => new Promise(r => setTimeout(r, 0));
+
+    // ────────────────────────────────────────────────
+    // CORRIGIR TUDO — em série, gera 1 _CORRIGIDO.xlsx por arquivo
+    // 1) Renomeia TQ-/TL→PV (TL apenas se h>1.30m vira PV)
+    // 2) Auto-fix declividade per-OSE (Fase 2)
+    // 3) Auto-fix grafo topológico inter-OSE (Fase 3)
+    // ────────────────────────────────────────────────
+    window.gisCorrigirTudo = async () => {
+      if (!gisData || !gisData.files) { alert('Faça a auditoria primeiro.'); return; }
+      _gisOpenProgress('Corrigindo planilha(s)...');
+      const pathMod = require('path');
+      const saved = [];
+      const grandStats = { renTQ:0, renTL:0, fxDecl:0, fxContra:0, fxGrafo:0, harmonized:0, degraus:0, tqs:0, warns:0, manual:0 };
+
+      try {
+        const totalFiles = gisData.files.length;
+        for (let fi = 0; fi < totalFiles; fi++) {
+          const fmeta = gisData.files[fi];
+          const filePath = fmeta.path;
+          const baseProgress = (fi / totalFiles) * 100;
+          const stepShare = 100 / totalFiles;
+          _gisProgress(baseProgress, '[' + (fi+1) + '/' + totalFiles + '] ' + _basename(filePath) + ' — lendo...');
+          await _yield();
+
+          const wb = xlsx.readFile(filePath, { cellFormula:false, cellNF:false, cellStyles:false });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const ref = xlsx.utils.decode_range(ws['!ref']);
+          const C = fmeta.cols;
+          const lastMain = fmeta.lastMainRow;
+
+          // ─── Pass 0: Normalização de polígonos (se aplicável) ───
+          _gisProgress(baseProgress + stepShare*0.05, 'Normalizando polígonos...');
+          await _yield();
+          let polyChanged = 0;
+          {
+            const useShape = !!gisData.useShape;
+            let polyCol = fmeta.polyCol;
+            // Em modo shape: garante coluna SBB
+            if (useShape) {
+              let sbbCol = -1;
+              for (let cc = 0; cc <= ref.e.c; cc++) {
+                const h = (ws[xlsx.utils.encode_cell({ r: 0, c: cc })] || {}).v;
+                if (h && String(h).trim().toUpperCase() === 'SBB') { sbbCol = cc; break; }
+              }
+              if (sbbCol < 0) {
+                sbbCol = ref.e.c + 1;
+                ws[xlsx.utils.encode_cell({ r: 0, c: sbbCol })] = { v: 'SBB', t: 's' };
+                ws['!ref'] = xlsx.utils.encode_range({ s: ref.s, e: { r: ref.e.r, c: sbbCol } });
+              }
+              polyCol = sbbCol;
+            }
+            if (polyCol >= 0) {
+              // Decide polígono final por OSE (majoritário)
+              const finalByOse = {};
+              for (const [ose1a, info] of Object.entries(gisData.oseMap)) {
+                const polys = Object.keys(info.polyCount || {});
+                if (!polys.length) continue;
+                let f = polys[0];
+                for (const p of polys) if (info.polyCount[p] > info.polyCount[f]) f = p;
+                finalByOse[ose1a] = f;
+              }
+              for (const [ose1a, info] of Object.entries(gisData.oseMap)) {
+                const finalPoly = finalByOse[ose1a];
+                if (!finalPoly) continue;
+                for (const items of Object.values(info.polyRows || {})) {
+                  for (const it of items) {
+                    if (it.path !== filePath) continue;
+                    const addr = xlsx.utils.encode_cell({ r: it.row, c: polyCol });
+                    if (useShape) {
+                      ws[addr] = { v: finalPoly, t: 's' };
+                    } else {
+                      const cell = ws[addr] || {};
+                      cell.v = isNaN(Number(finalPoly)) ? finalPoly : Number(finalPoly);
+                      cell.t = isNaN(Number(finalPoly)) ? 's' : 'n';
+                      delete cell.w; delete cell.f;
+                      ws[addr] = cell;
+                    }
+                    polyChanged++;
+                  }
+                }
+              }
+            }
+          }
+
+          // ─── Pass 1: nomenclatura TQ-/TL ───
+          _gisProgress(baseProgress + stepShare*0.15, 'Renomeando TQ-/TL...');
+          await _yield();
+          let renTQ = 0, renTL = 0;
+          for (let r = 1; r <= lastMain; r++) {
+            for (const colIdx of [C.pv_mont, C.pv_jus]) {
+              if (colIdx < 0) continue;
+              const a = xlsx.utils.encode_cell({ r, c: colIdx });
+              const cell = ws[a];
+              if (!cell || typeof cell.v !== 'string') continue;
+              const orig = cell.v;
+              if (orig.startsWith('TQ-')) {
+                cell.v = 'PV-' + orig.slice(3);
+                cell.t = 's'; delete cell.w; delete cell.f;
+                renTQ++;
+              } else if (orig.toUpperCase().startsWith('TL')) {
+                const profCol = colIdx === C.pv_mont ? C.prof_mont : C.prof_jus;
+                if (profCol >= 0) {
+                  const pv = ws[xlsx.utils.encode_cell({ r, c: profCol })];
+                  const h = pv ? Number(pv.v) : null;
+                  if (h != null && h > 1.30) {
+                    cell.v = 'PV-' + orig.replace(/^TL[-_]?/i, '');
+                    cell.t = 's'; delete cell.w; delete cell.f;
+                    renTL++;
+                  }
+                }
+              }
+            }
+          }
+          grandStats.renTQ += renTQ; grandStats.renTL += renTL;
+          if (!grandStats.polyChanged) grandStats.polyChanged = 0;
+          grandStats.polyChanged += polyChanged;
+
+          // ─── Pass 2: coleta edges + Pass 2 (per-OSE decl) + Pass 3 (grafo) ───
+          _gisProgress(baseProgress + stepShare*0.2, 'Coletando trechos...');
+          await _yield();
+          const edges = [];
+          for (let r = 1; r <= lastMain; r++) {
+            const ose1a = (ws[xlsx.utils.encode_cell({r,c:C.OSE1a})]||{}).v;
+            const mont = (ws[xlsx.utils.encode_cell({r,c:C.pv_mont})]||{}).v;
+            const jus = (ws[xlsx.utils.encode_cell({r,c:C.pv_jus})]||{}).v;
+            if (!mont || !jus) continue;
+            const num = (ci) => { const cv = (ws[xlsx.utils.encode_cell({r,c:ci})]||{}).v; const n = Number(cv); return isFinite(n)?n:null; };
+            edges.push({
+              row: r,
+              ose1a: ose1a ? String(ose1a) : '',
+              ose: String((ws[xlsx.utils.encode_cell({r,c:C.OSE})]||{}).v || ''),
+              mont: String(mont), jus: String(jus),
+              terrMont: num(C.terr_mont), terrJus: num(C.terr_jus),
+              projMontOrig: num(C.proj_mont), projJusOrig: num(C.proj_jus),
+              compr: num(C.compr),
+              projMontFinal: null, projJusFinal: null,
+            });
+          }
+
+          // Constrói grafo
+          _gisProgress(baseProgress + stepShare*0.3, 'Construindo grafo...');
+          await _yield();
+          const inE = {}, outE = {}, allPvs = new Set();
+          for (const e of edges) {
+            allPvs.add(e.mont); allPvs.add(e.jus);
+            (outE[e.mont] = outE[e.mont]||[]).push(e);
+            (inE[e.jus] = inE[e.jus]||[]).push(e);
+          }
+          const ctByPv = {};
+          for (const e of edges) {
+            if (e.terrMont != null && ctByPv[e.mont] == null) ctByPv[e.mont] = e.terrMont;
+            if (e.terrJus != null && ctByPv[e.jus] == null) ctByPv[e.jus] = e.terrJus;
+          }
+          const heads = [...allPvs].filter(p => !inE[p] || !inE[p].length);
+          const cfSaida = {};
+          // Helper: aplica restrição h_min (cf não pode exceder terr_pv - h_min)
+          const H_MIN_LOC = 1.10;
+          const enforceHMin = (pv, cf) => {
+            const ct = ctByPv[pv];
+            if (ct == null) return cf;
+            const cfMax = ct - H_MIN_LOC;
+            return Math.min(cf, cfMax);
+          };
+          for (const head of heads) {
+            const out = outE[head] || [];
+            for (const e of out) if (e.projMontOrig != null) {
+              cfSaida[head] = { cf: enforceHMin(head, e.projMontOrig) };
+              break;
+            }
+          }
+          const remIn = {};
+          for (const [pv, arr] of Object.entries(inE)) remIn[pv] = new Set(arr);
+
+          // ─── Pass 3: Kahn topológico (declividade ÚNICA por OSE) ───
+          _gisProgress(baseProgress + stepShare*0.4, 'Processando topologia (declividade por OSE)...');
+          await _yield();
+
+          // Agrupa edges por OSE (chains)
+          const chainsByOse = {};
+          for (const e of edges) {
+            if (!e.ose1a) continue;
+            (chainsByOse[e.ose1a] = chainsByOse[e.ose1a]||[]).push(e);
+          }
+          // Ordena cada chain montante→jusante
+          const orderedChains = {};
+          for (const [ose1a, arr] of Object.entries(chainsByOse)) {
+            if (arr.length <= 1) { orderedChains[ose1a] = arr.slice(); continue; }
+            const byMont = {};
+            for (const e of arr) byMont[e.mont] = e;
+            const justAll = new Set(arr.map(e => e.jus));
+            const head = arr.find(e => !justAll.has(e.mont)) || arr[0];
+            const ord = []; const seen = new Set();
+            let cur = head;
+            while (cur && !seen.has(cur.mont)) { seen.add(cur.mont); ord.push(cur); cur = byMont[cur.jus] || null; }
+            for (const e of arr) if (!ord.includes(e)) ord.push(e);
+            orderedChains[ose1a] = ord;
+          }
+          // Para cada OSE: head=primeiro mont, tail=último jus
+          const oseInfo = {};  // ose1a → {head, tail, chain}
+          for (const [ose1a, chain] of Object.entries(orderedChains)) {
+            oseInfo[ose1a] = { head: chain[0].mont, tail: chain[chain.length-1].jus, chain };
+          }
+          // Por PV: quais OSEs entram (terminam aqui) e saem (começam aqui)
+          const osesIn = {}, osesOut = {};
+          for (const [ose1a, info] of Object.entries(oseInfo)) {
+            (osesIn[info.tail] = osesIn[info.tail]||[]).push(ose1a);
+            (osesOut[info.head] = osesOut[info.head]||[]).push(ose1a);
+          }
+          const remOseIn = {};
+          for (const [pv, arr] of Object.entries(osesIn)) remOseIn[pv] = new Set(arr);
+
+          // Helper: calcula i único pra uma OSE (chain), dado cfHead
+          // SEMPRE usa i_min = 1% (mais conservador). Considera só requisito h_min adicional.
+          const computeIOse = (chain, cfHead) => {
+            const I_MIN_NORM = 0.01;  // 1% sempre
+            let req = 0, acum = 0;
+            for (const e of chain) {
+              if (!e.compr || e.compr <= 0) continue;
+              acum += e.compr;
+              if (e.terrJus != null) {
+                // h_jus >= 1.10 → cf_jus <= terr_jus - 1.10
+                // cf_jus = cfHead - i * acum → i >= (cfHead - terr_jus + 1.10) / acum
+                const r = (cfHead - e.terrJus + H_MIN_LOC) / acum;
+                if (r > req) req = r;
+              }
+            }
+            // Tenta manter declividade original da OSE se já é boa
+            if (chain.length > 0) {
+              const first = chain[0], last = chain[chain.length-1];
+              if (first.projMontOrig != null && last.projJusOrig != null) {
+                let totalL = 0;
+                for (const e of chain) if (e.compr && e.compr > 0) totalL += e.compr;
+                if (totalL > 0) {
+                  const iOrig = (first.projMontOrig - last.projJusOrig) / totalL;
+                  if (iOrig >= I_MIN_NORM - 1e-5 && iOrig >= req - 1e-5) return iOrig;
+                }
+              }
+            }
+            return Math.max(I_MIN_NORM, req);
+          };
+
+          // Inicializa cabeceiras (PVs sem osesIn)
+          const cabPvs = [...allPvs].filter(p => !osesIn[p] || !osesIn[p].length);
+          for (const pv of cabPvs) {
+            // CF saída = projMontOrig do primeiro trecho saindo (com h_min)
+            const out = osesOut[pv] || [];
+            for (const ose of out) {
+              const first = oseInfo[ose].chain[0];
+              if (first && first.projMontOrig != null) {
+                cfSaida[pv] = { cf: enforceHMin(pv, first.projMontOrig) };
+                break;
+              }
+            }
+            if (cfSaida[pv] == null) cfSaida[pv] = { cf: enforceHMin(pv, ctByPv[pv] != null ? ctByPv[pv] - H_MIN_LOC : 0) };
+          }
+
+          // Processo: queue = PVs prontos
+          const chegadasByPv = {};   // pv → [cf chegada por OSE]
+          let fxGrafo=0, harmonized=0, degraus=0, tqs=0, warns=0, manual=0, hMinFix=0, suspeitas=0;
+          let osesProcessed = 0;
+          const totalOsesLocal = Object.keys(oseInfo).length;
+          const queue = cabPvs.slice();
+          let iter = 0; const guard = allPvs.size * 4 + 100;
+
+          while (queue.length && iter++ < guard) {
+            const pv = queue.shift();
+            const cfOut = cfSaida[pv].cf;
+            // Processa cada OSE que SAI deste PV
+            for (const ose1a of (osesOut[pv] || [])) {
+              const chain = oseInfo[ose1a].chain;
+              const iOse = computeIOse(chain, cfOut);
+              // Aplica linear
+              let acum = 0, prevCf = cfOut;
+              for (const e of chain) {
+                e.projMontFinal = prevCf;
+                if (e.compr && e.compr > 0) {
+                  acum += e.compr;
+                  e.projJusFinal = cfOut - iOse * acum;
+                  prevCf = e.projJusFinal;
+                  // Stats: profundidade
+                  if (e.terrJus != null) {
+                    const hJus = e.terrJus - e.projJusFinal;
+                    if (hJus < H_MIN_LOC - 1e-6) manual++;
+                    else if (hJus > 3.0) warns++;
+                  }
+                  fxGrafo++;
+                }
+              }
+              // Registra chegada no tail PV
+              const tail = oseInfo[ose1a].tail;
+              if (chain[chain.length-1].projJusFinal != null) {
+                (chegadasByPv[tail] = chegadasByPv[tail]||[]).push(chain[chain.length-1].projJusFinal);
+              }
+              const r2 = remOseIn[tail];
+              if (r2) {
+                r2.delete(ose1a);
+                if (r2.size === 0) {
+                  // Tail pronto: cf_saída = min(chegadas) SEMPRE (não afoga PV)
+                  const chegadas = chegadasByPv[tail] || [];
+                  if (chegadas.length) {
+                    let mn = chegadas[0], mx = chegadas[0];
+                    for (const c of chegadas) { if (c < mn) mn = c; if (c > mx) mx = c; }
+                    const cfWithH = enforceHMin(tail, mn);  // sempre o mínimo
+                    if (cfWithH < mn) hMinFix++;
+                    cfSaida[tail] = { cf: cfWithH };
+                    if (chegadas.length > 1) {
+                      harmonized++;
+                      // Se diff > 30cm marca como suspeito (apenas log/diagnóstico — não muda comportamento)
+                      if ((mx - mn) > 0.30) suspeitas++;
+                      for (const c of chegadas) {
+                        const diff = c - cfWithH;
+                        if (diff > 0.001) { if (diff > 0.50) tqs++; else degraus++; }
+                      }
+                    }
+                  } else {
+                    cfSaida[tail] = { cf: enforceHMin(tail, cfOut) };
+                  }
+                  queue.push(tail);
+                }
+              } else {
+                // Tail não tem OSEs entrando além desta — só ela
+                cfSaida[tail] = cfSaida[tail] || { cf: enforceHMin(tail, chain[chain.length-1].projJusFinal != null ? chain[chain.length-1].projJusFinal : cfOut) };
+                queue.push(tail);
+              }
+              osesProcessed++;
+            }
+            if (osesProcessed % 100 === 0) {
+              _gisProgress(baseProgress + stepShare*(0.4 + 0.4*(osesProcessed/Math.max(1,totalOsesLocal))), 'Processando ' + osesProcessed + '/' + totalOsesLocal + ' OSEs...');
+              await _yield();
+            }
+          }
+          grandStats.fxGrafo += fxGrafo; grandStats.harmonized += harmonized;
+          grandStats.degraus += degraus; grandStats.tqs += tqs;
+          grandStats.warns += warns; grandStats.manual += manual;
+          if (!grandStats.hMinFix) grandStats.hMinFix = 0;
+          grandStats.hMinFix += hMinFix;
+          if (!grandStats.suspeitas) grandStats.suspeitas = 0;
+          grandStats.suspeitas += suspeitas;
+
+          // ─── Pass 4: aplica cotas + recalcula prof_mont/prof_jus no XLSX ───
+          _gisProgress(baseProgress + stepShare*0.85, 'Aplicando cotas e profundidades no XLSX...');
+          await _yield();
+          let cellsChanged = 0;
+          const writeCell = (r, c, val, type) => {
+            if (c < 0) return;
+            const a = xlsx.utils.encode_cell({ r, c });
+            const cur = ws[a];
+            if (!cur || Math.abs((cur.v||0) - val) > 1e-6) {
+              ws[a] = { v: val, t: type || 'n' };
+              cellsChanged++;
+            }
+          };
+          for (const e of edges) {
+            if (e.projMontFinal != null) {
+              writeCell(e.row, C.proj_mont, e.projMontFinal);
+              // Atualiza prof_mont = terr_mont - proj_mont (se terr disponível)
+              if (e.terrMont != null) writeCell(e.row, C.prof_mont, e.terrMont - e.projMontFinal);
+            }
+            if (e.projJusFinal != null) {
+              writeCell(e.row, C.proj_jus, e.projJusFinal);
+              if (e.terrJus != null) writeCell(e.row, C.prof_jus, e.terrJus - e.projJusFinal);
+            }
+          }
+
+          // ─── Pass 5: log + salva ───
+          _gisProgress(baseProgress + stepShare*0.95, 'Salvando...');
+          await _yield();
+          const logRows = [
+            ['Item','Quantidade'],
+            ['Polígonos normalizados', polyChanged],
+            ['TQ- → PV-', renTQ],
+            ['TL → PV (h>1.30)', renTL],
+            ['Trechos com cota recalculada', fxGrafo],
+            ['Cotas rebaixadas pra atender h_min', hMinFix],
+            ['PVs harmonizados (≥2 chegadas)', harmonized],
+            ['  ↳ Degraus externos (≤50cm)', degraus],
+            ['  ↳ Tubos de queda (>50cm)', tqs],
+            ['Avisos h>3m', warns],
+            ['Trechos restantes (h<1.10m após fix)', manual],
+            ['Células alteradas (cotas + prof)', cellsChanged],
+          ];
+          xlsx.utils.book_append_sheet(wb, xlsx.utils.aoa_to_sheet(logRows), 'Log Correcao');
+
+          const dir = pathMod.dirname(filePath);
+          const base = pathMod.basename(filePath, pathMod.extname(filePath));
+          const outPath = pathMod.join(dir, base + '_CORRIGIDO.xlsx');
+          xlsx.writeFile(wb, outPath);
+          saved.push({ path: outPath, renTQ, renTL, fxGrafo, harmonized, degraus, tqs, warns, manual, cellsChanged });
+          _gisProgressLog('✓ ' + _basename(outPath) + ' (' + cellsChanged + ' células, ' + renTQ + ' TQ→PV, ' + renTL + ' TL→PV, ' + harmonized + ' harm.)');
+        }
+
+        _gisProgress(100, 'Concluído! Re-auditando...');
+        await new Promise(r => setTimeout(r, 300));
+        _gisCloseProgress();
+
+        // Auto: substitui a lista pelas planilhas corrigidas e re-audita imediatamente
+        const correctedPaths = saved.map(s => s.path);
+        _gisFiles = correctedPaths;
+        _renderGisFiles();
+
+        // Toast persistente
+        const toastHtml = `
+          <div id="gis-corr-toast" style="position:fixed;top:20px;right:20px;z-index:9990;background:#16a34a;color:#fff;padding:14px 20px;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.3);font-family:inherit;max-width:480px">
+            <div style="font-weight:700;font-size:13px;margin-bottom:6px">✓ Correção aplicada</div>
+            <div style="font-size:11px;line-height:1.6;font-family:'DM Mono',monospace">
+              ${grandStats.polyChanged} polígonos · ${grandStats.renTQ} TQ→PV · ${grandStats.renTL} TL→PV<br>
+              ${grandStats.fxGrafo} cotas recalculadas · ${grandStats.hMinFix} rebaixadas (h_min)<br>
+              ${grandStats.harmonized} PVs harm. (${grandStats.degraus} degraus / ${grandStats.tqs} TQs)<br>
+              ⚠ ${grandStats.suspeitas} harmonizações com diff>30cm (verifique cadeia montante)<br>
+              ${grandStats.warns} avisos h>3m · ${grandStats.manual} restam c/ h<1.10m
+            </div>
+            <div style="font-size:10px;margin-top:8px;opacity:.85">Arquivo(s): ${saved.map(s => _basename(s.path)).join(', ')}</div>
+            <button onclick="document.getElementById('gis-corr-toast').remove()" style="position:absolute;top:6px;right:8px;background:transparent;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0">×</button>
+          </div>`;
+        const wrap = document.createElement('div');
+        wrap.innerHTML = toastHtml;
+        document.body.appendChild(wrap.firstElementChild);
+        setTimeout(() => { const t = document.getElementById('gis-corr-toast'); if (t) t.remove(); }, 15000);
+
+        // Re-roda audit (que atualiza o mapa também)
+        await window.gisAudit();
+      } catch (e) {
+        console.error('Corrigir Tudo error:', e);
+        _gisCloseProgress();
+        alert('Erro: ' + e.message);
+      }
+    };
+
+    // Substitui a lista de planilhas pelas corrigidas e roda audit
+    window.gisReloadCorrected = (paths) => {
+      const ov = document.getElementById('gis-corr-overlay');
+      if (ov) ov.remove();
+      _gisFiles = paths.slice();
+      _renderGisFiles();
+      window.gisAudit();
+    };
+
+    // ────────────────────────────────────────────────
+    // VISUALIZAR PERFIL DE OSE
+    // ────────────────────────────────────────────────
+    function _gisCollectOseChain(ose1aTarget) {
+      // Para a OSE escolhida, retorna a cadeia ordenada de trechos com seus dados
+      const out = [];
+      for (const fmeta of (gisData.files || [])) {
+        const wb = xlsx.readFile(fmeta.path, { cellFormula:false, cellNF:false, cellStyles:false });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const C = fmeta.cols;
+        const num = (r, ci) => { if (ci<0) return null; const v = (ws[xlsx.utils.encode_cell({r,c:ci})]||{}).v; const n = Number(v); return isFinite(n)?n:null; };
+        const str = (r, ci) => { if (ci<0) return ''; const v = (ws[xlsx.utils.encode_cell({r,c:ci})]||{}).v; return v!=null?String(v):''; };
+        for (let r = 1; r <= fmeta.lastMainRow; r++) {
+          if (str(r, C.OSE1a) !== ose1aTarget) continue;
+          out.push({
+            ose: str(r, C.OSE),
+            mont: str(r, C.pv_mont), jus: str(r, C.pv_jus),
+            terrMont: num(r, C.terr_mont), terrJus: num(r, C.terr_jus),
+            projMont: num(r, C.proj_mont), projJus: num(r, C.proj_jus),
+            profMont: num(r, C.prof_mont), profJus: num(r, C.prof_jus),
+            compr: num(r, C.compr),
+            diam: num(r, C.diam),
+          });
+        }
+      }
+      // Ordena cadeia: pv_jus do anterior == pv_mont do próximo
+      if (out.length <= 1) return out;
+      const byMont = {};
+      for (const t of out) byMont[t.mont] = t;
+      const justAll = new Set(out.map(t => t.jus));
+      const head = out.find(t => !justAll.has(t.mont)) || out[0];
+      const ordered = []; const seen = new Set();
+      let cur = head;
+      while (cur && !seen.has(cur.mont)) { seen.add(cur.mont); ordered.push(cur); cur = byMont[cur.jus] || null; }
+      for (const t of out) if (!ordered.includes(t)) ordered.push(t);
+      return ordered;
+    }
+
+    window.gisPerfilOpen = () => {
+      if (!gisData) return;
+      const oses = Object.keys(gisData.oseMap || {}).sort();
+      if (!oses.length) { alert('Nenhuma OSE encontrada.'); return; }
+      const html = `
+        <div id="gis-perfil-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('gis-perfil-overlay').remove()">
+          <div style="background:var(--surface);border-radius:10px;width:1100px;max-width:98vw;max-height:95vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+            <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+              <h3 style="margin:0;font-size:14px;color:var(--text)">Perfil da OSE</h3>
+              <select id="gis-perfil-ose" onchange="window.gisPerfilRender()" style="padding:5px 10px;font-family:inherit;font-size:12px;border:1px solid var(--border);border-radius:5px;background:var(--surface2);color:var(--text);min-width:200px">
+                <option value="">— Selecione uma OSE —</option>
+                ${oses.map(o => '<option value="' + esc(o) + '">' + esc(o) + '</option>').join('')}
+              </select>
+              <span id="gis-perfil-info" style="font-size:11px;color:var(--text3)"></span>
+              <button onclick="document.getElementById('gis-perfil-overlay').remove()" style="margin-left:auto;background:none;border:none;font-size:22px;color:var(--text3);cursor:pointer;line-height:1;padding:0 4px">×</button>
+            </div>
+            <div id="gis-perfil-body" style="flex:1;overflow:auto;padding:14px 20px;background:var(--surface2)">
+              <div style="text-align:center;padding:60px;color:var(--text3);font-size:13px">Selecione uma OSE acima pra ver o perfil</div>
+            </div>
+          </div>
+        </div>`;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = html;
+      document.body.appendChild(wrap.firstElementChild);
+    };
+
+    window.gisPerfilRender = () => {
+      const sel = document.getElementById('gis-perfil-ose');
+      const body = document.getElementById('gis-perfil-body');
+      const info = document.getElementById('gis-perfil-info');
+      if (!sel || !body) return;
+      const ose = sel.value;
+      if (!ose) { body.innerHTML = ''; info.textContent = ''; return; }
+
+      const chain = _gisCollectOseChain(ose);
+      if (!chain.length) { body.innerHTML = '<div style="padding:30px;color:var(--text3);text-align:center">Sem dados pra esta OSE</div>'; return; }
+
+      // Coleta cotas e PVs por posição (acumulado)
+      const pvs = [];  // [{id, x_acum, ct, cf, prof, isFirst, isLast}]
+      let acum = 0;
+      // Primeiro PV (mont do primeiro trecho)
+      const t0 = chain[0];
+      pvs.push({ id: t0.mont, x: 0, ct: t0.terrMont, cf: t0.projMont, prof: t0.profMont });
+      for (let i = 0; i < chain.length; i++) {
+        const t = chain[i];
+        if (t.compr != null) acum += t.compr;
+        pvs.push({ id: t.jus, x: acum, ct: t.terrJus, cf: t.projJus, prof: t.profJus, decl: (t.compr > 0 && t.projMont != null && t.projJus != null) ? (t.projMont - t.projJus)/t.compr : null, compr: t.compr, diam: t.diam });
+      }
+      info.textContent = chain.length + ' trechos · ' + acum.toFixed(2) + ' m extensão · ' + pvs.length + ' PVs';
+
+      // Determina escala
+      const cts = pvs.filter(p => p.ct != null).map(p => p.ct);
+      const cfs = pvs.filter(p => p.cf != null).map(p => p.cf);
+      const cotaMax = Math.max(...cts) + 0.5;
+      const cotaMin = Math.min(...cfs) - 0.5;
+      const cotaRange = cotaMax - cotaMin;
+      const xMax = acum > 0 ? acum : pvs.length;
+
+      // Dimensões SVG
+      const W = Math.max(1000, Math.min(2600, pvs.length * 70));
+      const H = 440;
+      const padL = 70, padR = 40, padT = 30, padB = 40;
+      const innerW = W - padL - padR, innerH = H - padT - padB;
+      const sx = (x) => padL + (x / xMax) * innerW;
+      const sy = (y) => padT + (1 - (y - cotaMin) / cotaRange) * innerH;
+      const isPit = (id) => /^PIT-/i.test(id || '');
+
+      // Pontos das linhas (passam por PVs e PITs)
+      const terrPts = pvs.map(p => sx(p.x) + ',' + sy(p.ct)).join(' ');
+      const cfPts = pvs.map(p => sx(p.x) + ',' + sy(p.cf)).join(' ');
+      const dnDefault = 0.150;
+      const cfTopPts = pvs.map((p, i) => {
+        const dn = i < chain.length && chain[i] && chain[i].diam ? chain[i].diam : dnDefault;
+        return sx(p.x) + ',' + sy(p.cf + dn);
+      }).join(' ');
+
+      // Hatched terrain (área acima da linha de CT)
+      const terrAreaPts = sx(0) + ',' + sy(cotaMax) + ' ' + terrPts + ' ' + sx(xMax) + ',' + sy(cotaMax);
+
+      // Estacas (ticks verticais nos PITs)
+      const pitTicks = pvs.filter(p => isPit(p.id)).map(p => {
+        const x = sx(p.x); const yTop = sy(p.ct);
+        return '<line x1="' + x + '" y1="' + yTop + '" x2="' + x + '" y2="' + (yTop+8) + '" stroke="#475569" stroke-width="1"/>';
+      }).join('');
+
+      // Retângulos APENAS pra PVs reais (não-PIT)
+      const pvRects = pvs.filter(p => !isPit(p.id)).map(p => {
+        const x = sx(p.x); const yTop = sy(p.ct); const yBot = sy(p.cf);
+        const cx = x, cy = (yTop + yBot) / 2;
+        return '<g>' +
+          '<rect x="' + (x-7) + '" y="' + yTop + '" width="14" height="' + (yBot-yTop) + '" fill="url(#pvGrad)" stroke="#0f172a" stroke-width="1.2"/>' +
+          '<line x1="' + (x-9) + '" y1="' + yTop + '" x2="' + (x+9) + '" y2="' + yTop + '" stroke="#0f172a" stroke-width="2"/>' +
+          '<text x="' + x + '" y="' + (yTop-8) + '" font-size="11" font-weight="800" text-anchor="middle" fill="#0f172a">' + esc(p.id) + '</text>' +
+          '</g>';
+      }).join('');
+
+      // Grade Y (cotas) e X (extensão)
+      const yTicks = [];
+      const yStep = cotaRange / 6;
+      for (let i = 0; i <= 6; i++) {
+        const c = cotaMin + i * yStep;
+        const y = sy(c);
+        yTicks.push('<line x1="' + padL + '" y1="' + y + '" x2="' + (padL + innerW) + '" y2="' + y + '" stroke="#e2e8f0" stroke-width="0.6"/>' +
+          '<text x="' + (padL-6) + '" y="' + (y+3) + '" font-size="9" text-anchor="end" fill="#475569" font-family="DM Mono,monospace">' + c.toFixed(2) + '</text>');
+      }
+      const xTicks = [];
+      const xStep = xMax / 5;
+      for (let i = 0; i <= 5; i++) {
+        const x = sx(i * xStep);
+        xTicks.push('<line x1="' + x + '" y1="' + (padT+innerH) + '" x2="' + x + '" y2="' + (padT+innerH+4) + '" stroke="#475569" stroke-width="0.8"/>' +
+          '<text x="' + x + '" y="' + (padT+innerH+15) + '" font-size="9" text-anchor="middle" fill="#475569" font-family="DM Mono,monospace">' + (i*xStep).toFixed(0) + 'm</text>');
+      }
+
+      const svg =
+        '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;background:linear-gradient(180deg,#f0f9ff 0%,#e0f2fe 50%,#fef3c7 100%);border-radius:8px;border:1px solid var(--border);box-shadow:inset 0 0 0 1px rgba(0,0,0,0.04)">' +
+          '<defs>' +
+            '<pattern id="hatchTerr" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">' +
+              '<line x1="0" y1="0" x2="0" y2="6" stroke="#a16207" stroke-width="1.2" opacity="0.55"/>' +
+            '</pattern>' +
+            '<linearGradient id="pvGrad" x1="0" x2="0" y1="0" y2="1">' +
+              '<stop offset="0%" stop-color="#475569"/>' +
+              '<stop offset="100%" stop-color="#1e293b"/>' +
+            '</linearGradient>' +
+          '</defs>' +
+          '<rect x="' + padL + '" y="' + padT + '" width="' + innerW + '" height="' + innerH + '" fill="white" opacity="0.55"/>' +
+          yTicks.join('') + xTicks.join('') +
+          '<polygon points="' + terrAreaPts + '" fill="url(#hatchTerr)" opacity="0.5"/>' +
+          '<polyline points="' + terrPts + '" fill="none" stroke="#92400e" stroke-width="2.4" stroke-linejoin="round"/>' +
+          '<polyline points="' + cfTopPts + '" fill="none" stroke="#2563eb" stroke-width="1.4" stroke-dasharray="5,3" opacity="0.85"/>' +
+          '<polyline points="' + cfPts + '" fill="none" stroke="#1e40af" stroke-width="2.2" stroke-linejoin="round"/>' +
+          pitTicks +
+          pvRects +
+          '<rect x="' + padL + '" y="' + padT + '" width="' + innerW + '" height="' + innerH + '" fill="none" stroke="#1e293b" stroke-width="1"/>' +
+        '</svg>';
+
+      // Bandset: tabela com colunas alinhadas ao perfil
+      const cols = pvs.map((p, i) => {
+        const isFirst = i === 0;
+        const declPrev = !isFirst && p.decl != null ? (p.decl * 100).toFixed(2) + '%' : '';
+        const comprPrev = !isFirst && p.compr != null ? p.compr.toFixed(2) : '';
+        return `<th style="font-size:9px;font-weight:700;writing-mode:vertical-rl;transform:rotate(180deg);padding:8px 2px;border-left:1px solid var(--border);background:var(--surface);color:var(--text2);min-width:50px">${esc(p.id)}</th>`;
+      }).join('');
+      const rowCT = pvs.map(p => `<td style="text-align:center;font-family:'DM Mono',monospace;font-size:10px;border-left:1px solid var(--border);padding:3px">${p.ct != null ? p.ct.toFixed(3) : '—'}</td>`).join('');
+      const rowCF = pvs.map(p => `<td style="text-align:center;font-family:'DM Mono',monospace;font-size:10px;border-left:1px solid var(--border);padding:3px">${p.cf != null ? p.cf.toFixed(3) : '—'}</td>`).join('');
+      const rowProf = pvs.map(p => `<td style="text-align:center;font-family:'DM Mono',monospace;font-size:10px;border-left:1px solid var(--border);padding:3px;color:${p.prof != null && p.prof < 1.10 ? '#dc2626' : 'inherit'}">${p.prof != null ? p.prof.toFixed(2) : '—'}</td>`).join('');
+      const rowAcum = pvs.map(p => `<td style="text-align:center;font-family:'DM Mono',monospace;font-size:10px;border-left:1px solid var(--border);padding:3px">${p.x.toFixed(2)}</td>`).join('');
+      const rowDecl = pvs.map((p, i) => {
+        if (i === 0) return `<td style="text-align:center;font-family:'DM Mono',monospace;font-size:10px;border-left:1px solid var(--border);padding:3px;color:var(--text3)">—</td>`;
+        const d = p.decl != null ? (p.decl*100).toFixed(2) + '%' : '—';
+        const cor = p.decl != null && p.decl < 0.01 ? '#d97706' : (p.decl != null && p.decl < 0 ? '#dc2626' : 'inherit');
+        return `<td style="text-align:center;font-family:'DM Mono',monospace;font-size:10px;border-left:1px solid var(--border);padding:3px;color:${cor}">${d}</td>`;
+      }).join('');
+      const rowCompr = pvs.map((p, i) => {
+        if (i === 0) return `<td style="text-align:center;font-family:'DM Mono',monospace;font-size:10px;border-left:1px solid var(--border);padding:3px;color:var(--text3)">—</td>`;
+        return `<td style="text-align:center;font-family:'DM Mono',monospace;font-size:10px;border-left:1px solid var(--border);padding:3px">${p.compr != null ? p.compr.toFixed(2) : '—'}</td>`;
+      }).join('');
+
+      const bandset = `
+        <div style="margin-top:14px;background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto">
+          <table style="border-collapse:collapse;width:100%;min-width:${W}px">
+            <thead>
+              <tr><th style="text-align:left;padding:6px 8px;font-size:10px;font-weight:700;color:var(--text2);background:var(--surface2);border-bottom:1px solid var(--border)">PV</th>${cols}</tr>
+            </thead>
+            <tbody>
+              <tr><td style="text-align:left;padding:4px 8px;font-size:10px;font-weight:600;color:var(--text2);background:var(--surface2);border-bottom:1px solid var(--border)">CT (m)</td>${rowCT}</tr>
+              <tr><td style="text-align:left;padding:4px 8px;font-size:10px;font-weight:600;color:var(--text2);background:var(--surface2);border-bottom:1px solid var(--border)">CF (m)</td>${rowCF}</tr>
+              <tr><td style="text-align:left;padding:4px 8px;font-size:10px;font-weight:600;color:var(--text2);background:var(--surface2);border-bottom:1px solid var(--border)">h (m)</td>${rowProf}</tr>
+              <tr><td style="text-align:left;padding:4px 8px;font-size:10px;font-weight:600;color:var(--text2);background:var(--surface2);border-bottom:1px solid var(--border)">L acum (m)</td>${rowAcum}</tr>
+              <tr><td style="text-align:left;padding:4px 8px;font-size:10px;font-weight:600;color:var(--text2);background:var(--surface2);border-bottom:1px solid var(--border)">L trecho (m)</td>${rowCompr}</tr>
+              <tr><td style="text-align:left;padding:4px 8px;font-size:10px;font-weight:600;color:var(--text2);background:var(--surface2)">i (%)</td>${rowDecl}</tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:8px;font-size:10px;color:var(--text3);display:flex;gap:14px;flex-wrap:wrap">
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#92400e;display:inline-block"></span> Terreno</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#2563eb;display:inline-block"></span> Geratriz inferior</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:0;border-top:2px dashed #2563eb;display:inline-block"></span> Geratriz superior</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:14px;background:#0f172a;display:inline-block"></span> PV</span>
+        </div>`;
+
+      body.innerHTML = svg + bandset;
     };
 
     // ── Render summary cards ──
@@ -8475,15 +9658,36 @@ body {
     }
 
     // ── Build one ROTINA workbook for a polygon ──
-    async function buildRotinaForPoly(ws, ref, lastMain, polyCol, polyVal, cidade) {
+    async function buildRotinaForPoly(ws, ref, lastMain, polyCol, polyVal, cidade, colsOverride) {
       const ExcelJS = require('exceljs');
       const fs = require('fs');
+
+      const useShape = !!(gisData && gisData.useShape);
+      const allPolys = gisData && gisData.allPolys;
+      const cols = colsOverride || COL;
 
       const rows = [];
       const oseSet = new Set();
       for (let r = 1; r <= lastMain; r++) {
-        const pv = cellVal(ws, r, polyCol).val;
-        const pStr = pv != null ? String(Math.round(Number(pv))) : '';
+        let pStr = '';
+        if (useShape && allPolys && cols.px_x >= 0 && cols.px_y >= 0) {
+          const x = cellNum(ws, r, cols.px_x);
+          const y = cellNum(ws, r, cols.px_y);
+          if (x != null && y != null) {
+            const sbb = _classifyPoint(x, y, allPolys);
+            if (sbb) pStr = sbb;
+          }
+        } else if (polyCol >= 0) {
+          const pv = cellVal(ws, r, polyCol).val;
+          if (pv != null && pv !== '') {
+            const s = String(pv).trim();
+            if (/^-?\d+(\.\d+)?$/.test(s)) {
+              pStr = String(Math.round(Number(s)));
+            } else {
+              pStr = s;
+            }
+          }
+        }
         if (pStr !== polyVal) continue;
 
         const rowData = {};
@@ -8492,7 +9696,7 @@ body {
           if (ws[addr]) rowData[c] = ws[addr].v;
         }
         rows.push(rowData);
-        const ose1a = cellStr(ws, r, COL.OSE1a);
+        const ose1a = cellStr(ws, r, cols.OSE1a);
         if (ose1a) oseSet.add(ose1a);
       }
 
@@ -8501,7 +9705,6 @@ body {
       const wbOut = new ExcelJS.Workbook();
       const wsOut = wbOut.addWorksheet('ROTINA');
 
-      // Headers
       const headers = [];
       for (let c = 0; c <= ref.e.c; c++) headers.push(cellStr(ws, 0, c));
       const extraHeaders = { 29: 'numero da OSE', 30: 'CIDADE', 31: 'DATA', 32: 'ESCALA', 33: 'TRECHO_DA_OSE', 34: 'SUB BACIA' };
@@ -8509,15 +9712,14 @@ body {
       wsOut.addRow(headers);
       wsOut.getRow(1).eachCell(c => { c.font = { bold: true, size: 10 }; });
 
-      // Data rows
       const today = new Date().toISOString().slice(0, 10);
       for (const rd of rows) {
         const vals = [];
         for (let c = 0; c <= ref.e.c; c++) vals.push(rd[c] != null ? rd[c] : '');
-        vals[29] = rd[COL.OSE1a] || '';
+        vals[29] = rd[cols.OSE1a] || '';
         vals[30] = cidade;
         vals[31] = today;
-        vals[33] = rd[COL.OSE] || '';
+        vals[33] = rd[cols.OSE] || '';
         wsOut.addRow(vals);
       }
 
@@ -8571,40 +9773,49 @@ body {
       try {
         const fs = require('fs');
         const pathMod = require('path');
-        addLog('Lendo planilha GIS...');
-        const wb = xlsx.readFile(gisData.filePath, { cellFormula: false });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const ref = xlsx.utils.decode_range(ws['!ref']);
-        const lastMain = findMainDataEnd(ws, ref);
-        const polyCol = gisData.polyCol;
 
-        // Get base name from source file
-        const srcName = pathMod.basename(gisData.filePath, pathMod.extname(gisData.filePath));
+        const files = (gisData.files && gisData.files.length) ? gisData.files
+                    : (gisData.filePath ? [{ path: gisData.filePath, polyCol: gisData.polyCol, cols: null, lastMainRow: null }] : []);
+        if (!files.length) throw new Error('Nenhuma planilha carregada.');
 
         let totalFiles = 0;
         let totalRows = 0;
+        const totalSteps = files.length * selectedPolys.length;
+        let stepDone = 0;
 
-        for (let i = 0; i < selectedPolys.length; i++) {
-          const poly = selectedPolys[i];
-          const pct = Math.round(((i + 1) / selectedPolys.length) * 100);
-          bar.style.width = pct + '%';
+        for (let fi = 0; fi < files.length; fi++) {
+          const fmeta = files[fi];
+          addLog('Lendo ' + pathMod.basename(fmeta.path) + '...');
+          const wb = xlsx.readFile(fmeta.path, { cellFormula: false });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const ref = xlsx.utils.decode_range(ws['!ref']);
+          const lastMain = fmeta.lastMainRow || findMainDataEnd(ws, ref);
+          const polyCol = (fmeta.polyCol != null) ? fmeta.polyCol : -1;
+          const cols = fmeta.cols || COL;
+          const srcName = pathMod.basename(fmeta.path, pathMod.extname(fmeta.path));
 
-          addLog('Polígono ' + poly + '...');
-          const result = await buildRotinaForPoly(ws, ref, lastMain, polyCol, poly, cidade);
+          for (let i = 0; i < selectedPolys.length; i++) {
+            const poly = selectedPolys[i];
+            stepDone++;
+            bar.style.width = Math.round((stepDone / totalSteps) * 100) + '%';
 
-          if (!result.rows) {
-            addLog('  Polígono ' + poly + ': nenhuma linha — pulado', '#d97706');
-            continue;
+            const result = await buildRotinaForPoly(ws, ref, lastMain, polyCol, poly, cidade, cols);
+
+            if (!result.rows) {
+              addLog('  [' + srcName + '] Polígono ' + poly + ': 0 linhas — pulado', '#d97706');
+              continue;
+            }
+
+            const polySafe = /^\d+$/.test(poly) ? poly.padStart(2, '0') : String(poly).replace(/[\\/:*?"<>|]/g, '_');
+            const fileName = srcName + '_POLY_' + polySafe + '.xlsx';
+            const filePath = pathMod.join(folder, fileName);
+            const buf = await result.wb.xlsx.writeBuffer();
+            fs.writeFileSync(filePath, Buffer.from(buf));
+
+            totalFiles++;
+            totalRows += result.rows;
+            addLog('  ' + fileName + ' — ' + result.rows + ' linhas, ' + result.oses + ' OSEs', '#16a34a');
           }
-
-          const fileName = srcName + '_POLY' + poly.padStart(2, '0') + '.xlsx';
-          const filePath = pathMod.join(folder, fileName);
-          const buf = await result.wb.xlsx.writeBuffer();
-          fs.writeFileSync(filePath, Buffer.from(buf));
-
-          totalFiles++;
-          totalRows += result.rows;
-          addLog('  ' + fileName + ' — ' + result.rows + ' linhas, ' + result.oses + ' OSEs', '#16a34a');
         }
 
         bar.style.width = '100%';
@@ -8634,18 +9845,54 @@ body {
       st.textContent = 'Gerando ROTINA para polígono ' + polyF + '...';
 
       try {
-        const wb = xlsx.readFile(gisData.filePath, { cellFormula: false });
+        const pathMod = require('path');
+        const fs = require('fs');
+        const files = (gisData.files && gisData.files.length) ? gisData.files
+                    : (gisData.filePath ? [{ path: gisData.filePath, polyCol: gisData.polyCol, cols: null, lastMainRow: null }] : []);
+        if (!files.length) throw new Error('Nenhuma planilha carregada.');
+
+        // Se multi-arquivo, pergunta pasta de saída e salva N arquivos. Senão, download único.
+        if (files.length > 1) {
+          const folder = await window.electronAPI.selectFolder();
+          if (!folder) { st.textContent = 'Cancelado.'; return; }
+          let totalFiles = 0, totalRows = 0;
+          for (const fmeta of files) {
+            const wb = xlsx.readFile(fmeta.path, { cellFormula: false });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const ref = xlsx.utils.decode_range(ws['!ref']);
+            const lastMain = fmeta.lastMainRow || findMainDataEnd(ws, ref);
+            const polyCol = (fmeta.polyCol != null) ? fmeta.polyCol : -1;
+            const cols = fmeta.cols || COL;
+            const result = await buildRotinaForPoly(ws, ref, lastMain, polyCol, polyF, cidade, cols);
+            if (!result.rows) continue;
+            const srcName = pathMod.basename(fmeta.path, pathMod.extname(fmeta.path));
+            const polySafe = /^\d+$/.test(polyF) ? polyF.padStart(2, '0') : String(polyF).replace(/[\\/:*?"<>|]/g, '_');
+            const fileName = srcName + '_POLY_' + polySafe + '.xlsx';
+            const buf = await result.wb.xlsx.writeBuffer();
+            fs.writeFileSync(pathMod.join(folder, fileName), Buffer.from(buf));
+            totalFiles++;
+            totalRows += result.rows;
+          }
+          st.textContent = totalFiles + ' arquivos · ' + totalRows + ' linhas · salvos em ' + folder;
+          st.style.color = totalFiles ? '#16a34a' : '#d97706';
+          return;
+        }
+
+        const fmeta = files[0];
+        const wb = xlsx.readFile(fmeta.path, { cellFormula: false });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const ref = xlsx.utils.decode_range(ws['!ref']);
-        const lastMain = findMainDataEnd(ws, ref);
-        const result = await buildRotinaForPoly(ws, ref, lastMain, gisData.polyCol, polyF, cidade);
+        const lastMain = fmeta.lastMainRow || findMainDataEnd(ws, ref);
+        const polyCol = (fmeta.polyCol != null) ? fmeta.polyCol : -1;
+        const cols = fmeta.cols || COL;
+        const result = await buildRotinaForPoly(ws, ref, lastMain, polyCol, polyF, cidade, cols);
 
         if (!result.rows) { st.textContent = 'Nenhuma linha para polígono ' + polyF; return; }
 
         const buf = await result.wb.xlsx.writeBuffer();
-        const pathMod = require('path');
-        const srcName = pathMod.basename(gisData.filePath, pathMod.extname(gisData.filePath));
-        const defaultName = srcName + '_POLY' + polyF.padStart(2, '0') + '.xlsx';
+        const srcName = pathMod.basename(fmeta.path, pathMod.extname(fmeta.path));
+        const polySafe = /^\d+$/.test(polyF) ? polyF.padStart(2, '0') : String(polyF).replace(/[\\/:*?"<>|]/g, '_');
+        const defaultName = srcName + '_POLY_' + polySafe + '.xlsx';
         const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -8659,6 +9906,7 @@ body {
       } catch (e) {
         st.textContent = 'Erro: ' + e.message;
         st.style.color = '#dc2626';
+        console.error('gisGerarRotina error:', e);
       }
     };
 
@@ -8709,99 +9957,137 @@ body {
       }
     };
 
-    // Pre-process map data once (called after audit)
+    // Pre-process map data once (called after audit) — itera todos os arquivos
     function buildGisMapCache() {
-      if (!gisData) return;
-      const wb = xlsx.readFile(gisData.filePath, { cellFormula: false, cellNF: false, cellStyles: false });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const ref = xlsx.utils.decode_range(ws['!ref']);
-      const lastMain = findMainDataEnd(ws, ref);
-      const polyCol = gisData.polyCol;
+      if (!gisData || !gisData.files || !gisData.files.length) return;
+      const useShape = !!gisData.useShape;
+      const allPolys = gisData.allPolys || [];
+      const utmZone = 22;
 
       const errByRow = {};
       for (const e of gisData.errors) {
-        if (!errByRow[e.row]) errByRow[e.row] = { hasError: false, hasWarning: false };
-        if (ERROR_COLORS[e.type] === 'red') errByRow[e.row].hasError = true;
-        else errByRow[e.row].hasWarning = true;
+        const key = (e.filePath || '') + '|' + e.row;
+        if (!errByRow[key]) errByRow[key] = { hasError: false, hasWarning: false };
+        if (ERROR_COLORS[e.type] === 'red') errByRow[key].hasError = true;
+        else errByRow[key].hasWarning = true;
       }
 
-      const allXs = [];
-      for (let r = 1; r <= lastMain; r++) {
-        const x = cellNum(ws, r, COL.px_x);
-        if (x != null) allXs.push(x);
-      }
-      const avgX = allXs.length ? allXs.reduce((a, b) => a + b, 0) / allXs.length : 500000;
-      // Detecta zona UTM: X < 400k indica borda oeste (pode ser zona anterior)
-      // PR/SC/RS: zona 22 (CM -51°). X ~300k = margem oeste da zona 22.
-      // Se X médio > 500k em zona 22, pode ser zona 21 com X alto, mas raro.
-      // Heurística: zona 22 para projetos no Paraná (default seguro).
-      const utmZone = 22;
-
-      const pvs = {};      // pvId -> { lat, lon, hasError, hasWarning, oses, ct, cf, prof, diam, polygon }
+      const pvs = {};
       const networks = [];
 
-      for (let r = 1; r <= lastMain; r++) {
-        const rowNum = r + 1;
-        const ose = cellStr(ws, r, COL.OSE);
-        const ose1a = cellStr(ws, r, COL.OSE1a);
-        const pvMontId = cellStr(ws, r, COL.pv_mont);
-        const pvJusId = cellStr(ws, r, COL.pv_jus);
-        const x = cellNum(ws, r, COL.px_x);
-        const y = cellNum(ws, r, COL.px_y);
-        const re = errByRow[rowNum];
-        const polyRaw = polyCol >= 0 ? cellVal(ws, r, polyCol).val : null;
-        const polyNum = Number(polyRaw);
-        const polyStr = (polyRaw != null && !isNaN(polyNum)) ? String(Math.round(polyNum)) : (typeof polyRaw === 'string' && polyRaw.trim() ? polyRaw.trim() : '');
+      for (const fmeta of gisData.files) {
+        const wb = xlsx.readFile(fmeta.path, { cellFormula: false, cellNF: false, cellStyles: false });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const C = fmeta.cols;
+        const polyCol = fmeta.polyCol;
 
-        if (pvMontId && x != null && y != null) {
-          const ll = gisUtmToLatLon(x, y, utmZone, true);
-          if (!isNaN(ll.lat) && Math.abs(ll.lat) < 90) {
-            if (!pvs[pvMontId]) {
-              pvs[pvMontId] = {
-                lat: ll.lat, lon: ll.lon, hasError: false, hasWarning: false, oses: new Set(),
-                ct: cellNum(ws, r, COL.terr_mont), cf: cellNum(ws, r, COL.proj_mont),
-                prof: cellNum(ws, r, COL.prof_mont),
-                diam: cellNum(ws, r, COL.diam) ? Math.round(cellNum(ws, r, COL.diam) * 1000) : null,
+        for (let r = 1; r <= fmeta.lastMainRow; r++) {
+          const rowNum = r + 1;
+          const ose = cellStr(ws, r, C.OSE);
+          const ose1a = cellStr(ws, r, C.OSE1a);
+          const pvMontId = cellStr(ws, r, C.pv_mont);
+          const pvJusId = cellStr(ws, r, C.pv_jus);
+          const x = C.px_x >= 0 ? cellNum(ws, r, C.px_x) : null;
+          const y = C.px_y >= 0 ? cellNum(ws, r, C.px_y) : null;
+          const re = errByRow[fmeta.path + '|' + rowNum];
+
+          let polyStr = '';
+          if (useShape && x != null && y != null) {
+            const sbb = _classifyPoint(x, y, allPolys);
+            if (sbb) polyStr = sbb;
+          } else if (polyCol >= 0) {
+            const polyRaw = cellVal(ws, r, polyCol).val;
+            const polyNum = Number(polyRaw);
+            polyStr = (polyRaw != null && !isNaN(polyNum)) ? String(Math.round(polyNum)) : (typeof polyRaw === 'string' && polyRaw.trim() ? polyRaw.trim() : '');
+          }
+
+          // Helper para registrar PV (com cotas)
+          const trecho = ose ? ose : (ose1a || '?');
+          const regPv = (id, lat, lon, ct, cf, prof, role) => {
+            if (!pvs[id]) {
+              pvs[id] = {
+                lat, lon, hasError: false, hasWarning: false, oses: new Set(),
+                ct, cf, prof,
+                diam: cellNum(ws, r, C.diam) ? Math.round(cellNum(ws, r, C.diam) * 1000) : null,
                 polygon: polyStr,
+                cotas: [],  // [{src, ct, cf, prof, role}]
               };
             }
-            pvs[pvMontId].oses.add(ose1a);
-            if (re && re.hasError) pvs[pvMontId].hasError = true;
-            if (re && re.hasWarning) pvs[pvMontId].hasWarning = true;
-          }
-        }
+            if (ose1a) pvs[id].oses.add(ose1a);
+            if (re && re.hasError) pvs[id].hasError = true;
+            if (re && re.hasWarning) pvs[id].hasWarning = true;
+            if (cf != null) pvs[id].cotas.push({ src: trecho + ' ' + role, ct, cf, prof, role });
+          };
 
-        const xJus = cellNum(ws, r, 24);
-        const yJus = cellNum(ws, r, 25);
-        if (x != null && y != null && xJus != null && yJus != null) {
-          const ll0 = gisUtmToLatLon(x, y, utmZone, true);
-          const ll1 = gisUtmToLatLon(xJus, yJus, utmZone, true);
-          if (!isNaN(ll0.lat) && !isNaN(ll1.lat)) {
-            const projMont = cellNum(ws, r, COL.proj_mont);
-            const projJus = cellNum(ws, r, COL.proj_jus);
-            const compr = cellNum(ws, r, COL.compr);
-            const diam = cellNum(ws, r, COL.diam);
-            networks.push({
-              ose, ose1a, pvMontId, pvJusId, polygon: polyStr,
-              lat0: ll0.lat, lon0: ll0.lon, lat1: ll1.lat, lon1: ll1.lon,
-              hasError: re ? re.hasError : false, hasWarning: re ? re.hasWarning : false,
-              compr, diam: diam ? Math.round(diam * 1000) : null,
-              decl: compr > 0 && projMont != null && projJus != null ? Math.abs(projMont - projJus) / compr : null,
-            });
+          if (pvMontId && x != null && y != null) {
+            const ll = gisUtmToLatLon(x, y, utmZone, true);
+            if (!isNaN(ll.lat) && Math.abs(ll.lat) < 90) {
+              regPv(pvMontId, ll.lat, ll.lon,
+                cellNum(ws, r, C.terr_mont), cellNum(ws, r, C.proj_mont), cellNum(ws, r, C.prof_mont), 'mont');
+            }
+          }
+
+          const xJus = C.end_x >= 0 ? cellNum(ws, r, C.end_x) : null;
+          const yJus = C.end_y >= 0 ? cellNum(ws, r, C.end_y) : null;
+          if (pvJusId && xJus != null && yJus != null) {
+            const llJ = gisUtmToLatLon(xJus, yJus, utmZone, true);
+            if (!isNaN(llJ.lat) && Math.abs(llJ.lat) < 90) {
+              regPv(pvJusId, llJ.lat, llJ.lon,
+                cellNum(ws, r, C.terr_jus), cellNum(ws, r, C.proj_jus), cellNum(ws, r, C.prof_jus), 'jus');
+            }
+          }
+
+          if (x != null && y != null && xJus != null && yJus != null) {
+            const ll0 = gisUtmToLatLon(x, y, utmZone, true);
+            const ll1 = gisUtmToLatLon(xJus, yJus, utmZone, true);
+            if (!isNaN(ll0.lat) && !isNaN(ll1.lat)) {
+              const projMont = cellNum(ws, r, C.proj_mont);
+              const projJus = cellNum(ws, r, C.proj_jus);
+              const compr = cellNum(ws, r, C.compr);
+              const diam = cellNum(ws, r, C.diam);
+              networks.push({
+                ose, ose1a, pvMontId, pvJusId, polygon: polyStr,
+                lat0: ll0.lat, lon0: ll0.lon, lat1: ll1.lat, lon1: ll1.lon,
+                hasError: re ? re.hasError : false, hasWarning: re ? re.hasWarning : false,
+                compr, diam: diam ? Math.round(diam * 1000) : null,
+                decl: compr > 0 && projMont != null && projJus != null ? Math.abs(projMont - projJus) / compr : null,
+              });
+            }
           }
         }
       }
 
-      _gisMapCache = { pvs, networks };
+      // Calcula centroide por OSE (média lat/lon dos PVs montante das suas redes)
+      const oseCentroids = {};   // ose1a -> { lat, lon, count }
+      for (const n of networks) {
+        if (!n.ose1a) continue;
+        if (!oseCentroids[n.ose1a]) oseCentroids[n.ose1a] = { sumLat: 0, sumLon: 0, count: 0 };
+        const c = oseCentroids[n.ose1a];
+        c.sumLat += (n.lat0 + n.lat1) / 2;
+        c.sumLon += (n.lon0 + n.lon1) / 2;
+        c.count++;
+      }
+      const oseLabels = {};
+      for (const [ose, c] of Object.entries(oseCentroids)) {
+        if (c.count > 0) oseLabels[ose] = { lat: c.sumLat / c.count, lon: c.sumLon / c.count };
+      }
+
+      _gisMapCache = { pvs, networks, oseLabels };
 
       // Populate map polygon filter
       const sel = document.getElementById('gis-map-poly');
+      const label = useShape ? 'SBB' : 'Polígono';
       if (gisData.polygons.length) {
-        sel.innerHTML = '<option value="">Selecione um polígono</option>' +
-          gisData.polygons.map(p => '<option value="' + p + '">Polígono ' + p + '</option>').join('') +
-          '<option value="__all__">Todos os polígonos</option>';
+        sel.innerHTML = '<option value="">Selecione um ' + (useShape ? 'SBB' : 'polígono') + '</option>' +
+          gisData.polygons.map(p => '<option value="' + p + '">' + label + ' ' + p + '</option>').join('') +
+          '<option value="__all__">Todos</option>';
       } else {
         sel.innerHTML = '<option value="__all__">Todos</option>';
+      }
+      // Quando shape carregado: pré-seleciona "Todos" e dispara render automaticamente
+      if (useShape) {
+        sel.value = '__all__';
+        try { window.gisMapRender(); } catch (e) { console.error('gisMapRender auto error:', e); }
       }
     }
 
@@ -8816,15 +10102,28 @@ body {
       }
       const showAll = polyVal === '__all__';
 
-      // Filter networks by polygon, then collect PV IDs that belong to those networks
-      const filteredNets = _gisMapCache.networks.filter(n => showAll || n.polygon === polyVal);
+      // Filter networks by polygon + OSE
+      const oseFilterRaw = (document.getElementById('gis-map-ose-filter') || {}).value || '';
+      const oseFilter = oseFilterRaw.trim().toUpperCase();
+      const matchesOse = (val) => !oseFilter || (val && String(val).toUpperCase().includes(oseFilter));
+      const filteredNets = _gisMapCache.networks.filter(n =>
+        (showAll || n.polygon === polyVal) && (!oseFilter || matchesOse(n.ose1a) || matchesOse(n.ose))
+      );
       const pvIdsInNets = new Set();
       for (const n of filteredNets) { pvIdsInNets.add(n.pvMontId); pvIdsInNets.add(n.pvJusId); }
-      const filteredPvs = Object.entries(_gisMapCache.pvs).filter(([id, p]) => showAll ? true : pvIdsInNets.has(id) || p.polygon === polyVal);
+      const filteredPvs = Object.entries(_gisMapCache.pvs).filter(([id, p]) => {
+        const polyOk = showAll || pvIdsInNets.has(id) || p.polygon === polyVal;
+        if (!polyOk) return false;
+        if (!oseFilter) return true;
+        // PV passa o filtro de OSE se está em alguma rede filtrada OU se uma de suas OSEs bate
+        if (pvIdsInNets.has(id)) return true;
+        for (const o of p.oses) if (matchesOse(o)) return true;
+        return false;
+      });
 
-      document.getElementById('gis-map-count').textContent = filteredPvs.length + ' PVs, ' + filteredNets.length + ' trechos';
+      document.getElementById('gis-map-count').textContent = filteredPvs.length + ' PVs, ' + filteredNets.length + ' trechos' + (oseFilter ? ' [filtro: ' + oseFilterRaw + ']' : '');
 
-      if (!filteredPvs.length) return;
+      if (!filteredPvs.length && !filteredNets.length) return;
       wrap.style.display = '';
 
       // Init map
@@ -8839,47 +10138,139 @@ body {
       _gisMapMarkers = [];
       Object.values(_gisMapLayers).forEach(lg => { if (lg) _gisMap.removeLayer(lg); });
       _gisMapLayers = {
-        pvs:    L.layerGroup().addTo(_gisMap),
-        redes:  L.layerGroup().addTo(_gisMap),
-        labels: L.layerGroup(),  // NOT added by default — labels off for performance
+        polys:    L.layerGroup(),
+        pvs:      L.layerGroup().addTo(_gisMap),
+        pits:     L.layerGroup(),  // off por default — toggle separado
+        redes:    L.layerGroup().addTo(_gisMap),
+        arrows:   L.layerGroup().addTo(_gisMap),
+        labels:   L.layerGroup(),  // labels de PVs (off por default)
+        oseNames: L.layerGroup().addTo(_gisMap),
       };
-      // Sync checkbox
       const labelsCb = document.getElementById('gis-map-labels-cb');
       if (labelsCb && labelsCb.checked) _gisMap.addLayer(_gisMapLayers.labels);
+      const pitsCb = document.getElementById('gis-map-pits-cb');
+      if (pitsCb && pitsCb.checked) _gisMap.addLayer(_gisMapLayers.pits);
+      const arrowsCb = document.getElementById('gis-map-arrows-cb');
+      if (arrowsCb && !arrowsCb.checked) _gisMap.removeLayer(_gisMapLayers.arrows);
+      const polysCb = document.getElementById('gis-map-polys-cb');
+
+      // (Labels de OSE renderizados depois — usam ângulo do trecho do meio)
 
       const bounds = [];
+
+      // Desenha polígonos do shape (união de todos os shapes carregados)
+      const allShapePolys = (gisData && gisData.allPolys) ? gisData.allPolys : [];
+      if (allShapePolys.length) {
+        const showAllPolys = !polyVal || polyVal === '__all__';
+        const visible = allShapePolys.filter(p => showAllPolys || p.sbb === polyVal);
+        for (const sp of visible) {
+          const color = _sbbColor(sp.sbb);
+          const toLatLngs = (ring) => ring.map(([x, y]) => {
+            const ll = gisUtmToLatLon(x, y, 22, true);
+            return [ll.lat, ll.lon];
+          });
+          const ringsToLeaflet = (poly) => poly.map(toLatLngs);
+          const leafletCoords = sp.geom.type === 'Polygon'
+            ? ringsToLeaflet(sp.geom.coordinates)
+            : sp.geom.coordinates.map(ringsToLeaflet);
+          const polyLayer = L.polygon(leafletCoords, {
+            color, weight: 2, opacity: 0.85, fillColor: color, fillOpacity: 0.10,
+          }).addTo(_gisMapLayers.polys);
+          polyLayer.bindTooltip(sp.sbb, { permanent: true, direction: 'center', className: 'sbb-label' });
+          const b = polyLayer.getBounds();
+          bounds.push([b.getNorth(), b.getEast()]);
+          bounds.push([b.getSouth(), b.getWest()]);
+        }
+        if (polysCb && polysCb.checked) _gisMap.addLayer(_gisMapLayers.polys);
+      }
+
+      // Helpers de cotas múltiplas e tipo de degrau
+      const ROUND_CF = (v) => Math.round(v * 1000) / 1000;  // 1mm
+      function uniqueCotas(p) {
+        if (!p.cotas || !p.cotas.length) return [];
+        const seen = {};
+        for (const c of p.cotas) {
+          if (c.cf == null) continue;
+          const k = ROUND_CF(c.cf);
+          if (!seen[k]) seen[k] = { cf: c.cf, ct: c.ct, prof: c.prof, srcs: [] };
+          seen[k].srcs.push(c.src);
+        }
+        return Object.values(seen).sort((a, b) => b.cf - a.cf); // mais alta primeiro
+      }
+      function tipoDegrau(diff) {
+        const d = Math.abs(diff);
+        if (d <= 0.50) return { label: 'degrau ' + (d*100).toFixed(0) + 'cm', color: '#f59e0b' };
+        return { label: 'TQ ' + d.toFixed(2) + 'm', color: '#dc2626' };
+      }
 
       // PV markers (canvas-rendered CircleMarker — very fast)
       for (const [id, p] of filteredPvs) {
         const color = p.hasError ? '#dc2626' : p.hasWarning ? '#f59e0b' : '#16a34a';
-        const radius = /^TL/i.test(id) ? 4 : 6;
-
+        const isPit = /^PIT-/i.test(id);
+        const radius = isPit ? 3 : (/^TL/i.test(id) ? 4 : 6);
+        const targetLayer = isPit ? _gisMapLayers.pits : _gisMapLayers.pvs;
         const marker = L.circleMarker([p.lat, p.lon], {
           radius, fillColor: color, color: '#fff', weight: 1, opacity: 1, fillOpacity: 0.9,
           renderer: _gisCanvasRenderer,
-        }).addTo(_gisMapLayers.pvs);
+        }).addTo(targetLayer);
 
+        const cotas = uniqueCotas(p);
         const ctTxt = p.ct != null ? p.ct.toFixed(3) : '—';
-        const cfTxt = p.cf != null ? p.cf.toFixed(3) : '—';
         const profTxt = p.prof != null ? p.prof.toFixed(2) : '—';
         const status = p.hasError ? 'ERRO' : p.hasWarning ? 'ALERTA' : 'OK';
 
+        // Popup — lista todas as cotas (com diff/tipo de degrau se múltiplas)
+        let popupCotas;
+        if (cotas.length <= 1) {
+          const cf = cotas[0] ? cotas[0].cf.toFixed(3) : '—';
+          popupCotas = '<span style="color:#1e40af;font-weight:600">CT:</span>' + ctTxt +
+                       ' <span style="color:#b91c1c;font-weight:600">CF:</span>' + cf +
+                       ' <span style="color:#6b21a8;font-weight:600">h:</span>' + profTxt + 'm';
+        } else {
+          const maxCf = cotas[0].cf, minCf = cotas[cotas.length-1].cf;
+          const t = tipoDegrau(maxCf - minCf);
+          popupCotas = '<span style="color:#1e40af;font-weight:600">CT:</span>' + ctTxt + '<br>' +
+            cotas.map(c => '<span style="color:#b91c1c;font-weight:600">CF:</span>' + c.cf.toFixed(3) +
+              ' <span style="color:#6b21a8">h=' + (c.prof != null ? c.prof.toFixed(2) : '?') + 'm</span>' +
+              ' <span style="color:#64748b;font-size:10px">' + esc(c.srcs.join(' / ')) + '</span>').join('<br>') +
+            '<br><span style="background:' + t.color + ';color:#fff;padding:1px 6px;border-radius:3px;font-weight:700;font-size:10px">' + t.label + '</span>';
+        }
+
         marker.bindPopup(
-          '<div style="font-family:\'DM Mono\',monospace;font-size:11px;line-height:1.6;min-width:130px">' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:11px;line-height:1.6;min-width:160px">' +
           '<div style="font-size:13px;font-weight:800;border-bottom:2px solid ' + color + ';padding-bottom:3px;margin-bottom:3px">' + esc(id) + ' <span style="color:' + color + ';font-size:9px">[' + status + ']</span></div>' +
           '<span style="color:#64748b">OSEs:</span> ' + [...p.oses].join(', ') + '<br>' +
-          '<span style="color:#1e40af;font-weight:600">CT:</span>' + ctTxt +
-          ' <span style="color:#b91c1c;font-weight:600">CF:</span>' + cfTxt +
-          ' <span style="color:#6b21a8;font-weight:600">h:</span>' + profTxt + 'm' +
-          (p.diam ? ' <span style="color:#64748b">DN:</span>' + p.diam + 'mm' : '') +
-          '</div>', { maxWidth: 260 }
+          popupCotas +
+          (p.diam ? '<br><span style="color:#64748b">DN:</span>' + p.diam + 'mm' : '') +
+          '</div>', { maxWidth: 320 }
         );
 
-        // Lightweight label — just ID + prof
+        // Label: pula PIT- pra deixar leve
+        if (isPit) { _gisMapMarkers.push(marker); bounds.push([p.lat, p.lon]); continue; }
+
+        // Label em 4 linhas: Nome / CT / CF / h. Se cotas múltiplas, lista todos os CFs + tag degrau/TQ
+        let cfLines;
+        if (cotas.length <= 1) {
+          cfLines = '<div>CF: ' + (cotas[0] ? cotas[0].cf.toFixed(3) : '—') + '</div>';
+        } else {
+          const maxCf = cotas[0].cf, minCf = cotas[cotas.length-1].cf;
+          const t = tipoDegrau(maxCf - minCf);
+          cfLines = cotas.map(c => '<div>CF: ' + c.cf.toFixed(3) + '</div>').join('') +
+            '<div style="color:' + t.color + ';font-weight:700">[' + t.label + ']</div>';
+        }
+        const labelHtml =
+          '<div style="background:rgba(0,0,0,.78);color:#fff;padding:3px 7px;border-radius:3px;font-family:\'DM Mono\',monospace;white-space:nowrap;pointer-events:none;border-left:2px solid ' + color + ';line-height:1.25">' +
+            '<div style="font:700 10px/1.2 \'DM Mono\',monospace;margin-bottom:1px">' + esc(id) + '</div>' +
+            '<div style="font:600 8px/1.25 \'DM Mono\',monospace;color:#cbd5e1">' +
+              '<div>CT: ' + ctTxt + '</div>' +
+              cfLines +
+              '<div>h: ' + profTxt + 'm</div>' +
+            '</div>' +
+          '</div>';
         const pvLabel = L.marker([p.lat, p.lon], {
           icon: L.divIcon({
             className: 'ose-pv-box',
-            html: '<div style="background:rgba(0,0,0,.7);color:#fff;padding:1px 4px;border-radius:3px;font:600 8px/1.3 \'DM Mono\',monospace;white-space:nowrap;pointer-events:none;border-left:2px solid ' + color + '">' + esc(id) + ' <span style="color:#94a3b8">' + profTxt + '</span></div>',
+            html: labelHtml,
             iconSize: [0, 0],
             iconAnchor: [-8, 4],
           }),
@@ -8890,7 +10281,9 @@ body {
         bounds.push([p.lat, p.lon]);
       }
 
-      // Network lines (canvas polylines)
+      // Network lines (sem seta — seta é por OSE, abaixo)
+      // Agrupa por OSE pra: 1) renderizar linhas, 2) montar a cadeia pra seta no meio
+      const netsByOse = {};
       for (const net of filteredNets) {
         const lineColor = net.hasError ? '#dc2626' : net.hasWarning ? '#f59e0b' : '#16a34a';
         const line = L.polyline([[net.lat0, net.lon0], [net.lat1, net.lon1]], {
@@ -8909,6 +10302,66 @@ body {
           '</div>'
         );
         _gisMapMarkers.push(line);
+
+        if (net.ose1a) {
+          if (!netsByOse[net.ose1a]) netsByOse[net.ose1a] = [];
+          netsByOse[net.ose1a].push(net);
+        }
+      }
+
+      // Uma seta + nome OSE (rotacionados) por OSE: ordena cadeia, pega trecho do meio
+      const isDarkMap = _gisMapTheme === 'dark';
+      const oseTxtColor = isDarkMap ? '#ffffff' : '#000000';
+      const oseHaloColor = isDarkMap ? '#000000' : '#ffffff';
+      const oseHalo = '0 0 3px ' + oseHaloColor + ',0 0 3px ' + oseHaloColor + ',0 0 3px ' + oseHaloColor + ',0 0 3px ' + oseHaloColor;
+
+      for (const [ose1a, nets] of Object.entries(netsByOse)) {
+        const byMont = {};
+        for (const n of nets) byMont[n.pvMontId] = n;
+        const justAll = new Set(nets.map(n => n.pvJusId));
+        const head = nets.find(n => !justAll.has(n.pvMontId)) || nets[0];
+        const ordered = [];
+        let cur = head;
+        const visited = new Set();
+        while (cur && !visited.has(cur.pvMontId)) {
+          visited.add(cur.pvMontId);
+          ordered.push(cur);
+          cur = byMont[cur.pvJusId] || null;
+        }
+        if (!ordered.length) ordered.push(...nets);
+        const mid = ordered[Math.floor(ordered.length / 2)];
+        const lineColor = mid.hasError ? '#dc2626' : mid.hasWarning ? '#f59e0b' : '#16a34a';
+        const midLat = (mid.lat0 + mid.lat1) / 2;
+        const midLon = (mid.lon0 + mid.lon1) / 2;
+        let ang = Math.atan2(mid.lat1 - mid.lat0, mid.lon1 - mid.lon0) * 180 / Math.PI;
+        // Pra texto: mantém legibilidade (não de cabeça pra baixo)
+        let txtAng = -ang;
+        if (txtAng > 90) txtAng -= 180;
+        if (txtAng < -90) txtAng += 180;
+
+        // Seta
+        const arrow = L.marker([midLat, midLon], {
+          icon: L.divIcon({
+            className: 'gis-arrow',
+            html: '<div style="transform:translate(-50%,-50%) rotate(' + (-ang).toFixed(1) + 'deg);transform-origin:center center;color:' + lineColor + ';font:900 22px/1 sans-serif;text-shadow:0 0 4px rgba(255,255,255,.95),0 0 4px rgba(255,255,255,.95);pointer-events:none;width:fit-content">▶</div>',
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+          }),
+          interactive: false,
+        }).addTo(_gisMapLayers.arrows);
+        _gisMapMarkers.push(arrow);
+
+        // Nome da OSE (rotacionado, levemente acima da seta)
+        const nameLabel = L.marker([midLat, midLon], {
+          icon: L.divIcon({
+            className: 'ose-name-label',
+            html: '<div style="transform:translate(-50%,calc(-50% - 16px)) rotate(' + txtAng.toFixed(1) + 'deg);transform-origin:center center;color:' + oseTxtColor + ';font:900 12px/1.2 \'DM Mono\',monospace;white-space:nowrap;text-shadow:' + oseHalo + ';pointer-events:none;width:fit-content">' + esc(ose1a) + '</div>',
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+          }),
+          interactive: false,
+        }).addTo(_gisMapLayers.oseNames);
+        _gisMapMarkers.push(nameLabel);
       }
 
       if (bounds.length) {
@@ -8922,8 +10375,15 @@ body {
     // Called after audit — builds cache + shows section
     function renderGisMap() {
       if (!gisData) return;
-      buildGisMapCache();
+      // Mostra seção primeiro pra não ficar oculta se buildCache falhar
       document.getElementById('gis-map-section').style.display = '';
+      try { buildGisMapCache(); }
+      catch (e) {
+        console.error('buildGisMapCache error:', e);
+        const cnt = document.getElementById('gis-map-count');
+        if (cnt) cnt.textContent = 'Erro ao processar mapa: ' + e.message;
+        return;
+      }
       // If no polygons, auto-select "Todos" and render immediately
       if (!gisData.polygons.length) {
         document.getElementById('gis-map-poly').value = '__all__';
