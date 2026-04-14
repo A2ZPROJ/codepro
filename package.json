@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "2.9.4",
+  "version": "2.10.2",
   "description": "Nexus — Gestão de Projetos A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
@@ -8,8 +8,8 @@
     "dev": "electron . --dev",
     "precompile": "electron scripts/compile-bytecode.js && node scripts/obfuscate-html.js",
     "postrestore": "node scripts/restore-source.js",
-    "build": "npm run precompile && electron-builder --win && npm run postrestore",
-    "build:publish": "npm run precompile && electron-builder --win --publish always && npm run postrestore"
+    "build": "npm run precompile && node -e \"setTimeout(()=>process.exit(),5000)\" && electron-builder --win && npm run postrestore",
+    "build:publish": "npm run precompile && node -e \"setTimeout(()=>process.exit(),5000)\" && electron-builder --win --publish always && npm run postrestore"
   },
   "build": {
     "appId": "com.a2zprojetos.codepro",
@@ -64,6 +64,7 @@
     "html2canvas": "^1.4.1",
     "pdfmake": "^0.3.7",
     "pizzip": "^3.2.0",
+    "shapefile": "^0.6.6",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

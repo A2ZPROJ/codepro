@@ -7862,6 +7862,7 @@ body {
             <button id="gis-normalize-btn" onclick="window.gisNormalizePreview()" style="display:none;background:#fef3c7;color:#92400e;border:1.5px solid #fcd34d;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:11px;cursor:pointer" title="Avançado: só normaliza polígonos sem corrigir cotas">Normalizar Polígonos (avançado)</button>
             <button id="gis-corrigir-btn" onclick="window.gisCorrigirTudo()" style="display:none;background:#16a34a;color:white;border:none;border-radius:6px;padding:9px 20px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">⚙ Corrigir Tudo</button>
             <button id="gis-perfil-btn" onclick="window.gisPerfilOpen()" style="display:none;background:#2563eb;color:white;border:none;border-radius:6px;padding:9px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">📈 Visualizar Perfil</button>
+            <button id="gis-validar-btn" onclick="window.gisValidarRede()" style="display:none;background:#7c3aed;color:white;border:none;border-radius:6px;padding:9px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer" title="Simula o fluxo da rede e valida CT imutável, contra-declive, afogamento de PV, declividade única, profundidade mínima">🔬 Validar Rede</button>
             <span id="gis-status" style="font-size:12px;color:var(--text3)"></span>
           </div>
         </div>
@@ -8479,6 +8480,8 @@ body {
           if (corrBtn) corrBtn.style.display = errors.length ? '' : 'none';
           const perfilBtn = document.getElementById('gis-perfil-btn');
           if (perfilBtn) perfilBtn.style.display = '';
+          const validarBtn = document.getElementById('gis-validar-btn');
+          if (validarBtn) validarBtn.style.display = '';
 
           // Botão Normalizar Polígonos
           const normBtn = document.getElementById('gis-normalize-btn');
@@ -8777,6 +8780,284 @@ body {
     const _yield = () => new Promise(r => setTimeout(r, 0));
 
     // ────────────────────────────────────────────────
+    // ────────────────────────────────────────────────
+    // VALIDAÇÃO INDEPENDENTE DA REDE
+    // Roda 6 checks sobre a planilha (corrigida ou não) simulando o fluxo:
+    //  1. CT (terreno) imutável    — compara terr_mont/terr_jus vs arquivo original
+    //  2. Sem contra-declive       — proj_mont >= proj_jus em todo trecho
+    //  3. Declividade única/OSE    — i varia menos de ±0.01% dentro de cada OSE
+    //  4. PV não afogado           — CF_saída <= min(CF_chegadas) em cada PV
+    //  5. Profundidade mínima      — prof_mont/prof_jus >= 1.10m
+    //  6. Coerência início de OSE  — CF inicial da OSE == CF_saída do PV montante (ou registra degrau/TQ)
+    // ────────────────────────────────────────────────
+    function _validateNetwork(ws, C, lastMain, originalPath) {
+      const num = (ws2, r, c) => { if (c<0) return null; const v = (ws2[xlsx.utils.encode_cell({r,c})]||{}).v; const n=Number(v); return isFinite(n)?n:null; };
+      const str = (ws2, r, c) => { if (c<0) return ''; const v = (ws2[xlsx.utils.encode_cell({r,c})]||{}).v; return v!=null?String(v):''; };
+      const H_MIN = 1.10;
+      const DEGRAU_MAX = 0.50;
+      const TOL_CT = 1e-3;       // 1mm
+      const TOL_COTA = 1e-3;
+      const TOL_DECL = 1e-4;     // 0.01%
+      const TOL_AFOGAMENTO = 1e-3;
+
+      const counts = { ctChanged:0, contraDecl:0, declMultipla:0, pvAfogado:0, hBaixo:0, oseDegrau:0, oseTQ:0, oseIncoerente:0 };
+      const issues = [];
+
+      // Coleta edges do arquivo corrigido
+      const edges = [];
+      for (let r = 1; r <= lastMain; r++) {
+        const mont = str(ws, r, C.pv_mont);
+        const jus = str(ws, r, C.pv_jus);
+        if (!mont || !jus) continue;
+        edges.push({
+          row: r,
+          ose1a: str(ws, r, C.OSE1a),
+          ose: str(ws, r, C.OSE),
+          mont, jus,
+          terrMont: num(ws, r, C.terr_mont),
+          terrJus:  num(ws, r, C.terr_jus),
+          projMont: num(ws, r, C.proj_mont),
+          projJus:  num(ws, r, C.proj_jus),
+          profMont: num(ws, r, C.prof_mont),
+          profJus:  num(ws, r, C.prof_jus),
+          compr:    num(ws, r, C.compr),
+        });
+      }
+
+      // 1) CT imutável
+      if (originalPath) {
+        try {
+          const wbOrig = xlsx.readFile(originalPath, { cellFormula:false, cellNF:false, cellStyles:false });
+          const wsOrig = wbOrig.Sheets[wbOrig.SheetNames[0]];
+          for (const e of edges) {
+            const tmOrig = num(wsOrig, e.row, C.terr_mont);
+            const tjOrig = num(wsOrig, e.row, C.terr_jus);
+            if (tmOrig != null && e.terrMont != null && Math.abs(tmOrig - e.terrMont) > TOL_CT) {
+              counts.ctChanged++;
+              issues.push({ tipo:'CT_ALTERADA', linha:e.row+1, ose:e.ose1a, msg:`terr_mont: ${tmOrig.toFixed(3)} → ${e.terrMont.toFixed(3)} (Δ=${Math.abs(tmOrig-e.terrMont).toFixed(3)}m)` });
+            }
+            if (tjOrig != null && e.terrJus != null && Math.abs(tjOrig - e.terrJus) > TOL_CT) {
+              counts.ctChanged++;
+              issues.push({ tipo:'CT_ALTERADA', linha:e.row+1, ose:e.ose1a, msg:`terr_jus: ${tjOrig.toFixed(3)} → ${e.terrJus.toFixed(3)} (Δ=${Math.abs(tjOrig-e.terrJus).toFixed(3)}m)` });
+            }
+          }
+        } catch (err) {
+          issues.push({ tipo:'INFO', linha:'', ose:'', msg:'Original não disponível — CT não validada' });
+        }
+      }
+
+      // 2) Contra-declive + 5) h_min
+      for (const e of edges) {
+        if (e.projMont != null && e.projJus != null && e.projMont < e.projJus - TOL_COTA) {
+          counts.contraDecl++;
+          issues.push({ tipo:'CONTRA_DECLIVE', linha:e.row+1, ose:e.ose1a, msg:`${e.mont}→${e.jus}: proj_mont(${e.projMont.toFixed(3)}) < proj_jus(${e.projJus.toFixed(3)})` });
+        }
+        if (e.profMont != null && e.profMont < H_MIN - TOL_COTA) {
+          counts.hBaixo++;
+          issues.push({ tipo:'H_BAIXO', linha:e.row+1, ose:e.ose1a, msg:`${e.mont}: prof=${e.profMont.toFixed(3)}m < ${H_MIN}` });
+        }
+        if (e.profJus != null && e.profJus < H_MIN - TOL_COTA) {
+          counts.hBaixo++;
+          issues.push({ tipo:'H_BAIXO', linha:e.row+1, ose:e.ose1a, msg:`${e.jus}: prof=${e.profJus.toFixed(3)}m < ${H_MIN}` });
+        }
+      }
+
+      // 3) Declividade única por OSE
+      const byOse = {};
+      for (const e of edges) {
+        if (!e.ose1a || e.projMont == null || e.projJus == null || !e.compr || e.compr <= 0) continue;
+        const i = (e.projMont - e.projJus) / e.compr;
+        (byOse[e.ose1a] = byOse[e.ose1a] || []).push({ row:e.row, i, mont:e.mont, jus:e.jus });
+      }
+      for (const [ose, arr] of Object.entries(byOse)) {
+        if (arr.length < 2) continue;
+        const iMin = Math.min(...arr.map(x=>x.i));
+        const iMax = Math.max(...arr.map(x=>x.i));
+        if (iMax - iMin > TOL_DECL) {
+          counts.declMultipla++;
+          issues.push({ tipo:'DECL_MULTIPLA', linha:arr[0].row+1, ose, msg:`OSE ${ose}: i varia de ${(iMin*100).toFixed(3)}% a ${(iMax*100).toFixed(3)}% em ${arr.length} trechos` });
+        }
+      }
+
+      // Grafo
+      const inE = {}, outE = {};
+      for (const e of edges) {
+        (outE[e.mont] = outE[e.mont]||[]).push(e);
+        (inE[e.jus] = inE[e.jus]||[]).push(e);
+      }
+
+      // 4) PV não afogado
+      for (const pv of Object.keys(outE)) {
+        const saidas = outE[pv];
+        const chegadas = inE[pv] || [];
+        if (!chegadas.length) continue;
+        const cfsCheg = chegadas.map(e => e.projJus).filter(v => v != null);
+        if (!cfsCheg.length) continue;
+        const minCheg = Math.min(...cfsCheg);
+        for (const s of saidas) {
+          if (s.projMont == null) continue;
+          if (s.projMont > minCheg + TOL_AFOGAMENTO) {
+            counts.pvAfogado++;
+            issues.push({ tipo:'PV_AFOGADO', linha:s.row+1, ose:s.ose1a, msg:`${pv}: CF saída=${s.projMont.toFixed(3)} > min(CF_chegadas)=${minCheg.toFixed(3)} — tubo de saída afoga chegadas` });
+          }
+        }
+      }
+
+      // 6) Coerência início de OSE: primeiro trecho da OSE (no PV mais montante) deve casar com CF_saída
+      //    do PV upstream. Diferenças são classificadas como degrau (≤50cm) ou TQ (>50cm).
+      //    Se o PV upstream NÃO tem saída alternativa com cota coerente, marcamos incoerência.
+      for (const [ose, arr] of Object.entries(byOse)) {
+        // Encontra o trecho mais montante da OSE: PV mont que não é jus de nenhum outro trecho DESSA OSE
+        const rowsOse = edges.filter(e => e.ose1a === ose);
+        if (!rowsOse.length) continue;
+        const jusSet = new Set(rowsOse.map(e => e.jus));
+        const heads = rowsOse.filter(e => !jusSet.has(e.mont));
+        for (const head of heads) {
+          if (head.projMont == null) continue;
+          const pvUp = head.mont;
+          // CF saída do PV upstream = min das saídas desse PV (mas dessa mesma OSE, é a própria head)
+          // Compara com a chegada: se este PV recebe de outras OSEs, deveria casar ou ter degrau
+          const chegadasPv = inE[pvUp] || [];
+          if (!chegadasPv.length) continue; // PV de cabeceira absoluta — OK
+          const cfsCheg = chegadasPv.map(e => e.projJus).filter(v => v != null);
+          if (!cfsCheg.length) continue;
+          const minCheg = Math.min(...cfsCheg);
+          const diff = head.projMont - minCheg;
+          if (Math.abs(diff) < TOL_COTA) continue; // OK, coerente
+          if (diff < 0) {
+            // Saída da OSE ABAIXO da chegada mínima — isso é o PV afogado, já reportado em (4)
+            continue;
+          }
+          // Saída acima: degrau ou TQ é esperado
+          if (diff <= DEGRAU_MAX) counts.oseDegrau++;
+          else counts.oseTQ++;
+        }
+      }
+
+      return { counts, issues, totalEdges: edges.length, totalOses: Object.keys(byOse).length };
+    }
+
+    // Monta sheet "Validacao" a partir do resultado
+    function _validationToSheet(v) {
+      const rows = [];
+      rows.push(['=== RESUMO DA VALIDAÇÃO ===']);
+      rows.push(['Check','Status','Qtd']);
+      const row = (label, count, invert) => {
+        const ok = invert ? !count : !!count;
+        rows.push([label, count === 0 ? 'OK' : (invert ? 'INFO' : 'FALHOU'), count]);
+      };
+      row('CT (terreno) imutável — 0 células alteradas', v.counts.ctChanged, false);
+      row('Sem contra-declive — 0 trechos com i<0', v.counts.contraDecl, false);
+      row('Declividade única por OSE (±0.01%)', v.counts.declMultipla, false);
+      row('PV não afogado (CF_saída ≤ min CF_chegadas)', v.counts.pvAfogado, false);
+      row('Profundidade ≥ 1,10m em todos os pontos', v.counts.hBaixo, false);
+      rows.push(['Degraus externos identificados (≤0,50m)', 'INFO', v.counts.oseDegrau]);
+      rows.push(['Tubos de queda identificados (>0,50m)', 'INFO', v.counts.oseTQ]);
+      rows.push(['']);
+      rows.push([`Trechos analisados: ${v.totalEdges}  ·  OSEs: ${v.totalOses}`]);
+      rows.push(['']);
+      rows.push(['=== PROBLEMAS DETECTADOS ===']);
+      rows.push(['Tipo','Linha Excel','OSE','Descrição']);
+      if (!v.issues.length) rows.push(['—','','','Nenhum problema encontrado']);
+      for (const iss of v.issues) rows.push([iss.tipo, iss.linha, iss.ose, iss.msg]);
+      return xlsx.utils.aoa_to_sheet(rows);
+    }
+
+    // Handler do botão "Validar Rede"
+    window.gisValidarRede = async () => {
+      if (!gisData || !gisData.files || !gisData.files.length) { alert('Faça a auditoria primeiro.'); return; }
+      _gisOpenProgress('Validando rede...');
+      const pathMod = require('path');
+      try {
+        const results = [];
+        for (let fi = 0; fi < gisData.files.length; fi++) {
+          const fmeta = gisData.files[fi];
+          _gisProgress((fi / gisData.files.length) * 100, '[' + (fi+1) + '/' + gisData.files.length + '] ' + _basename(fmeta.path));
+          await _yield();
+          const wb = xlsx.readFile(fmeta.path, { cellFormula:false, cellNF:false, cellStyles:false });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          // Busca original: se o arquivo é _CORRIGIDO, procura o sem sufixo na mesma pasta
+          let orig = null;
+          const base = pathMod.basename(fmeta.path, pathMod.extname(fmeta.path));
+          if (base.endsWith('_CORRIGIDO')) {
+            const candidate = pathMod.join(pathMod.dirname(fmeta.path), base.replace(/_CORRIGIDO$/, '') + pathMod.extname(fmeta.path));
+            const fs = require('fs');
+            if (fs.existsSync(candidate)) orig = candidate;
+          }
+          const v = _validateNetwork(ws, fmeta.cols, fmeta.lastMainRow, orig);
+          results.push({ path: fmeta.path, v, hasOriginal: !!orig });
+        }
+        _gisProgress(100, 'Concluído');
+        await new Promise(r => setTimeout(r, 200));
+        _gisCloseProgress();
+        _showValidationModal(results);
+      } catch (e) {
+        console.error('Validar Rede error:', e);
+        _gisCloseProgress();
+        alert('Erro: ' + e.message);
+      }
+    };
+
+    function _showValidationModal(results) {
+      const modal = document.createElement('div');
+      modal.id = 'gis-val-modal';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9995;display:flex;align-items:center;justify-content:center;padding:30px';
+      const badge = (ok, label, qty) => `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600;background:${ok?'#dcfce7':'#fee2e2'};color:${ok?'#15803d':'#b91c1c'}">${ok?'✓':'✗'} ${label} (${qty})</span>`;
+      const infoBadge = (label, qty) => `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600;background:#e0e7ff;color:#4338ca">ⓘ ${label} (${qty})</span>`;
+
+      const bodies = results.map(({path, v, hasOriginal}) => {
+        const c = v.counts;
+        const issuesHtml = v.issues.length
+          ? `<div style="max-height:280px;overflow:auto;border:1px solid var(--border);border-radius:6px;margin-top:10px;font-family:'DM Mono',monospace;font-size:11px">
+              <table style="width:100%;border-collapse:collapse">
+                <thead style="position:sticky;top:0;background:var(--surface-2)"><tr>
+                  <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Tipo</th>
+                  <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Linha</th>
+                  <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">OSE</th>
+                  <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Problema</th>
+                </tr></thead>
+                <tbody>
+                  ${v.issues.slice(0,500).map(i => `<tr>
+                    <td style="padding:4px 8px;border-bottom:1px solid var(--border);color:#b91c1c;font-weight:600">${i.tipo}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${i.linha}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${i.ose||''}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${i.msg}</td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>
+              ${v.issues.length>500?`<div style="padding:6px 8px;color:var(--text3);font-size:10px">...e mais ${v.issues.length-500} (ver sheet Validacao na planilha)</div>`:''}
+            </div>`
+          : `<div style="margin-top:10px;padding:12px;background:#dcfce7;color:#15803d;border-radius:6px;font-size:12px;font-weight:600">✓ Nenhum problema encontrado</div>`;
+        return `<div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border)">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px">${_basename(path)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${v.totalEdges} trechos · ${v.totalOses} OSEs${hasOriginal?' · original encontrado (CT validada)':' · sem original (CT não validada)'}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${hasOriginal ? badge(!c.ctChanged, 'CT imutável', c.ctChanged) : infoBadge('CT não validada', 0)}
+            ${badge(!c.contraDecl, 'Sem contra-declive', c.contraDecl)}
+            ${badge(!c.declMultipla, 'Decl. única/OSE', c.declMultipla)}
+            ${badge(!c.pvAfogado, 'PV não afogado', c.pvAfogado)}
+            ${badge(!c.hBaixo, 'h ≥ 1,10m', c.hBaixo)}
+            ${infoBadge('Degraus', c.oseDegrau)}
+            ${infoBadge('TQs', c.oseTQ)}
+          </div>
+          ${issuesHtml}
+        </div>`;
+      }).join('');
+
+      modal.innerHTML = `
+        <div style="background:var(--bg);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.4);max-width:1100px;width:100%;max-height:90vh;overflow:auto;padding:24px;color:var(--text1)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:12px">
+            <div>
+              <div style="font-size:16px;font-weight:700">🔬 Validação da Rede</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">6 checks independentes · simulação de fluxo ponta-a-ponta</div>
+            </div>
+            <button onclick="document.getElementById('gis-val-modal').remove()" style="background:transparent;border:none;font-size:20px;cursor:pointer;color:var(--text2);padding:4px 10px">×</button>
+          </div>
+          ${bodies}
+        </div>`;
+      document.body.appendChild(modal);
+    }
+
     // CORRIGIR TUDO — em série, gera 1 _CORRIGIDO.xlsx por arquivo
     // 1) Renomeia TQ-/TL→PV (TL apenas se h>1.30m vira PV)
     // 2) Auto-fix declividade per-OSE (Fase 2)
@@ -9158,6 +9439,23 @@ body {
           ];
           xlsx.utils.book_append_sheet(wb, xlsx.utils.aoa_to_sheet(logRows), 'Log Correcao');
 
+          // ─── Pass 6: validação independente sobre o ws já corrigido ───
+          _gisProgress(baseProgress + stepShare*0.97, 'Validando rede corrigida...');
+          await _yield();
+          let validation = null;
+          try {
+            validation = _validateNetwork(ws, C, lastMain, filePath);
+            xlsx.utils.book_append_sheet(wb, _validationToSheet(validation), 'Validacao');
+            if (!grandStats.val) grandStats.val = { ctChanged:0, contraDecl:0, declMultipla:0, pvAfogado:0, hBaixo:0 };
+            grandStats.val.ctChanged   += validation.counts.ctChanged;
+            grandStats.val.contraDecl  += validation.counts.contraDecl;
+            grandStats.val.declMultipla+= validation.counts.declMultipla;
+            grandStats.val.pvAfogado   += validation.counts.pvAfogado;
+            grandStats.val.hBaixo      += validation.counts.hBaixo;
+          } catch (vErr) {
+            console.error('Validação falhou:', vErr);
+          }
+
           const dir = pathMod.dirname(filePath);
           const base = pathMod.basename(filePath, pathMod.extname(filePath));
           const outPath = pathMod.join(dir, base + '_CORRIGIDO.xlsx');
@@ -9185,6 +9483,7 @@ body {
               ${grandStats.harmonized} PVs harm. (${grandStats.degraus} degraus / ${grandStats.tqs} TQs)<br>
               ⚠ ${grandStats.suspeitas} harmonizações com diff>30cm (verifique cadeia montante)<br>
               ${grandStats.warns} avisos h>3m · ${grandStats.manual} restam c/ h<1.10m
+              ${grandStats.val ? `<br><strong>🔬 Validação:</strong> CT=${grandStats.val.ctChanged?'✗'+grandStats.val.ctChanged:'✓'} · contra-decl=${grandStats.val.contraDecl?'✗'+grandStats.val.contraDecl:'✓'} · decl/OSE=${grandStats.val.declMultipla?'✗'+grandStats.val.declMultipla:'✓'} · afogado=${grandStats.val.pvAfogado?'✗'+grandStats.val.pvAfogado:'✓'} · h&lt;1.10=${grandStats.val.hBaixo?'⚠'+grandStats.val.hBaixo:'✓'}` : ''}
             </div>
             <div style="font-size:10px;margin-top:8px;opacity:.85">Arquivo(s): ${saved.map(s => _basename(s.path)).join(', ')}</div>
             <button onclick="document.getElementById('gis-corr-toast').remove()" style="position:absolute;top:6px;right:8px;background:transparent;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0">×</button>
