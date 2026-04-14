@@ -276,8 +276,15 @@ autoUpdater.on('update-downloaded', info=>{
 autoUpdater.on('error', (err)=>{ logUpdate('autoUpdater error: ' + err); });
 
 ipcMain.on('install-update', ()=> {
-  logUpdate('install-update requested — quitAndInstall');
-  autoUpdater.quitAndInstall(false, true);
+  logUpdate('install-update requested — quitAndInstall (silent)');
+  // Fecha janelas e remove guard de window-all-closed pra garantir que o app finaliza
+  // antes do NSIS rodar. isSilent=true evita o diálogo "não foi possível fechar o Nexus".
+  try {
+    app.removeAllListeners('window-all-closed');
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy();
+  } catch (e) { logUpdate('pré-quit error: ' + e.message); }
+  setImmediate(() => autoUpdater.quitAndInstall(true, true));
 });
 
 // ── CONFERÊNCIA DE ARQUIVOS ──
