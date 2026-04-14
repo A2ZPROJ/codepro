@@ -8308,7 +8308,16 @@ body {
             COL = detectCols(ws, ref);
             const lastMainRow = findMainDataEnd(ws, ref);
             const polyCol = useShape ? -1 : findPolygonCol(ws, ref);
-            filesMeta.push({ path: filePath, lastMainRow, polyCol, cols: { ...COL } });
+            // Em modo shape: detecta se a planilha já tem coluna SBB preenchida (override
+            // de normalização anterior). Se tiver, ela vence a classificação por geometria.
+            let sbbOverrideCol = -1;
+            if (useShape) {
+              for (let c = 0; c <= ref.e.c; c++) {
+                const h = (ws[xlsx.utils.encode_cell({r:0, c})] || {}).v;
+                if (h && String(h).trim().toUpperCase() === 'SBB') { sbbOverrideCol = c; break; }
+              }
+            }
+            filesMeta.push({ path: filePath, lastMainRow, polyCol, cols: { ...COL }, sbbOverrideCol });
 
           for (let r = 1; r <= lastMainRow; r++) {
             const ose = cellStr(ws, r, COL.OSE);
@@ -8318,11 +8327,19 @@ body {
             const rowNum = r + 1; // 1-indexed for user
             let polyStr = '';
             if (useShape) {
-              const x = COL.px_x >= 0 ? cellNum(ws, r, COL.px_x) : null;
-              const y = COL.px_y >= 0 ? cellNum(ws, r, COL.px_y) : null;
-              if (x != null && y != null) {
-                const sbb = _classifyPoint(x, y, allPolys);
-                if (sbb) polyStr = sbb;
+              // Prefere override da coluna SBB (preenchida por normalização anterior)
+              if (sbbOverrideCol >= 0) {
+                const v = (ws[xlsx.utils.encode_cell({r, c: sbbOverrideCol})] || {}).v;
+                if (v != null && String(v).trim() !== '') polyStr = String(v).trim();
+              }
+              // Fallback: classifica pela geometria do shapefile
+              if (!polyStr) {
+                const x = COL.px_x >= 0 ? cellNum(ws, r, COL.px_x) : null;
+                const y = COL.px_y >= 0 ? cellNum(ws, r, COL.px_y) : null;
+                if (x != null && y != null) {
+                  const sbb = _classifyPoint(x, y, allPolys);
+                  if (sbb) polyStr = sbb;
+                }
               }
             } else if (polyCol >= 0) {
               const poly = cellVal(ws, r, polyCol).val;
@@ -10167,18 +10184,34 @@ body {
       const allPolys = gisData && gisData.allPolys;
       const cols = colsOverride || COL;
 
+      // Detecta override SBB na planilha (usado se normalização anterior escreveu)
+      let sbbOvCol = -1;
+      if (useShape) {
+        const refHdr = xlsx.utils.decode_range(ws['!ref']);
+        for (let c = 0; c <= refHdr.e.c; c++) {
+          const h = (ws[xlsx.utils.encode_cell({r:0, c})] || {}).v;
+          if (h && String(h).trim().toUpperCase() === 'SBB') { sbbOvCol = c; break; }
+        }
+      }
+
       const rows = [];
       const oseSet = new Set();
       for (let r = 1; r <= lastMain; r++) {
         let pStr = '';
-        if (useShape && allPolys && cols.px_x >= 0 && cols.px_y >= 0) {
+        // 1) Override SBB na planilha (normalização anterior)
+        if (useShape && sbbOvCol >= 0) {
+          const v = (ws[xlsx.utils.encode_cell({r, c: sbbOvCol})] || {}).v;
+          if (v != null && String(v).trim() !== '') pStr = String(v).trim();
+        }
+        // 2) Classificação por geometria do shapefile
+        if (!pStr && useShape && allPolys && cols.px_x >= 0 && cols.px_y >= 0) {
           const x = cellNum(ws, r, cols.px_x);
           const y = cellNum(ws, r, cols.px_y);
           if (x != null && y != null) {
             const sbb = _classifyPoint(x, y, allPolys);
             if (sbb) pStr = sbb;
           }
-        } else if (polyCol >= 0) {
+        } else if (!pStr && polyCol >= 0) {
           const pv = cellVal(ws, r, polyCol).val;
           if (pv != null && pv !== '') {
             const s = String(pv).trim();
@@ -10481,6 +10514,7 @@ body {
         const ws = wb.Sheets[wb.SheetNames[0]];
         const C = fmeta.cols;
         const polyCol = fmeta.polyCol;
+        const sbbOvCol = (fmeta.sbbOverrideCol != null) ? fmeta.sbbOverrideCol : -1;
 
         for (let r = 1; r <= fmeta.lastMainRow; r++) {
           const rowNum = r + 1;
@@ -10493,10 +10527,15 @@ body {
           const re = errByRow[fmeta.path + '|' + rowNum];
 
           let polyStr = '';
-          if (useShape && x != null && y != null) {
+          // 1) Override SBB (normalização anterior)
+          if (useShape && sbbOvCol >= 0) {
+            const v = (ws[xlsx.utils.encode_cell({r, c: sbbOvCol})] || {}).v;
+            if (v != null && String(v).trim() !== '') polyStr = String(v).trim();
+          }
+          if (!polyStr && useShape && x != null && y != null) {
             const sbb = _classifyPoint(x, y, allPolys);
             if (sbb) polyStr = sbb;
-          } else if (polyCol >= 0) {
+          } else if (!polyStr && polyCol >= 0) {
             const polyRaw = cellVal(ws, r, polyCol).val;
             const polyNum = Number(polyRaw);
             polyStr = (polyRaw != null && !isNaN(polyNum)) ? String(Math.round(polyNum)) : (typeof polyRaw === 'string' && polyRaw.trim() ? polyRaw.trim() : '');
