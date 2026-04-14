@@ -8,8 +8,8 @@
     "dev": "electron . --dev",
     "precompile": "electron scripts/compile-bytecode.js && node scripts/obfuscate-html.js",
     "postrestore": "node scripts/restore-source.js",
-    "build": "npm run precompile && node -e \"setTimeout(()=>process.exit(),5000)\" && electron-builder --win && npm run postrestore",
-    "build:publish": "npm run precompile && node -e \"setTimeout(()=>process.exit(),5000)\" && electron-builder --win --publish always && npm run postrestore"
+    "build": "npm run precompile && node -e \"setTimeout(()=>process.exit(),60000)\" && electron-builder --win && npm run postrestore",
+    "build:publish": "npm run precompile && node -e \"setTimeout(()=>process.exit(),60000)\" && electron-builder --win --publish always && npm run postrestore"
   },
   "build": {
     "appId": "com.a2zprojetos.codepro",
