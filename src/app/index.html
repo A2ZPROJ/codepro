@@ -8963,6 +8963,154 @@ body {
       return xlsx.utils.aoa_to_sheet(rows);
     }
 
+    // ────────────────────────────────────────────────
+    // FIX AFOGAMENTOS — abaixa a saída de cada PV afogado até ≤ min(CF_chegadas),
+    // preserva a declividade original de cada trecho, cascateia pela rede até convergir.
+    // ────────────────────────────────────────────────
+    async function _fixAfogamentos(fmeta) {
+      const pathMod = require('path');
+      const H_MIN = 1.10;
+      const TOL = 1e-3;
+      const MAX_ITERS = 50;
+
+      const wb = xlsx.readFile(fmeta.path, { cellFormula:false, cellNF:false, cellStyles:false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const C = fmeta.cols;
+      const lastMain = fmeta.lastMainRow;
+
+      const num = (r, c) => { if (c<0) return null; const v = (ws[xlsx.utils.encode_cell({r,c})]||{}).v; const n=Number(v); return isFinite(n)?n:null; };
+      const str = (r, c) => { if (c<0) return ''; const v = (ws[xlsx.utils.encode_cell({r,c})]||{}).v; return v!=null?String(v):''; };
+
+      const edges = [];
+      for (let r = 1; r <= lastMain; r++) {
+        const mont = str(r, C.pv_mont);
+        const jus  = str(r, C.pv_jus);
+        if (!mont || !jus) continue;
+        const projMont = num(r, C.proj_mont);
+        const projJus  = num(r, C.proj_jus);
+        const compr    = num(r, C.compr);
+        const iOrig = (compr && compr > 0 && projMont != null && projJus != null)
+                      ? (projMont - projJus) / compr : 0;
+        edges.push({
+          row: r,
+          ose1a: str(r, C.OSE1a),
+          mont, jus,
+          terrMont: num(r, C.terr_mont),
+          terrJus:  num(r, C.terr_jus),
+          projMont, projJus, compr, iOrig,
+          modified: false,
+        });
+      }
+
+      const ctByPv = {};
+      for (const e of edges) {
+        if (e.terrMont != null && ctByPv[e.mont] == null) ctByPv[e.mont] = e.terrMont;
+        if (e.terrJus  != null && ctByPv[e.jus]  == null) ctByPv[e.jus]  = e.terrJus;
+      }
+
+      const log = [];
+      let totalFixed = 0;
+      let iter;
+      for (iter = 0; iter < MAX_ITERS; iter++) {
+        const inE = {}, outE = {};
+        for (const e of edges) {
+          (outE[e.mont] = outE[e.mont]||[]).push(e);
+          (inE[e.jus]  = inE[e.jus]||[]).push(e);
+        }
+        let iterFixed = 0;
+        for (const pv of Object.keys(outE)) {
+          const chegadas = inE[pv] || [];
+          if (!chegadas.length) continue;
+          const cfsCheg = chegadas.map(e => e.projJus).filter(v => v != null);
+          if (!cfsCheg.length) continue;
+          const minCheg = Math.min(...cfsCheg);
+          for (const s of outE[pv]) {
+            if (s.projMont == null) continue;
+            if (s.projMont <= minCheg + TOL) continue;
+            const ct = ctByPv[pv];
+            const cfMax = ct != null ? ct - H_MIN : Infinity;
+            const newMont = Math.min(minCheg, cfMax);
+            const oldMont = s.projMont;
+            const oldJus  = s.projJus;
+            const newJus  = (s.compr && s.compr > 0) ? (newMont - s.iOrig * s.compr) : (oldJus != null ? oldJus - (oldMont - newMont) : null);
+            s.projMont = newMont;
+            s.projJus  = newJus;
+            s.modified = true;
+            log.push({
+              iter: iter+1, row: s.row+1, ose: s.ose1a, pv,
+              oldMont, newMont, oldJus, newJus,
+              delta: oldMont - newMont,
+              minCheg
+            });
+            iterFixed++;
+          }
+        }
+        totalFixed += iterFixed;
+        if (!iterFixed) break;
+      }
+
+      // Aplica modificações no ws
+      let cellsChanged = 0;
+      for (const e of edges) {
+        if (!e.modified) continue;
+        ws[xlsx.utils.encode_cell({r:e.row, c:C.proj_mont})] = { v: e.projMont, t:'n' };
+        ws[xlsx.utils.encode_cell({r:e.row, c:C.proj_jus})]  = { v: e.projJus,  t:'n' };
+        if (e.terrMont != null) ws[xlsx.utils.encode_cell({r:e.row, c:C.prof_mont})] = { v: e.terrMont - e.projMont, t:'n' };
+        if (e.terrJus  != null) ws[xlsx.utils.encode_cell({r:e.row, c:C.prof_jus})]  = { v: e.terrJus  - e.projJus,  t:'n' };
+        cellsChanged += 4;
+      }
+
+      // Sheet de log
+      const logRows = [['Iter','Linha','OSE','PV/PIT','proj_mont antigo','proj_mont novo','Δ mont','proj_jus antigo','proj_jus novo','min CF chegadas']];
+      for (const l of log) logRows.push([l.iter, l.row, l.ose, l.pv, l.oldMont, l.newMont, l.delta.toFixed(3), l.oldJus, l.newJus, l.minCheg]);
+      xlsx.utils.book_append_sheet(wb, xlsx.utils.aoa_to_sheet(logRows), 'Log_Ajustes');
+
+      // Re-valida e adiciona sheet
+      const validation = _validateNetwork(ws, C, lastMain, fmeta.path);
+      // Remove sheet Validacao antiga se existe (herdada do _CORRIGIDO) antes de reescrever
+      const idxOld = wb.SheetNames.indexOf('Validacao');
+      if (idxOld >= 0) {
+        delete wb.Sheets['Validacao'];
+        wb.SheetNames.splice(idxOld, 1);
+      }
+      xlsx.utils.book_append_sheet(wb, _validationToSheet(validation), 'Validacao');
+
+      // Salva _AJUSTADO
+      const dir = pathMod.dirname(fmeta.path);
+      const base = pathMod.basename(fmeta.path, pathMod.extname(fmeta.path));
+      const outPath = pathMod.join(dir, base + '_AJUSTADO.xlsx');
+      xlsx.writeFile(wb, outPath);
+
+      return { outPath, totalFixed, iterations: iter, cellsChanged, validation };
+    }
+
+    // Handler do botão "Ajustar Afogamentos" (roda em todos os arquivos com afogamento)
+    window.gisAjustarAfogamentos = async () => {
+      if (!gisData || !gisData.files) return;
+      _gisOpenProgress('Ajustando afogamentos...');
+      try {
+        const results = [];
+        for (let fi = 0; fi < gisData.files.length; fi++) {
+          const fmeta = gisData.files[fi];
+          _gisProgress((fi / gisData.files.length) * 100, '[' + (fi+1) + '/' + gisData.files.length + '] ' + _basename(fmeta.path));
+          await _yield();
+          const r = await _fixAfogamentos(fmeta);
+          results.push({ path: r.outPath, v: r.validation, hasOriginal: true, fixStats: { totalFixed: r.totalFixed, iterations: r.iterations, cellsChanged: r.cellsChanged } });
+        }
+        _gisProgress(100, 'Concluído');
+        await new Promise(r => setTimeout(r, 200));
+        _gisCloseProgress();
+        // Remove modal atual e abre novo com resultados pós-ajuste
+        const prev = document.getElementById('gis-val-modal');
+        if (prev) prev.remove();
+        _showValidationModal(results);
+      } catch (e) {
+        console.error('Ajustar afogamentos error:', e);
+        _gisCloseProgress();
+        alert('Erro: ' + e.message);
+      }
+    };
+
     // Handler do botão "Validar Rede"
     window.gisValidarRede = async () => {
       if (!gisData || !gisData.files || !gisData.files.length) { alert('Faça a auditoria primeiro.'); return; }
@@ -9044,6 +9192,16 @@ body {
         </div>`;
       }).join('');
 
+      const totalAfogados = results.reduce((a, r) => a + r.v.counts.pvAfogado, 0);
+      const fixBtn = totalAfogados > 0
+        ? `<button onclick="window.gisAjustarAfogamentos()" style="background:#ea580c;color:white;border:none;border-radius:6px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;margin-right:10px" title="Abaixa saídas afogadas preservando declividade, cascateia pela rede, gera _AJUSTADO.xlsx">🔧 Ajustar ${totalAfogados} afogamento(s)</button>`
+        : '';
+      const fixSummary = results.some(r => r.fixStats)
+        ? `<div style="margin:0 0 14px;padding:10px 14px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:12px;color:#92400e">
+             ✓ Ajustes aplicados: ${results.map(r => r.fixStats ? `${_basename(r.path)} — ${r.fixStats.totalFixed} fix em ${r.fixStats.iterations} iterações` : '').filter(Boolean).join(' · ')}
+           </div>`
+        : '';
+
       modal.innerHTML = `
         <div style="background:var(--bg);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.4);max-width:1100px;width:100%;max-height:90vh;overflow:auto;padding:24px;color:var(--text1)">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:12px">
@@ -9051,8 +9209,12 @@ body {
               <div style="font-size:16px;font-weight:700">🔬 Validação da Rede</div>
               <div style="font-size:11px;color:var(--text3);margin-top:2px">6 checks independentes · simulação de fluxo ponta-a-ponta</div>
             </div>
-            <button onclick="document.getElementById('gis-val-modal').remove()" style="background:transparent;border:none;font-size:20px;cursor:pointer;color:var(--text2);padding:4px 10px">×</button>
+            <div style="display:flex;align-items:center">
+              ${fixBtn}
+              <button onclick="document.getElementById('gis-val-modal').remove()" style="background:transparent;border:none;font-size:20px;cursor:pointer;color:var(--text2);padding:4px 10px">×</button>
+            </div>
           </div>
+          ${fixSummary}
           ${bodies}
         </div>`;
       document.body.appendChild(modal);
