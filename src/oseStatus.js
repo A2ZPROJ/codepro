@@ -37,6 +37,13 @@ function isTL(id) {
   return typeof id === 'string' && id.trim().toUpperCase().startsWith('TL');
 }
 
+// PV existente (levantado em campo) — h e CT imutáveis, fora das regras de
+// profundidade mínima do projeto. Casa "PV-EX-###" e também "PV-EXIST-###".
+function isExistingPv(id) {
+  if (typeof id !== 'string') return false;
+  return /^PV-EX/i.test(id.trim()) || /^PV-INT/i.test(id.trim());
+}
+
 function maxProf(pv) {
   const vals = [pv.excel_prof_pv, pv.excel_prof_chegada, pv.mapa_h, pv.perf_h]
     .filter(v => v != null && !isNaN(v));
@@ -74,50 +81,91 @@ function classifyOse(r) {
   if (!r.in_perfil) errors.push('ausente no Perfil');
   if (!r.in_excel)  errors.push('ausente na Planilha');
 
+  // Helper: mensagem no formato "X em REF (Planilha=A · Mapa=B · Perfil=C)"
+  // Inclui sempre as 3 fontes — a ausente vira "—". Assim o engenheiro sabe
+  // exatamente de onde veio cada número e pode ir direto conferir a fonte.
+  function divergMsg(label, ref, unit, dec, sources) {
+    const parts = sources.map(s => s.name + '=' +
+      (s.v == null ? '—' : fmt(s.v, dec) + (unit || '')));
+    return label + ' divergente em ' + ref + ' (' + parts.join(' · ') + ')';
+  }
+
   // Extensão L — tolerância de 1 cm (0.01 m), com pequeno epsilon para absorver arredondamento.
   const Lm = r.mapa_L, Lp = r.excel_L, Lf = r.perfil_L;
   const L_EPS = 5e-5;
-  if (Lm != null && Lp != null && Math.abs(Lm - Lp) > TOL.L + L_EPS) {
-    errors.push('L: ' + fmt(Lm, 3) + ' vs ' + fmt(Lp, 3) + ' (Mapa-Plan, Δ=' + fmt(Math.abs(Lm - Lp), 3) + 'm)');
-  }
-  if (Lm != null && Lf != null && Math.abs(Lm - Lf) > TOL.L + L_EPS) {
-    errors.push('L: ' + fmt(Lm, 3) + ' vs ' + fmt(Lf, 3) + ' (Mapa-Perfil, Δ=' + fmt(Math.abs(Lm - Lf), 3) + 'm)');
+  const L_DIV = [
+    Lm != null && Lp != null && Math.abs(Lm - Lp) > TOL.L + L_EPS,
+    Lm != null && Lf != null && Math.abs(Lm - Lf) > TOL.L + L_EPS,
+    Lp != null && Lf != null && Math.abs(Lp - Lf) > TOL.L + L_EPS,
+  ].some(Boolean);
+  if (L_DIV) {
+    errors.push(divergMsg('L', 'OSE', 'm', 3, [
+      { name: 'Planilha', v: Lp },
+      { name: 'Mapa',     v: Lm },
+      { name: 'Perfil',   v: Lf },
+    ]));
   }
 
   // Declividade i
   const Im = r.mapa_i, Ip = r.excel_i, If = r.perfil_i;
-  if (Im != null && Ip != null && Math.abs(Im - Ip) > TOL.I) {
-    errors.push('i: ' + fmt(Im, 5) + ' vs ' + fmt(Ip, 5) + ' (Mapa-Plan)');
-  }
-  if (Im != null && If != null && Math.abs(Im - If) > TOL.I) {
-    errors.push('i: ' + fmt(Im, 5) + ' vs ' + fmt(If, 5) + ' (Mapa-Perfil)');
+  const I_DIV = [
+    Im != null && Ip != null && Math.abs(Im - Ip) > TOL.I,
+    Im != null && If != null && Math.abs(Im - If) > TOL.I,
+    Ip != null && If != null && Math.abs(Ip - If) > TOL.I,
+  ].some(Boolean);
+  if (I_DIV) {
+    errors.push(divergMsg('i', 'OSE', '', 5, [
+      { name: 'Planilha', v: Ip },
+      { name: 'Mapa',     v: Im },
+      { name: 'Perfil',   v: If },
+    ]));
   }
 
   // Por PV
   let hasTQ = false, hasTLbad = false, hasShallow = false, hasDeepTL = false;
   for (const pv of (r.pvs || [])) {
-    // CT
-    if (pv.diff_ct != null && pv.diff_ct > TOL.CT) {
-      errors.push('CT divergente em ' + pv.id + ' (' + fmt(pv.excel_ct, 3) + ' vs ' + fmt(pv.mapa_ct, 3) + ' Mapa)');
+    // CT — compara as 3 fontes juntas
+    const ctDiv = [
+      pv.diff_ct != null && pv.diff_ct > TOL.CT,
+      pv.diff_ct_perf != null && pv.diff_ct_perf > TOL.CT,
+    ].some(Boolean);
+    if (ctDiv) {
+      errors.push(divergMsg('CT', pv.id, '', 3, [
+        { name: 'Planilha', v: pv.excel_ct },
+        { name: 'Mapa',     v: pv.mapa_ct },
+        { name: 'Perfil',   v: pv.perf_ct },
+      ]));
     }
-    if (pv.diff_ct_perf != null && pv.diff_ct_perf > TOL.CT) {
-      errors.push('CT divergente em ' + pv.id + ' (' + fmt(pv.excel_ct, 3) + ' vs ' + fmt(pv.perf_ct, 3) + ' Perfil)');
+    // CF — compara fundo do PV (excel_cf_pv) contra mapa_cf e perf_cf
+    const cfDiv = [
+      pv.diff_cf != null && pv.diff_cf > TOL.CF,
+      pv.diff_cf_perf != null && pv.diff_cf_perf > TOL.CF,
+    ].some(Boolean);
+    if (cfDiv) {
+      errors.push(divergMsg('CF', pv.id, '', 3, [
+        { name: 'Planilha', v: pv.excel_cf_pv },
+        { name: 'Mapa',     v: pv.mapa_cf },
+        { name: 'Perfil',   v: pv.perf_cf },
+      ]));
     }
-    // CF (compara fundo do PV)
-    if (pv.diff_cf != null && pv.diff_cf > TOL.CF) {
-      errors.push('CF divergente em ' + pv.id + ' (' + fmt(pv.excel_cf_pv, 3) + ' vs ' + fmt(pv.mapa_cf, 3) + ' Mapa)');
-    }
-    if (pv.diff_cf_perf != null && pv.diff_cf_perf > TOL.CF) {
-      errors.push('CF divergente em ' + pv.id + ' (' + fmt(pv.excel_cf_pv, 3) + ' vs ' + fmt(pv.perf_cf, 3) + ' Perfil)');
-    }
-    // h (profundidade) — só compara contra mapa (perfil h ainda não confiável)
-    if (pv.diff_h != null && pv.diff_h > TOL.H) {
-      errors.push('h divergente em ' + pv.id + ' (' + fmt(pv.excel_prof_pv, 3) + ' vs ' + fmt(pv.mapa_h, 3) + ' Mapa)');
+    // h (profundidade)
+    const hDiv = [
+      pv.diff_h != null && pv.diff_h > TOL.H,
+      pv.diff_h_perf != null && pv.diff_h_perf > TOL.H,
+    ].some(Boolean);
+    if (hDiv) {
+      errors.push(divergMsg('h', pv.id, 'm', 3, [
+        { name: 'Planilha', v: pv.excel_prof_pv },
+        { name: 'Mapa',     v: pv.mapa_h },
+        { name: 'Perfil',   v: pv.perf_h },
+      ]));
     }
 
-    // Profundidade mínima (qualquer PV/TL) — regra nova
+    // Profundidade mínima (qualquer PV/TL) — regra nova.
+    // PVs existentes / de interligação (PV-EX-###, PV-INT-###) ficam fora
+    // da regra — são levantamentos de campo, h é imutável, não é erro.
     const hPv = maxProf(pv);
-    if (hPv != null && hPv < H_MIN) {
+    if (hPv != null && hPv < H_MIN && !isExistingPv(pv.id)) {
       hasShallow = true;
       errors.push(pv.id + ' raso (h=' + hPv.toFixed(3) + 'm < ' + H_MIN.toFixed(2) + 'm mínimo)');
     }
@@ -142,10 +190,13 @@ function classifyOse(r) {
 
   // Declividade mínima por profundidade da OSE (regra nova)
   // Usa a declividade da planilha (canônica); se ausente, cai para mapa.
-  // Epsilon de 5e-5 absorve ruído de arredondamento (1,000% arredonda para 1,00%).
+  // Epsilon de 5e-4 (0,05pp) absorve arredondamento ao exibir 2 casas
+  // decimais: uma OSE com i real = 0,0099 (planilha/mapa exibem "0,99%")
+  // não deve virar ERRO quando o engenheiro claramente dimensionou pra 1%.
+  // Continua flagrando declividades genuinamente baixas (≤ ~0,95%).
   const iCheck = r.excel_i != null ? r.excel_i : r.mapa_i;
   const maxH   = maxProfOse(r);
-  const DECL_EPS = 5e-5;
+  const DECL_EPS = 5e-4;
   if (iCheck != null && maxH != null) {
     if (maxH <= DECL_DEPTH_LIMIT) {
       if (iCheck < DECL_MIN_SHALLOW - DECL_EPS) {
@@ -252,6 +303,6 @@ function crossCheckPVs(data) {
 
 module.exports = {
   classifyOse, crossCheckPVs, TOL,
-  isTL, tlShouldBePv, maxProf, maxProfOse,
+  isTL, isExistingPv, tlShouldBePv, maxProf, maxProfOse,
   H_MIN, TL_MAX_H, DECL_MIN_SHALLOW, DECL_MIN_DEEP, DECL_DEPTH_LIMIT,
 };

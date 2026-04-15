@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { classifyOse, crossCheckPVs } = require('./oseStatus');
+const { deepCheck: deepCheckOse } = require('./oseDeepCheck');
 const { generateMemorial } = require('./memorialGenerator');
 const { generateFromTemplate } = require('./memorialTemplate');
 
@@ -49,6 +50,7 @@ window.electronAPI = {
   exportOseXlsx:  (opts)       => ipcRenderer.invoke('export-ose-xlsx', opts),
   classifyOse:    (r)          => classifyOse(r),
   crossCheckPVs:  (data)       => crossCheckPVs(data),
+  deepCheckOse:   (data)       => deepCheckOse(data),
   generateMemorial: (info, agg) => generateMemorial(info, agg),
   generateFromTemplate: (tplPath, info, agg) => generateFromTemplate(tplPath, info, agg),
   dashboard: {

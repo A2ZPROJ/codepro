@@ -110,18 +110,32 @@ function parseMapaDxf(filePath) {
 
   function flushMultiLeader() {
     if (!mlBuf) return;
-    const mId = mlBuf.match(/;((?:PV|TL|PIT)[\s\-]+\d+)/i);
+    // Aceita PV-###, TL-###, PIT-###, TQ-### e variantes com qualificador
+    // intermediário como PV-EX-### (existente) ou PV-INT-### (interligação).
+    const mId = mlBuf.match(/;((?:PV|TL|PIT|TQ)(?:[\s\-]+[A-Z]{1,4})?[\s\-]+\d+)/i);
     const cleaned = mlBuf.replace(/\\f[^;]*;/gi, '').replace(/[{}]/g, '');
     const mCt = cleaned.match(/(?:\\P|^|\s)CT\s*:\s*([\d.,]+)/i);
     const mCf = cleaned.match(/(?:\\P|^|\s)CF\s*:\s*([\d.,]+)/i);
     const mH  = cleaned.match(/(?:\\P|^|\s|;)h\s*:\s*([\d.,]+)/i);
     if (mId && mCt && mCf) {
       const pid = normalizeId(mId[1]);
-      pvs[pid] = {
-        ct: parseFloat(mCt[1].replace(',', '.')),
-        cf: parseFloat(mCf[1].replace(',', '.')),
-        h:  mH ? parseFloat(mH[1].replace(',', '.')) : null,
-      };
+      const ct = parseFloat(mCt[1].replace(',', '.'));
+      const cf = parseFloat(mCf[1].replace(',', '.'));
+      const h  = mH ? parseFloat(mH[1].replace(',', '.')) : null;
+      // Um mesmo PV pode ter vários multileaders no mapa (um por tubo
+      // chegando/saindo). CF_chegada > CF_fundo; para casar com a cf_pv
+      // da planilha (fundo real = min) pegamos a CF MÍNIMA, e o h MÁXIMO
+      // (fundo mais profundo). Antes o parser sobrescrevia com o último
+      // rótulo, que poderia ser o da chegada e virava falso "CF divergente".
+      const prev = pvs[pid];
+      if (!prev) {
+        pvs[pid] = { ct, cf, h };
+      } else {
+        if (cf < prev.cf) prev.cf = cf;
+        if (h != null && (prev.h == null || h > prev.h)) prev.h = h;
+        // CT teoricamente é o mesmo; mantém o primeiro, mas se faltar registra
+        if (prev.ct == null && ct != null) prev.ct = ct;
+      }
       if (mlX != null && mlY != null) pvCoords[pid] = { x: mlX, y: mlY };
     }
     mlBuf = ''; mlX = null; mlY = null;
@@ -130,7 +144,10 @@ function parseMapaDxf(filePath) {
   function flushMtext() {
     if (!mtText) return;
     const plain = mtText.replace(/\\f[^;]*;/gi, '').replace(/[{}]/g, '');
-    const m = plain.match(/OSE[\s\-]+(\d+)\s+L=([\d.,]+)\s*m.*?i=([\d.,]+)/is);
+    // Unidade `m` após o valor de L é OPCIONAL — muitos rótulos vêm como
+    // `L=25,09\PØ150mm  i=0,0470` (o `m` só aparece em `mm` depois).
+    // Antes o regex exigia `m` logo após o número, derrubando a OSE.
+    const m = plain.match(/OSE[\s\-]+(\d+)\b[\s\S]*?L=\s*([\d.,]+)\s*m?[\s\S]*?i\s*=\s*([\d.,]+)/i);
     if (m) {
       const num = m[1].padStart(3, '0');
       oses[num] = {
@@ -227,7 +244,11 @@ function parsePerfisDxf(filePath) {
       if (!(dy > -100 && dy < -15 && dx > -150 && dx < 150)) continue;
       if (it.layer !== 'SES-TXT' && it.layer !== 'A-ANOTACAO') continue;
       const t = cleanMtext(it.text);
-      if (/^(TL|PV)-\d+$/.test(t)) {
+      // Aceita PV/TL/PIT/TQ e variantes com qualificador intermediário
+      // (PV-EX-###, PV-INT-### etc.). Sem isso, blocos de OSE que começam
+      // num PV existente/interligação ficavam com 1 só candidato, dy_pv
+      // distorcido e ext_acum=0 → falso "Perfil ausente".
+      if (/^(?:PV|TL|PIT|TQ)(?:-[A-Z]{1,4})?-\d+$/.test(t)) {
         cands.push({ name: t, dx, dy, x: it.x, y: it.y });
       }
     }
@@ -277,11 +298,20 @@ function parsePerfisDxf(filePath) {
         } else if (rdy > OFF_EXTAC[0] && rdy < OFF_EXTAC[1] && /\d+\.\d+m/.test(t)) {
           const m = t.match(/([\d.]+)m/);
           if (m) rec.ext_acum = parseFloat(m[1]);
-        } else if (rdy > OFF_DECL[0] && rdy < OFF_DECL[1] && t.includes('%')) {
-          const m = t.match(/([\d.]+)/);
-          if (m) {
-            const n = parseFloat(m[1]);
-            if (!isNaN(n) && n < 1) rec.decl = n;
+        } else if (rdy > OFF_DECL[0] && rdy < OFF_DECL[1]) {
+          // No DXF real a célula de declividade vem como MTEXT multi-linha:
+          //   "0.0224\n2.24%"   (m/m + percentual, empilhados)
+          // Pode também vir só uma linha em qualquer formato. Estratégia:
+          // varre linhas, tenta casar decimal (com ou sem %); aceita a primeira
+          // que for válida. Se tem % OU n>=1 → divide por 100 pra pt no formato m/m.
+          const lines = t.split('\n').map(l => l.trim().replace(',', '.'));
+          for (const ln of lines) {
+            const m = ln.match(/^([\d.]+)\s*%?$/);
+            if (!m) continue;
+            let n = parseFloat(m[1]);
+            if (isNaN(n) || n <= 0) continue;
+            if (ln.includes('%') || n >= 1) n = n / 100;
+            if (n > 0 && n < 0.2) { rec.decl = n; break; }
           }
         }
       }
@@ -353,7 +383,12 @@ function parseExcel(filePath) {
   const result = {};
 
   for (const sheetName of wb.SheetNames) {
-    const m = sheetName.match(/OSE[\s\-]+(\d+)/i);
+    // Aceita somente `OSE-NNN` exato (sem sufixo). Sheets como `OSE-077A`,
+    // `OSE-052A` etc. são cópias/trechos alternativos: o mapa sempre
+    // rotula apenas a OSE principal. Se incluíssemos o sufixo, o A
+    // sobrescrevia a OSE principal e o i/cf ficava divergente do mapa
+    // (falso "i mapa vs planilha").
+    const m = sheetName.match(/^OSE[\s\-]+(\d+)$/i);
     if (!m) continue;
     const oseNum = m[1].padStart(3, '0');
     const ws = wb.Sheets[sheetName];

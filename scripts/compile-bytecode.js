@@ -17,6 +17,7 @@
  */
 'use strict';
 
+const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const bytenode = require('bytenode');
@@ -29,6 +30,7 @@ const targets = [
   'preload.js',
   'parseOse.js',
   'oseStatus.js',
+  'oseDeepCheck.js',
   'exportOse.js',
   'memorialGenerator.js',
   'license.js',
@@ -89,4 +91,4 @@ async function main() {
   console.log('Para restaurar os .js originais: node scripts/restore-source.js');
 }
 
-main().catch(e => { console.error('FATAL:', e); process.exit(1); });
+app.whenReady().then(() => main()).then(() => app.quit()).catch(e => { console.error('FATAL:', e); app.quit(); process.exit(1); });

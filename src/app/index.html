@@ -3081,6 +3081,7 @@ body {
             <button id="ose-export-btn" onclick="oseExportXLSX()" style="display:none;background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;cursor:pointer">Exportar XLSX</button>
             <button id="ose-pdf-btn" onclick="oseExportPDF()" style="display:none;background:transparent;color:#dc2626;border:1.5px solid #dc2626;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Exportar PDF</button>
             <button id="ose-diff-btn" onclick="oseDiffRevisions()" style="display:none;background:transparent;color:#6b21a8;border:1.5px solid #6b21a8;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Comparar revisões</button>
+            <button id="ose-deep-btn" onclick="oseDeepCheck()" style="display:none;background:transparent;color:#0369a1;border:1.5px solid #0369a1;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Verificação Profunda</button>
             <span id="ose-status" style="font-size:12px;color:var(--text3)"></span>
           </div>
         </div>
@@ -3356,6 +3357,7 @@ body {
     document.getElementById('ose-export-btn').style.display = '';
     document.getElementById('ose-pdf-btn').style.display = '';
     document.getElementById('ose-diff-btn').style.display = '';
+    document.getElementById('ose-deep-btn').style.display = '';
     // Salva snapshot automaticamente no Supabase pra futuras comparações
     oseSaveSnapshot(res.data);
   };
@@ -3425,20 +3427,25 @@ body {
 
     // ── Estatísticas agregadas da bacia ──────────────────────
     (function renderBaciaStats() {
-      let Ltotal = 0, profSum = 0, profMax = 0, profCount = 0, nPVs = 0, nTLs = 0, nTQ = 0;
+      let Ltotal = 0, profSum = 0, profMax = 0, profCount = 0, nPVs = 0, nTLs = 0;
       const seenPV = new Set();
+      // T.Q. é característica física do PV — conta 1 por PV único se QUALQUER
+      // OSE o declarar com TQ (não basta olhar a 1ª aparição, porque o mesmo
+      // PV pode ser montante em uma OSE sem TQ e jusante em outra COM TQ).
+      const tqPvs = new Set();
       for (const r of data) {
         if (r.excel_L) Ltotal += r.excel_L;
         else if (r.mapa_L) Ltotal += r.mapa_L;
         for (const pv of (r.pvs || [])) {
+          if (pv.excel_has_tq) tqPvs.add(pv.id);
           if (seenPV.has(pv.id)) continue;
           seenPV.add(pv.id);
           if (/^TL/i.test(pv.id)) nTLs++; else nPVs++;
           const h = Math.max(pv.excel_prof_pv || 0, pv.excel_prof_chegada || 0, pv.mapa_h || 0);
           if (h > 0) { profSum += h; profMax = Math.max(profMax, h); profCount++; }
-          if (pv.excel_has_tq) nTQ++;
         }
       }
+      const nTQ = tqPvs.size;
       const profMed = profCount > 0 ? profSum / profCount : 0;
       const card = function(label, value, color) {
         return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:100px">'
@@ -4206,6 +4213,7 @@ body {
     // Agrega stats
     let Ltotal = 0, nPVs = 0, nTLs = 0, nTQ = 0, errCount = 0, warnCount = 0, okCount = 0;
     const seen = new Set();
+    const tqSet = new Set();
     const errosList = [];
     for (const r of data) {
       if (r.excel_L) Ltotal += r.excel_L;
@@ -4215,11 +4223,12 @@ body {
       else if (c.hasTQ) warnCount++;
       else okCount++;
       for (const pv of (r.pvs || [])) {
+        if (pv.excel_has_tq) tqSet.add(pv.id);
         if (seen.has(pv.id)) continue; seen.add(pv.id);
         if (/^TL/i.test(pv.id)) nTLs++; else nPVs++;
-        if (pv.excel_has_tq) nTQ++;
       }
     }
+    nTQ = tqSet.size;
     const projectName = (window._ose.excelPath || '').split(/[\\/]/).pop().replace(/\.[^.]+$/, '') || 'Conferência OSE';
 
     // Tabela de erros
@@ -4350,6 +4359,157 @@ body {
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Exportar XLSX'; }
     }
+  };
+
+  // ── VERIFICAÇÃO PROFUNDA ─────────────────────────────────────────
+  // Roda cheques de topologia/hidráulica/geometria paralelos à conferência
+  // básica (classifyOse). Detecta problemas que a conferência trecho-a-trecho
+  // não pega: ciclos, OSE órfã, CF_saída afogando chegada, contra-declive,
+  // decl real vs declarada, CT inconsistente entre OSEs, distância mapa×L.
+  window.oseDeepCheck = function() {
+    if (!window._ose.data) return;
+    const result = window.electronAPI.deepCheckOse(window._ose.data);
+    oseDeepRenderModal(result);
+  };
+
+  function oseDeepRenderModal(result) {
+    const { violations, stats } = result;
+    const host = document.getElementById('ose-deep-modal') || (() => {
+      const d = document.createElement('div');
+      d.id = 'ose-deep-modal';
+      document.body.appendChild(d);
+      return d;
+    })();
+
+    const sevColor = { erro: '#dc2626', alerta: '#d97706', info: '#0369a1' };
+    const catLabel = {
+      conferencia: 'Conferência (mapa × perfil × planilha)',
+      topologia:   'Topologia da rede',
+      hidraulica:  'Hidráulica / Fluxo',
+      geometria:   'Cross-source',
+    };
+
+    // Agrupa por categoria + severidade
+    const groups = {};
+    for (const v of violations) {
+      const key = v.category + '|' + v.severity;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(v);
+    }
+
+    function rowHtml(v) {
+      const ref = [
+        v.ose ? '<span style="font-family:DM Mono,monospace;font-weight:600;color:var(--text)">OSE-' + v.ose + '</span>' : '',
+        v.pv  ? '<span style="font-family:DM Mono,monospace;color:var(--text2)">' + v.pv + '</span>' : '',
+      ].filter(Boolean).join(' · ');
+      return '<div style="padding:8px 12px;border-bottom:1px solid var(--border2);display:flex;gap:12px;align-items:flex-start">' +
+        '<div style="min-width:8px;width:4px;align-self:stretch;border-radius:2px;background:' + sevColor[v.severity] + '"></div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:11px;color:var(--text3);margin-bottom:2px;display:flex;gap:8px;flex-wrap:wrap">' +
+            '<span style="color:' + sevColor[v.severity] + ';font-weight:700;text-transform:uppercase">' + v.severity + '</span>' +
+            '<span>' + v.code + '</span>' +
+            (ref ? '<span>·</span>' + ref : '') +
+          '</div>' +
+          '<div style="font-size:13px;color:var(--text);line-height:1.4">' + v.message + '</div>' +
+        '</div>' +
+      '</div>';
+    }
+
+    const sections = [];
+    for (const cat of ['conferencia', 'topologia', 'hidraulica', 'geometria']) {
+      const blocks = [];
+      for (const sev of ['erro', 'alerta', 'info']) {
+        const items = groups[cat + '|' + sev] || [];
+        if (!items.length) continue;
+        blocks.push(
+          '<div style="margin-top:6px">' +
+          '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:' + sevColor[sev] + ';font-weight:700;padding:6px 12px">' +
+            sev + ' (' + items.length + ')' +
+          '</div>' +
+          items.map(rowHtml).join('') +
+          '</div>'
+        );
+      }
+      if (!blocks.length) blocks.push('<div style="padding:16px;color:var(--text3);font-size:13px;text-align:center">Nenhuma violação encontrada nesta categoria.</div>');
+      sections.push(
+        '<div style="margin-bottom:20px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface)">' +
+          '<div style="padding:12px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text)">' +
+            catLabel[cat] + ' — ' + (stats.por_categoria[cat] || 0) + ' item(s)' +
+          '</div>' +
+          blocks.join('') +
+        '</div>'
+      );
+    }
+
+    const stat = (label, val, color) =>
+      '<div style="flex:1;min-width:110px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:6px">' +
+        '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px">' + label + '</div>' +
+        '<div style="font-size:22px;font-weight:700;color:' + (color || 'var(--text)') + ';margin-top:2px">' + val + '</div>' +
+      '</div>';
+
+    host.innerHTML =
+      '<div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById(\'ose-deep-modal\').remove()">' +
+        '<div style="background:var(--bg);border-radius:10px;max-width:1100px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.4)">' +
+          '<div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">' +
+            '<div>' +
+              '<div style="font-size:16px;font-weight:700;color:var(--text)">Verificação Profunda da Rede</div>' +
+              '<div style="font-size:12px;color:var(--text3);margin-top:2px">Cheque paralelo de topologia, hidráulica e geometria</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:8px;align-items:center">' +
+              '<button onclick="oseDeepExportXlsx()" style="background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:7px 12px;font-family:inherit;font-size:12px;cursor:pointer">Exportar XLSX</button>' +
+              '<button onclick="document.getElementById(\'ose-deep-modal\').remove()" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:7px 14px;font-family:inherit;font-size:12px;cursor:pointer">Fechar</button>' +
+            '</div>' +
+          '</div>' +
+          '<div style="padding:16px 22px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap">' +
+            stat('Total OSEs', stats.oses_total) +
+            stat('Violações', stats.total) +
+            stat('Erros', stats.erros, sevColor.erro) +
+            stat('Alertas', stats.alertas, sevColor.alerta) +
+            stat('Infos', stats.infos, sevColor.info) +
+            stat('OSEs c/ erro', stats.oses_com_erro, sevColor.erro) +
+          '</div>' +
+          '<div style="padding:18px 22px;overflow:auto;flex:1">' +
+            sections.join('') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    window._oseDeep = result;
+  }
+
+  // Exporta o resultado pra XLSX (uma linha por violação)
+  window.oseDeepExportXlsx = async function() {
+    if (!window._oseDeep) return;
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Violações');
+    ws.columns = [
+      { header: 'Severidade', key: 'severity', width: 12 },
+      { header: 'Categoria',  key: 'category', width: 14 },
+      { header: 'Código',     key: 'code',     width: 22 },
+      { header: 'OSE',        key: 'ose',      width: 10 },
+      { header: 'PV',         key: 'pv',       width: 16 },
+      { header: 'Mensagem',   key: 'message',  width: 90 },
+    ];
+    for (const v of window._oseDeep.violations) {
+      ws.addRow({
+        severity: v.severity.toUpperCase(),
+        category: v.category,
+        code: v.code,
+        ose: v.ose || '',
+        pv: v.pv || '',
+        message: v.message,
+      });
+    }
+    ws.getRow(1).font = { bold: true };
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const projectName = (window._ose.excelPath || '').split(/[\\/]/).pop().replace(/\.[^.]+$/, '') || 'Relatório OSE';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = projectName + '_VerificacaoProfunda.xlsx';
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
   </script>
 
@@ -6107,6 +6267,7 @@ body {
           trechos: [],
         };
         const seen = new Set();
+        const tqSeen = new Set();
         for (const r of oseData) {
           if (r.mapa_L) oseAgg.L_total += r.mapa_L;
           // Trecho
@@ -6124,6 +6285,7 @@ body {
             });
           }
           for (const pv of (r.pvs || [])) {
+            if (pv.excel_has_tq && !tqSeen.has(pv.id)) { tqSeen.add(pv.id); oseAgg.tqs_count++; }
             if (seen.has(pv.id)) continue;
             seen.add(pv.id);
             const isTL = /^TL/i.test(pv.id);
@@ -6136,7 +6298,6 @@ body {
               else if (h <= 4) oseAgg.pvs_por_faixa['3-4']++;
               else             oseAgg.pvs_por_faixa['4+']++;
             }
-            if (pv.excel_has_tq) oseAgg.tqs_count++;
           }
         }
       }
@@ -6196,9 +6357,11 @@ body {
           pvs_por_faixa: { '0-2': 0, '2-3': 0, '3-4': 0, '4+': 0 }, tqs_count: 0,
         };
         const seen = new Set();
+        const tqSeen = new Set();
         for (const r of oseData) {
           if (r.mapa_L) oseAgg.L_total += r.mapa_L;
           for (const pv of (r.pvs || [])) {
+            if (pv.excel_has_tq && !tqSeen.has(pv.id)) { tqSeen.add(pv.id); oseAgg.tqs_count++; }
             if (seen.has(pv.id)) continue; seen.add(pv.id);
             if (/^TL/i.test(pv.id)) oseAgg.tls_count++; else oseAgg.pvs_count++;
             const h = Math.max(pv.excel_prof_pv || 0, pv.excel_prof_chegada || 0, pv.mapa_h || 0);
@@ -6208,7 +6371,6 @@ body {
               else if (h <= 4) oseAgg.pvs_por_faixa['3-4']++;
               else oseAgg.pvs_por_faixa['4+']++;
             }
-            if (pv.excel_has_tq) oseAgg.tqs_count++;
           }
         }
       }
@@ -6276,6 +6438,7 @@ body {
             tqs_count: 0, trechos: [],
           };
           const seen = new Set();
+          const tqSeen = new Set();
           for (const r of oseData) {
             if (r.mapa_L) oseAgg.L_total += r.mapa_L;
             const pvA = r.pvs[0], pvB = r.pvs[r.pvs.length - 1];
@@ -6287,6 +6450,7 @@ body {
               });
             }
             for (const pv of (r.pvs || [])) {
+              if (pv.excel_has_tq && !tqSeen.has(pv.id)) { tqSeen.add(pv.id); oseAgg.tqs_count++; }
               if (seen.has(pv.id)) continue; seen.add(pv.id);
               if (/^TL/i.test(pv.id)) oseAgg.tls_count++; else oseAgg.pvs_count++;
               const h = Math.max(pv.excel_prof_pv || 0, pv.excel_prof_chegada || 0, pv.mapa_h || 0);
@@ -6296,7 +6460,6 @@ body {
                 else if (h <= 4) oseAgg.pvs_por_faixa['3-4']++;
                 else oseAgg.pvs_por_faixa['4+']++;
               }
-              if (pv.excel_has_tq) oseAgg.tqs_count++;
             }
           }
         }
@@ -6632,10 +6795,11 @@ body {
         // ── 1. Agrega métricas detalhadas ──
         let Ltotal = 0;
         const Lporf = { '0-2': 0, '2-3': 0, '3-4': 0, '4-5': 0, '5+': 0 };
-        let nPVs = 0, nTLs = 0, nTQ = 0, nLigacoes = 0;
+        let nPVs = 0, nTLs = 0, nLigacoes = 0;
         const pvsPorf = { '0-2': 0, '2-3': 0, '3-4': 0, '4-5': 0, '5+': 0 };
         const diams = {};
         const seen = new Set();
+        const tqSet = new Set();  // PV com TQ em qualquer OSE (não só a 1ª aparição)
         let somaProf = 0, nProf = 0;
         const larguraVala = 0.65; // m (DN150 padrão)
 
@@ -6649,6 +6813,7 @@ body {
           Lporf[fk] += L;
 
           for (const pv of (r.pvs || [])) {
+            if (pv.excel_has_tq) tqSet.add(pv.id);
             if (seen.has(pv.id)) continue;
             seen.add(pv.id);
             const isTL = /^TL/i.test(pv.id);
@@ -6657,10 +6822,10 @@ body {
             if (h > 0) { somaProf += h; nProf++; }
             const fk2 = h <= 2 ? '0-2' : h <= 3 ? '2-3' : h <= 4 ? '3-4' : h <= 5 ? '4-5' : '5+';
             pvsPorf[fk2]++;
-            if (pv.excel_has_tq) nTQ++;
             if (pv.excel_diam) diams[pv.excel_diam] = (diams[pv.excel_diam] || 0) + 1;
           }
         }
+        const nTQ = tqSet.size;
         nLigacoes = nPVs + nTLs; // aprox — cada PV/TL atende ligações
         const profMedia = nProf > 0 ? somaProf / nProf : 1.5;
         const dnPrincipal = Object.keys(diams).sort((a, b) => diams[b] - diams[a])[0] || '150';
@@ -7965,6 +8130,7 @@ body {
             <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" id="gis-map-polys-cb" checked onchange="window.gisMapToggleLayer('polys',this.checked)" style="cursor:pointer"> Polígonos</label>
             <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" id="gis-map-osenames-cb" checked onchange="window.gisMapToggleLayer('oseNames',this.checked)" style="cursor:pointer"> Nomes OSE</label>
             <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" id="gis-map-labels-cb" onchange="window.gisMapToggleLayer('labels',this.checked)" style="cursor:pointer"> Labels PV</label>
+            <button id="gis-exist-btn" onclick="window.gisOpenExistPanel()" style="background:#f5f3ff;border:1px solid #7c3aed;border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;color:#5b21b6;font-family:inherit;font-weight:700" title="Listar/gerenciar PVs existentes">★ Existentes (<span id="gis-exist-count">0</span>)</button>
             <button id="gis-map-theme-btn" onclick="window.gisMapToggleTheme()" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;color:var(--text2);font-family:inherit;font-weight:600">Escuro</button>
           </div>
         </div>
@@ -8049,6 +8215,109 @@ body {
     // Estado: múltiplas planilhas e shapefiles
     let _gisFiles = [];   // [path, ...]
     let _gisShapes = [];  // [{path, polys}, ...]
+
+    // ─── PVs existentes (que receberão nova ligação) ───
+    // { [pvId]: { cf: number, ct?: number, note?: string } }
+    // Persistido em localStorage para sobreviver reloads.
+    const GIS_EXIST_KEY = 'nexus_gis_pvs_existentes';
+    let _gisPvsExist = (() => {
+      try { return JSON.parse(localStorage.getItem(GIS_EXIST_KEY) || '{}'); }
+      catch { return {}; }
+    })();
+    function _gisSaveExist() {
+      try { localStorage.setItem(GIS_EXIST_KEY, JSON.stringify(_gisPvsExist)); } catch {}
+    }
+    // Chamado pelos popups do mapa e pelo painel
+    window.gisSetPvExistente = function(pvId, cfRaw, ctRaw) {
+      if (!pvId) return;
+      const cf = Number(String(cfRaw).replace(',','.'));
+      if (isNaN(cf)) { alert('CF inválido'); return; }
+      const ct = ctRaw != null && ctRaw !== '' ? Number(String(ctRaw).replace(',','.')) : null;
+      _gisPvsExist[pvId] = { cf, ct: (ct != null && !isNaN(ct)) ? ct : undefined };
+      _gisSaveExist();
+      if (typeof window.gisRenderExistList === 'function') window.gisRenderExistList();
+      try { if (typeof buildGisMapCache === 'function' && gisData) { buildGisMapCache(); window.gisMapRender && window.gisMapRender(); } } catch {}
+    };
+    window.gisRemovePvExistente = function(pvId) {
+      if (!pvId || !_gisPvsExist[pvId]) return;
+      delete _gisPvsExist[pvId];
+      _gisSaveExist();
+      if (typeof window.gisRenderExistList === 'function') window.gisRenderExistList();
+      try { if (typeof buildGisMapCache === 'function' && gisData) { buildGisMapCache(); window.gisMapRender && window.gisMapRender(); } } catch {}
+    };
+    // Handler chamado a partir do popup — lê os inputs do popup
+    window.gisMarkExistFromPopup = function(pvId) {
+      const cfEl = document.getElementById('gis-exist-cf-' + CSS.escape(pvId));
+      const ctEl = document.getElementById('gis-exist-ct-' + CSS.escape(pvId));
+      const cf = cfEl ? cfEl.value : '';
+      const ct = ctEl ? ctEl.value : '';
+      window.gisSetPvExistente(pvId, cf, ct);
+    };
+    // Atualiza contador no botão
+    window.gisRenderExistList = function() {
+      const n = Object.keys(_gisPvsExist).length;
+      const cntEl = document.getElementById('gis-exist-count');
+      if (cntEl) cntEl.textContent = String(n);
+      const body = document.getElementById('gis-exist-panel-body');
+      if (!body) return;
+      const entries = Object.entries(_gisPvsExist);
+      if (!entries.length) {
+        body.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:16px;text-align:center">Nenhum PV existente marcado. Clique em um PV no mapa e use "Marcar como existente" no popup.</div>';
+        return;
+      }
+      entries.sort((a,b) => a[0].localeCompare(b[0]));
+      body.innerHTML =
+        '<table class="gis-tbl" style="font-size:12px"><thead><tr><th>PV</th><th style="text-align:right">CF (trava)</th><th style="text-align:right">CT</th><th style="width:80px"></th></tr></thead><tbody>' +
+        entries.map(([id, v]) => {
+          const idEsc = id.replace(/'/g, "\\'");
+          return '<tr><td style="font-weight:700">' + esc(id) + '</td>' +
+            '<td style="text-align:right;font-family:\'DM Mono\',monospace">' + v.cf.toFixed(3) + '</td>' +
+            '<td style="text-align:right;font-family:\'DM Mono\',monospace">' + (v.ct != null ? v.ct.toFixed(3) : '—') + '</td>' +
+            '<td><button onclick="window.gisRemovePvExistente(\'' + idEsc + '\')" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit">Remover</button></td></tr>';
+        }).join('') +
+        '</tbody></table>';
+    };
+    window.gisOpenExistPanel = function() {
+      document.getElementById('gis-exist-panel-overlay')?.remove();
+      const html = `
+        <div id="gis-exist-panel-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)window.gisCloseExistPanel()">
+          <div style="background:var(--surface);border-radius:10px;max-width:640px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+            <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+              <h3 style="margin:0;font-size:15px;color:var(--text)">★ PVs Existentes</h3>
+              <span style="font-size:11px;color:var(--text3)">Cota travada — a rede nunca chegará abaixo desse CF</span>
+              <button onclick="window.gisCloseExistPanel()" style="margin-left:auto;background:none;border:none;font-size:22px;color:var(--text3);cursor:pointer;line-height:1;padding:0 4px">×</button>
+            </div>
+            <div style="padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface2);display:flex;gap:6px;align-items:end">
+              <label style="font-size:11px;flex:2">PV<input id="gis-exist-new-id" placeholder="PV-123" style="width:100%;padding:5px;font-size:12px;border:1px solid var(--border);border-radius:3px;font-family:inherit;background:var(--surface);color:var(--text)"></label>
+              <label style="font-size:11px;flex:1">CF<input id="gis-exist-new-cf" type="number" step="0.001" style="width:100%;padding:5px;font-size:12px;border:1px solid var(--border);border-radius:3px;font-family:inherit;background:var(--surface);color:var(--text)"></label>
+              <label style="font-size:11px;flex:1">CT (opcional)<input id="gis-exist-new-ct" type="number" step="0.001" style="width:100%;padding:5px;font-size:12px;border:1px solid var(--border);border-radius:3px;font-family:inherit;background:var(--surface);color:var(--text)"></label>
+              <button onclick="window.gisAddExistFromPanel()" style="background:#7c3aed;color:#fff;border:none;border-radius:3px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:700;font-family:inherit">Adicionar</button>
+            </div>
+            <div id="gis-exist-panel-body" style="overflow:auto;flex:1;padding:8px 20px"></div>
+          </div>
+        </div>`;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = html;
+      document.body.appendChild(wrap.firstElementChild);
+      window.gisRenderExistList();
+    };
+    window.gisCloseExistPanel = function() {
+      document.getElementById('gis-exist-panel-overlay')?.remove();
+    };
+    window.gisAddExistFromPanel = function() {
+      const id = (document.getElementById('gis-exist-new-id') || {}).value || '';
+      const cf = (document.getElementById('gis-exist-new-cf') || {}).value || '';
+      const ct = (document.getElementById('gis-exist-new-ct') || {}).value || '';
+      if (!id.trim()) { alert('Informe o ID do PV'); return; }
+      window.gisSetPvExistente(id.trim(), cf, ct);
+      document.getElementById('gis-exist-new-id').value = '';
+      document.getElementById('gis-exist-new-cf').value = '';
+      document.getElementById('gis-exist-new-ct').value = '';
+    };
+    // Atualiza contador ao carregar a aba
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => window.gisRenderExistList && window.gisRenderExistList(), 300);
+    });
 
     function _basename(p) { return p.split(/[\\/]/).pop(); }
 
@@ -8256,13 +8525,15 @@ body {
     // ── Detect polygon column ──
     function findPolygonCol(ws, ref) {
       // Prioriza SBB (arquivos normalizados) sobre POLIGONO (numérico da SANEPAR)
+      // Varre a planilha inteira — SBB pode ser anexada ao fim pelo normalizador
       let sbbCol = -1, polyGenCol = -1;
-      for (let c = 26; c < Math.min(ref.e.c + 1, 55); c++) {
+      const last = ref.e.c;
+      for (let c = 0; c <= last; c++) {
         const h = cellStr(ws, 0, c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
         if (h === 'sbb' || h === 'sub bacia' || h === 'sub-bacia' || h === 'subbacia') { sbbCol = c; break; }
         if ((h.includes('poligono') || h.includes('polygon')) && polyGenCol < 0) polyGenCol = c;
       }
-      return sbbCol >= 0 ? sbbCol : polyGenCol;
+      return sbbCol >= 0 ? { col: sbbCol, isSbb: true } : { col: polyGenCol, isSbb: false };
     }
 
     // ── Detect end of main data (before auxiliary block) ──
@@ -8307,7 +8578,9 @@ body {
             // Detecta colunas (cada planilha pode ter layout próprio)
             COL = detectCols(ws, ref);
             const lastMainRow = findMainDataEnd(ws, ref);
-            const polyCol = useShape ? -1 : findPolygonCol(ws, ref);
+            const polyInfo = useShape ? { col: -1, isSbb: false } : findPolygonCol(ws, ref);
+            const polyCol = polyInfo.col;
+            const polyIsSbb = polyInfo.isSbb;
             // Em modo shape: detecta se a planilha já tem coluna SBB preenchida (override
             // de normalização anterior). Se tiver, ela vence a classificação por geometria.
             let sbbOverrideCol = -1;
@@ -8317,7 +8590,7 @@ body {
                 if (h && String(h).trim().toUpperCase() === 'SBB') { sbbOverrideCol = c; break; }
               }
             }
-            filesMeta.push({ path: filePath, lastMainRow, polyCol, cols: { ...COL }, sbbOverrideCol });
+            filesMeta.push({ path: filePath, lastMainRow, polyCol, polyIsSbb, cols: { ...COL }, sbbOverrideCol });
 
           for (let r = 1; r <= lastMainRow; r++) {
             const ose = cellStr(ws, r, COL.OSE);
@@ -8343,8 +8616,17 @@ body {
               }
             } else if (polyCol >= 0) {
               const poly = cellVal(ws, r, polyCol).val;
-              const polyStr0 = poly != null ? String(Math.round(Number(poly))) : '';
-              if (polyStr0 && polyStr0 !== 'NaN') polyStr = polyStr0;
+              if (poly != null && poly !== '') {
+                if (polyIsSbb) {
+                  // Coluna SBB: valores string ("PO1-4", "PO1-PAINEIRAS")
+                  const s = String(poly).trim();
+                  if (s) polyStr = s;
+                } else {
+                  // Coluna POLIGONO SANEPAR: numérico
+                  const n = Number(poly);
+                  if (!isNaN(n)) polyStr = String(Math.round(n));
+                }
+              }
             }
             if (polyStr) polygons.add(polyStr);
 
@@ -8456,6 +8738,7 @@ body {
 
           const totalRows = filesMeta.reduce((a, f) => a + f.lastMainRow, 0);
           const polyAvailableGlobal = useShape || filesMeta.some(f => f.polyCol >= 0);
+          const polyIsSbbGlobal = filesMeta.some(f => f.polyIsSbb);
 
           // Store results
           gisData = {
@@ -8467,6 +8750,7 @@ body {
             polygons: polyArr,
             polyCol: filesMeta[0] ? filesMeta[0].polyCol : -1,
             useShape,
+            polyIsSbb: polyIsSbbGlobal,
             allPolys,
             polyAvailableGlobal,
           };
@@ -8484,6 +8768,8 @@ body {
             statusMsg += ' · SBB via ' + _gisShapes.length + ' shape(s) (' + allPolys.length + ' polígonos) · ' + splits.length + ' OSEs divididas';
           } else if (!polyAvailableGlobal) {
             statusMsg += ' · ⚠ coluna POLIGONO ausente em todas as planilhas';
+          } else if (polyIsSbbGlobal) {
+            statusMsg += ' · SBB via coluna (planilha normalizada) · ' + splits.length + ' OSEs divididas';
           } else {
             statusMsg += ' · POLIGONO via coluna · ' + splits.length + ' OSEs divididas';
           }
@@ -8573,7 +8859,8 @@ body {
       if (!splits.length) { alert('Nenhuma OSE dividida — nada a normalizar.'); return; }
 
       const useShape = !!gisData.useShape;
-      const polyPrefix = useShape ? '' : 'POLY ';
+      const isSbbMode = useShape || !!gisData.polyIsSbb;
+      const polyPrefix = isSbbMode ? '' : 'POLY ';
       const totalMoved = splits.reduce((a, s) => a + s.movedCount, 0);
       const rows = splits.map(s => {
         const detail = Object.entries(s.polyCount)
@@ -8644,7 +8931,8 @@ body {
       try {
         const pathMod = require('path');
         const useShape = !!gisData.useShape;
-        const polyLabel = useShape ? 'SBB' : 'Polígono';
+        const sbbMode = useShape || !!gisData.polyIsSbb;
+        const polyLabel = sbbMode ? 'SBB' : 'Polígono';
 
         // Decide o "polígono final" por OSE (majoritário entre todas as linhas/arquivos)
         const finalByOse = {};
@@ -8686,6 +8974,8 @@ body {
             polyCol = sbbCol;
           }
 
+          const filePolyIsSbb = !!fmeta.polyIsSbb;
+          const fileSbbMode = useShape || filePolyIsSbb;
           let cellsChanged = 0;
           // Para cada OSE, percorre suas linhas neste arquivo e escreve o polígono final
           for (const [ose1a, info] of Object.entries(gisData.oseMap)) {
@@ -8694,11 +8984,11 @@ body {
             for (const [poly, items] of Object.entries(info.polyRows || {})) {
               for (const it of items) {
                 if (it.path !== filePath) continue;
-                // Em modo coluna: só altera o que está fora do majoritário
-                if (!useShape && poly === finalPoly) continue;
+                // Em modo coluna POLIGONO numérica: só altera o que está fora do majoritário
+                if (!fileSbbMode && poly === finalPoly) continue;
                 const addr = xlsx.utils.encode_cell({ r: it.row, c: polyCol });
-                if (useShape) {
-                  ws[addr] = { v: finalPoly, t: 's' };
+                if (fileSbbMode) {
+                  ws[addr] = { v: String(finalPoly), t: 's' };
                 } else {
                   const cell = ws[addr] || {};
                   cell.v = isNaN(Number(finalPoly)) ? finalPoly : Number(finalPoly);
@@ -9311,8 +9601,10 @@ body {
           let polyChanged = 0;
           {
             const useShape = !!gisData.useShape;
+            const polyIsSbb = !!fmeta.polyIsSbb;
+            const sbbMode = useShape || polyIsSbb;
             let polyCol = fmeta.polyCol;
-            // Em modo shape: garante coluna SBB
+            // Em modo shape: garante coluna SBB (cria se não existir)
             if (useShape) {
               let sbbCol = -1;
               for (let cc = 0; cc <= ref.e.c; cc++) {
@@ -9343,8 +9635,9 @@ body {
                   for (const it of items) {
                     if (it.path !== filePath) continue;
                     const addr = xlsx.utils.encode_cell({ r: it.row, c: polyCol });
-                    if (useShape) {
-                      ws[addr] = { v: finalPoly, t: 's' };
+                    if (sbbMode) {
+                      // SBB é string ("PO1-4", "PO1-PAINEIRAS")
+                      ws[addr] = { v: String(finalPoly), t: 's' };
                     } else {
                       const cell = ws[addr] || {};
                       cell.v = isNaN(Number(finalPoly)) ? finalPoly : Number(finalPoly);
@@ -9487,48 +9780,108 @@ body {
           for (const [pv, arr] of Object.entries(osesIn)) remOseIn[pv] = new Set(arr);
 
           // Helper: calcula i único pra uma OSE (chain), dado cfHead
-          // SEMPRE usa i_min = 1% (mais conservador). Considera só requisito h_min adicional.
-          const computeIOse = (chain, cfHead) => {
+          // SEMPRE usa i_min = 1% (mais conservador). Considera requisito h_min + TODOS os PVs existentes na cadeia.
+          const computeIOse = (chain, cfHead, tailPv) => {
             const I_MIN_NORM = 0.01;  // 1% sempre
-            let req = 0, acum = 0;
+            let req = 0, acum = 0, totalL = 0;
+            let iMax = Infinity;       // teto imposto por PVs existentes em qualquer ponto da cadeia
+            let anchorHits = 0;
             for (const e of chain) {
               if (!e.compr || e.compr <= 0) continue;
               acum += e.compr;
+              totalL += e.compr;
               if (e.terrJus != null) {
                 // h_jus >= 1.10 → cf_jus <= terr_jus - 1.10
                 // cf_jus = cfHead - i * acum → i >= (cfHead - terr_jus + 1.10) / acum
                 const r = (cfHead - e.terrJus + H_MIN_LOC) / acum;
                 if (r > req) req = r;
               }
+              // Âncora: QUALQUER PV existente ao longo da cadeia (meio ou tail)
+              // cf_no_PV = cfHead - i*acum >= cfExist → i <= (cfHead - cfExist)/acum
+              const jusPv = e.jus;
+              if (jusPv && _gisPvsExist[jusPv]) {
+                const cfExist = _gisPvsExist[jusPv].cf;
+                const iMaxHere = (cfHead - cfExist) / acum;
+                if (iMaxHere < iMax) iMax = iMaxHere;
+                anchorHits++;
+              }
             }
-            // Tenta manter declividade original da OSE se já é boa
+            // Fallback: se tailPv veio como parâmetro e não foi detectado no loop (edge sem compr)
+            if (tailPv && _gisPvsExist[tailPv] && totalL > 0 && anchorHits === 0) {
+              iMax = (cfHead - _gisPvsExist[tailPv].cf) / totalL;
+            }
+            // Tenta manter declividade original da OSE se já é boa e respeita o teto
             if (chain.length > 0) {
               const first = chain[0], last = chain[chain.length-1];
-              if (first.projMontOrig != null && last.projJusOrig != null) {
-                let totalL = 0;
-                for (const e of chain) if (e.compr && e.compr > 0) totalL += e.compr;
-                if (totalL > 0) {
-                  const iOrig = (first.projMontOrig - last.projJusOrig) / totalL;
-                  if (iOrig >= I_MIN_NORM - 1e-5 && iOrig >= req - 1e-5) return iOrig;
+              if (first.projMontOrig != null && last.projJusOrig != null && totalL > 0) {
+                const iOrig = (first.projMontOrig - last.projJusOrig) / totalL;
+                if (iOrig >= I_MIN_NORM - 1e-5 && iOrig >= req - 1e-5 && iOrig <= iMax + 1e-5) return iOrig;
+              }
+            }
+            let iFinal = Math.max(I_MIN_NORM, req);
+            if (iFinal > iMax) iFinal = Math.max(0, iMax);  // capa em iMax; warning registrado externamente
+            return iFinal;
+          };
+
+          // ─── Backward pass: CF mínima exigida em cada PV pra não afogar PVs existentes a jusante ───
+          // Para cada PV existente: cf_requerida >= cfExist. Propaga upstream via i_min=1%:
+          //   cfSaida[head_da_chain] >= cf_no_PV_downstream + 0.01 * L_do_head_ate_o_PV
+          const minCfAtPv = {};
+          for (const [pv, info] of Object.entries(_gisPvsExist)) {
+            minCfAtPv[pv] = info.cf;
+          }
+          // Propaga: por OSE, se algum PV do chain (meio ou tail) tem requisito, o head precisa atender
+          let propChanged = true, propGuard = 0;
+          while (propChanged && propGuard++ < 200) {
+            propChanged = false;
+            for (const [ose1a, info] of Object.entries(oseInfo)) {
+              const chain = info.chain;
+              const head = info.head;
+              let acum = 0;
+              let reqHead = -Infinity;
+              for (const e of chain) {
+                if (!e.compr || e.compr <= 0) continue;
+                acum += e.compr;
+                const jus = e.jus;
+                if (jus && minCfAtPv[jus] != null) {
+                  // cf_jus = cfHead - i*acum >= minCfAtPv[jus] → cfHead >= minCfAtPv[jus] + i*acum
+                  // Usa i_min = 1% como piso (i real pode ser maior por h_min, mas então cfHead precisa ainda mais)
+                  const r = minCfAtPv[jus] + 0.01 * acum;
+                  if (r > reqHead) reqHead = r;
+                }
+              }
+              if (reqHead > -Infinity) {
+                const prev = minCfAtPv[head];
+                if (prev == null || reqHead > prev + 1e-6) {
+                  minCfAtPv[head] = Math.max(prev != null ? prev : -Infinity, reqHead);
+                  propChanged = true;
                 }
               }
             }
-            return Math.max(I_MIN_NORM, req);
-          };
+          }
 
           // Inicializa cabeceiras (PVs sem osesIn)
           const cabPvs = [...allPvs].filter(p => !osesIn[p] || !osesIn[p].length);
           for (const pv of cabPvs) {
+            // PV existente como cabeceira → CF travada
+            if (_gisPvsExist[pv]) {
+              cfSaida[pv] = { cf: _gisPvsExist[pv].cf };
+              continue;
+            }
             // CF saída = projMontOrig do primeiro trecho saindo (com h_min)
+            let initCf = null;
             const out = osesOut[pv] || [];
             for (const ose of out) {
               const first = oseInfo[ose].chain[0];
               if (first && first.projMontOrig != null) {
-                cfSaida[pv] = { cf: enforceHMin(pv, first.projMontOrig) };
+                initCf = enforceHMin(pv, first.projMontOrig);
                 break;
               }
             }
-            if (cfSaida[pv] == null) cfSaida[pv] = { cf: enforceHMin(pv, ctByPv[pv] != null ? ctByPv[pv] - H_MIN_LOC : 0) };
+            if (initCf == null) initCf = enforceHMin(pv, ctByPv[pv] != null ? ctByPv[pv] - H_MIN_LOC : 0);
+            // Eleva pra atender exigência downstream (PV existente em algum ponto)
+            if (minCfAtPv[pv] != null && initCf < minCfAtPv[pv]) initCf = minCfAtPv[pv];
+            cfSaida[pv] = { cf: initCf };
           }
 
           // Processo: queue = PVs prontos
@@ -9545,7 +9898,8 @@ body {
             // Processa cada OSE que SAI deste PV
             for (const ose1a of (osesOut[pv] || [])) {
               const chain = oseInfo[ose1a].chain;
-              const iOse = computeIOse(chain, cfOut);
+              const tailPv = oseInfo[ose1a].tail;
+              const iOse = computeIOse(chain, cfOut, tailPv);
               // Aplica linear
               let acum = 0, prevCf = cfOut;
               for (const e of chain) {
@@ -9568,17 +9922,30 @@ body {
               if (chain[chain.length-1].projJusFinal != null) {
                 (chegadasByPv[tail] = chegadasByPv[tail]||[]).push(chain[chain.length-1].projJusFinal);
               }
+              const tailExist = _gisPvsExist[tail];
               const r2 = remOseIn[tail];
               if (r2) {
                 r2.delete(ose1a);
                 if (r2.size === 0) {
                   // Tail pronto: cf_saída = min(chegadas) SEMPRE (não afoga PV)
+                  // Se PV existente: CF é travada — chegadas acima viram degrau/TQ externo; abaixo = warning
                   const chegadas = chegadasByPv[tail] || [];
-                  if (chegadas.length) {
+                  if (tailExist) {
+                    const cfFix = tailExist.cf;
+                    cfSaida[tail] = { cf: cfFix };
+                    for (const c of chegadas) {
+                      const diff = c - cfFix;
+                      if (diff > 0.001) { if (diff > 0.50) tqs++; else degraus++; }
+                      else if (diff < -0.001) { suspeitas++; }  // chegou abaixo da CF existente
+                    }
+                    if (chegadas.length > 1) harmonized++;
+                  } else if (chegadas.length) {
                     let mn = chegadas[0], mx = chegadas[0];
                     for (const c of chegadas) { if (c < mn) mn = c; if (c > mx) mx = c; }
-                    const cfWithH = enforceHMin(tail, mn);  // sempre o mínimo
+                    let cfWithH = enforceHMin(tail, mn);  // sempre o mínimo
                     if (cfWithH < mn) hMinFix++;
+                    // Exigência de downstream: não pode afundar abaixo do necessário pra alcançar PV existente
+                    if (minCfAtPv[tail] != null && cfWithH < minCfAtPv[tail]) cfWithH = minCfAtPv[tail];
                     cfSaida[tail] = { cf: cfWithH };
                     if (chegadas.length > 1) {
                       harmonized++;
@@ -9590,13 +9957,19 @@ body {
                       }
                     }
                   } else {
-                    cfSaida[tail] = { cf: enforceHMin(tail, cfOut) };
+                    let cf = enforceHMin(tail, cfOut);
+                    if (minCfAtPv[tail] != null && cf < minCfAtPv[tail]) cf = minCfAtPv[tail];
+                    cfSaida[tail] = { cf };
                   }
                   queue.push(tail);
                 }
               } else {
                 // Tail não tem OSEs entrando além desta — só ela
-                cfSaida[tail] = cfSaida[tail] || { cf: enforceHMin(tail, chain[chain.length-1].projJusFinal != null ? chain[chain.length-1].projJusFinal : cfOut) };
+                if (tailExist) {
+                  cfSaida[tail] = { cf: tailExist.cf };
+                } else {
+                  cfSaida[tail] = cfSaida[tail] || { cf: enforceHMin(tail, chain[chain.length-1].projJusFinal != null ? chain[chain.length-1].projJusFinal : cfOut) };
+                }
                 queue.push(tail);
               }
               osesProcessed++;
@@ -9772,43 +10145,99 @@ body {
       if (!gisData) return;
       const oses = Object.keys(gisData.oseMap || {}).sort();
       if (!oses.length) { alert('Nenhuma OSE encontrada.'); return; }
+      document.getElementById('gis-perfil-overlay')?.remove();
+      const listHtml = oses.map((o, i) =>
+        '<label style="display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:3px;cursor:pointer;font-size:11px;font-family:\'DM Mono\',monospace" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">' +
+          '<input type="checkbox" class="gis-perfil-cb" value="' + esc(o) + '"' + (i===0?' checked':'') + ' onchange="window.gisPerfilRender()" style="cursor:pointer">' +
+          esc(o) +
+        '</label>'
+      ).join('');
       const html = `
-        <div id="gis-perfil-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)document.getElementById('gis-perfil-overlay').remove()">
-          <div style="background:var(--surface);border-radius:10px;width:1100px;max-width:98vw;max-height:95vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)">
-            <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
-              <h3 style="margin:0;font-size:14px;color:var(--text)">Perfil da OSE</h3>
-              <select id="gis-perfil-ose" onchange="window.gisPerfilRender()" style="padding:5px 10px;font-family:inherit;font-size:12px;border:1px solid var(--border);border-radius:5px;background:var(--surface2);color:var(--text);min-width:200px">
-                <option value="">— Selecione uma OSE —</option>
-                ${oses.map(o => '<option value="' + esc(o) + '">' + esc(o) + '</option>').join('')}
+        <div id="gis-perfil-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;padding:10px" onclick="if(event.target===this)document.getElementById('gis-perfil-overlay').remove()">
+          <div style="background:var(--surface);border-radius:10px;width:98vw;height:96vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+            <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <h3 style="margin:0;font-size:14px;color:var(--text)">Perfis de OSE</h3>
+              <span style="font-size:11px;color:var(--text3)">Exagero V:</span>
+              <select id="gis-perfil-vscale" onchange="window.gisPerfilRender()" style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);font-family:inherit">
+                <option value="auto" selected>Automático (preenche)</option>
+                <option value="1">1:1 (real)</option>
+                <option value="5">1:5</option>
+                <option value="10">1:10</option>
+                <option value="20">1:20</option>
+                <option value="50">1:50</option>
               </select>
-              <span id="gis-perfil-info" style="font-size:11px;color:var(--text3)"></span>
-              <button onclick="document.getElementById('gis-perfil-overlay').remove()" style="margin-left:auto;background:none;border:none;font-size:22px;color:var(--text3);cursor:pointer;line-height:1;padding:0 4px">×</button>
+              <span style="font-size:11px;color:var(--text3)">Escala H (px/m):</span>
+              <input id="gis-perfil-hscale" type="number" value="8" min="1" max="50" step="0.5" onchange="window.gisPerfilRender()" style="width:60px;padding:4px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);font-family:inherit">
+              <span style="font-size:11px;color:var(--text3)">Altura (px):</span>
+              <input id="gis-perfil-height" type="number" value="560" min="300" max="1200" step="20" onchange="window.gisPerfilRender()" style="width:70px;padding:4px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);font-family:inherit">
+              <button onclick="window.gisPerfilSelectAll(true)" style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:inherit">Todas</button>
+              <button onclick="window.gisPerfilSelectAll(false)" style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:inherit">Nenhuma</button>
+              <button onclick="window.gisPerfilPrint()" style="padding:4px 10px;font-size:11px;border:1px solid #2563eb;border-radius:4px;background:#2563eb;color:#fff;cursor:pointer;font-family:inherit;font-weight:600">Imprimir / PDF</button>
+              <span id="gis-perfil-info" style="font-size:11px;color:var(--text3);margin-left:auto"></span>
+              <button onclick="document.getElementById('gis-perfil-overlay').remove()" style="background:none;border:none;font-size:22px;color:var(--text3);cursor:pointer;line-height:1;padding:0 4px">×</button>
             </div>
-            <div id="gis-perfil-body" style="flex:1;overflow:auto;padding:14px 20px;background:var(--surface2)">
-              <div style="text-align:center;padding:60px;color:var(--text3);font-size:13px">Selecione uma OSE acima pra ver o perfil</div>
+            <div style="flex:1;display:flex;overflow:hidden">
+              <div style="width:220px;border-right:1px solid var(--border);background:var(--surface2);display:flex;flex-direction:column">
+                <div style="padding:8px 10px;border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px">OSEs (${oses.length})</div>
+                <div style="flex:1;overflow-y:auto;padding:6px 4px">${listHtml}</div>
+              </div>
+              <div id="gis-perfil-body" style="flex:1;overflow:auto;padding:14px 18px;background:var(--surface2)"></div>
             </div>
           </div>
         </div>`;
       const wrap = document.createElement('div');
       wrap.innerHTML = html;
       document.body.appendChild(wrap.firstElementChild);
+      window.gisPerfilRender();
+    };
+
+    window.gisPerfilSelectAll = (state) => {
+      document.querySelectorAll('.gis-perfil-cb').forEach(cb => cb.checked = state);
+      window.gisPerfilRender();
+    };
+
+    window.gisPerfilPrint = () => {
+      const body = document.getElementById('gis-perfil-body');
+      if (!body) return;
+      const w = window.open('', '_blank', 'width=1200,height=800');
+      w.document.write('<html><head><title>Perfis OSE</title><style>body{margin:0;padding:20px;font-family:system-ui,sans-serif}.perfil-block{page-break-after:always;margin-bottom:20px}</style></head><body>' + body.innerHTML + '</body></html>');
+      w.document.close();
+      setTimeout(() => { w.focus(); w.print(); }, 300);
     };
 
     window.gisPerfilRender = () => {
-      const sel = document.getElementById('gis-perfil-ose');
       const body = document.getElementById('gis-perfil-body');
       const info = document.getElementById('gis-perfil-info');
-      if (!sel || !body) return;
-      const ose = sel.value;
-      if (!ose) { body.innerHTML = ''; info.textContent = ''; return; }
+      if (!body) return;
 
+      const selected = [...document.querySelectorAll('.gis-perfil-cb:checked')].map(cb => cb.value);
+      if (!selected.length) {
+        body.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text3);font-size:13px">Selecione uma ou mais OSEs na lista à esquerda</div>';
+        if (info) info.textContent = '';
+        return;
+      }
+      const vscaleRaw = (document.getElementById('gis-perfil-vscale') || {}).value || 'auto';
+      const vscale = vscaleRaw === 'auto' ? 'auto' : Number(vscaleRaw);
+      const hScalePxPerM = Number((document.getElementById('gis-perfil-hscale') || {}).value || 8);
+      const Hpx = Number((document.getElementById('gis-perfil-height') || {}).value || 560);
+
+      const blocks = [];
+      let totalPvs = 0, totalL = 0;
+      for (const ose of selected) {
+        const html = _gisBuildPerfilBlock(ose, vscale, hScalePxPerM, Hpx);
+        if (html) { blocks.push(html.block); totalPvs += html.pvs; totalL += html.L; }
+      }
+      if (info) info.textContent = selected.length + ' OSE(s) · ' + totalPvs + ' PVs · ' + totalL.toFixed(1) + ' m totais';
+      body.innerHTML = blocks.join('');
+    };
+
+    function _gisBuildPerfilBlock(ose, vscale, hScalePxPerM, Hpx) {
       const chain = _gisCollectOseChain(ose);
-      if (!chain.length) { body.innerHTML = '<div style="padding:30px;color:var(--text3);text-align:center">Sem dados pra esta OSE</div>'; return; }
+      if (!chain.length) return null;
 
       // Coleta cotas e PVs por posição (acumulado)
-      const pvs = [];  // [{id, x_acum, ct, cf, prof, isFirst, isLast}]
+      const pvs = [];
       let acum = 0;
-      // Primeiro PV (mont do primeiro trecho)
       const t0 = chain[0];
       pvs.push({ id: t0.mont, x: 0, ct: t0.terrMont, cf: t0.projMont, prof: t0.profMont });
       for (let i = 0; i < chain.length; i++) {
@@ -9816,23 +10245,37 @@ body {
         if (t.compr != null) acum += t.compr;
         pvs.push({ id: t.jus, x: acum, ct: t.terrJus, cf: t.projJus, prof: t.profJus, decl: (t.compr > 0 && t.projMont != null && t.projJus != null) ? (t.projMont - t.projJus)/t.compr : null, compr: t.compr, diam: t.diam });
       }
-      info.textContent = chain.length + ' trechos · ' + acum.toFixed(2) + ' m extensão · ' + pvs.length + ' PVs';
 
-      // Determina escala
+      // Escala
       const cts = pvs.filter(p => p.ct != null).map(p => p.ct);
       const cfs = pvs.filter(p => p.cf != null).map(p => p.cf);
-      const cotaMax = Math.max(...cts) + 0.5;
-      const cotaMin = Math.min(...cfs) - 0.5;
+      if (!cts.length || !cfs.length) return null;
+      const cotaMaxReal = Math.max(...cts);
+      const cotaMinReal = Math.min(...cfs);
+      const realRange = Math.max(0.5, cotaMaxReal - cotaMinReal);
+      const cotaMax = cotaMaxReal + realRange * 0.08;
+      const cotaMin = cotaMinReal - realRange * 0.08;
       const cotaRange = cotaMax - cotaMin;
       const xMax = acum > 0 ? acum : pvs.length;
 
-      // Dimensões SVG
-      const W = Math.max(1000, Math.min(2600, pvs.length * 70));
-      const H = 440;
-      const padL = 70, padR = 40, padT = 30, padB = 40;
+      // Dimensões SVG — largura baseada em px/metro, altura configurável
+      const W = Math.max(900, Math.min(10000, xMax * hScalePxPerM + 120));
+      const H = Hpx;
+      const padL = 80, padR = 40, padT = 30, padB = 46;
       const innerW = W - padL - padR, innerH = H - padT - padB;
+      const pxPerMH = innerW / xMax;
+      // Exagero vertical: "auto" usa toda altura disponível; valor fixo aplica relação V:H
+      let effVscale;
+      if (vscale === 'auto') {
+        effVscale = (innerH / cotaRange) / pxPerMH;  // implícito: preenche innerH
+      } else {
+        effVscale = vscale;
+      }
+      const pxPerMV = pxPerMH * effVscale;
+      const usedH = Math.min(innerH, cotaRange * pxPerMV);
+      const yOffset = (innerH - usedH) / 2;
       const sx = (x) => padL + (x / xMax) * innerW;
-      const sy = (y) => padT + (1 - (y - cotaMin) / cotaRange) * innerH;
+      const sy = (y) => padT + yOffset + (1 - (y - cotaMin) / cotaRange) * usedH;
       const isPit = (id) => /^PIT-/i.test(id || '');
 
       // Pontos das linhas (passam por PVs e PITs)
@@ -9882,7 +10325,7 @@ body {
       }
 
       const svg =
-        '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;background:linear-gradient(180deg,#f0f9ff 0%,#e0f2fe 50%,#fef3c7 100%);border-radius:8px;border:1px solid var(--border);box-shadow:inset 0 0 0 1px rgba(0,0,0,0.04)">' +
+        '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="display:block;background:linear-gradient(180deg,#f0f9ff 0%,#e0f2fe 50%,#fef3c7 100%);border-radius:8px;border:1px solid var(--border);box-shadow:inset 0 0 0 1px rgba(0,0,0,0.04)">' +
           '<defs>' +
             '<pattern id="hatchTerr" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">' +
               '<line x1="0" y1="0" x2="0" y2="6" stroke="#a16207" stroke-width="1.2" opacity="0.55"/>' +
@@ -9926,7 +10369,7 @@ body {
       }).join('');
 
       const bandset = `
-        <div style="margin-top:14px;background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto">
+        <div style="margin-top:10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto">
           <table style="border-collapse:collapse;width:100%;min-width:${W}px">
             <thead>
               <tr><th style="text-align:left;padding:6px 8px;font-size:10px;font-weight:700;color:var(--text2);background:var(--surface2);border-bottom:1px solid var(--border)">PV</th>${cols}</tr>
@@ -9940,16 +10383,26 @@ body {
               <tr><td style="text-align:left;padding:4px 8px;font-size:10px;font-weight:600;color:var(--text2);background:var(--surface2)">i (%)</td>${rowDecl}</tr>
             </tbody>
           </table>
-        </div>
-        <div style="margin-top:8px;font-size:10px;color:var(--text3);display:flex;gap:14px;flex-wrap:wrap">
-          <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#92400e;display:inline-block"></span> Terreno</span>
-          <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#2563eb;display:inline-block"></span> Geratriz inferior</span>
-          <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:0;border-top:2px dashed #2563eb;display:inline-block"></span> Geratriz superior</span>
-          <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:14px;background:#0f172a;display:inline-block"></span> PV</span>
         </div>`;
 
-      body.innerHTML = svg + bandset;
-    };
+      const vscaleLabel = vscale === 'auto' ? ('V≈1:' + effVscale.toFixed(1) + ' (auto)') : ('V=1:' + vscale);
+      const header = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding-bottom:6px;border-bottom:1.5px solid var(--border)">' +
+        '<h4 style="margin:0;font-size:14px;color:var(--text);font-weight:800">' + esc(ose) + '</h4>' +
+        '<span style="font-size:11px;color:var(--text3);font-family:\'DM Mono\',monospace">' + chain.length + ' trechos · L=' + acum.toFixed(1) + 'm · ' + pvs.length + ' PVs · ' + vscaleLabel + '</span>' +
+        '</div>';
+      const legend = '<div style="margin-top:6px;font-size:10px;color:var(--text3);display:flex;gap:14px;flex-wrap:wrap">' +
+        '<span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#92400e;display:inline-block"></span> Terreno</span>' +
+        '<span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#2563eb;display:inline-block"></span> Geratriz inferior</span>' +
+        '<span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:0;border-top:2px dashed #2563eb;display:inline-block"></span> Geratriz superior</span>' +
+        '<span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:14px;background:#0f172a;display:inline-block"></span> PV</span></div>';
+
+      const block = '<div class="perfil-block" style="margin-bottom:28px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:8px">' +
+        header +
+        '<div style="overflow:auto;max-width:100%">' + svg + '</div>' +
+        bandset + legend +
+        '</div>';
+      return { block, pvs: pvs.length, L: acum };
+    }
 
     // ── Render summary cards ──
     function renderSummary() {
@@ -10181,12 +10634,13 @@ body {
       const fs = require('fs');
 
       const useShape = !!(gisData && gisData.useShape);
+      const polyIsSbb = !!(gisData && gisData.polyIsSbb);
       const allPolys = gisData && gisData.allPolys;
       const cols = colsOverride || COL;
 
       // Detecta override SBB na planilha (usado se normalização anterior escreveu)
       let sbbOvCol = -1;
-      if (useShape) {
+      if (useShape || polyIsSbb) {
         const refHdr = xlsx.utils.decode_range(ws['!ref']);
         for (let c = 0; c <= refHdr.e.c; c++) {
           const h = (ws[xlsx.utils.encode_cell({r:0, c})] || {}).v;
@@ -10198,8 +10652,8 @@ body {
       const oseSet = new Set();
       for (let r = 1; r <= lastMain; r++) {
         let pStr = '';
-        // 1) Override SBB na planilha (normalização anterior)
-        if (useShape && sbbOvCol >= 0) {
+        // 1) Override SBB na planilha (normalização anterior, OU coluna SBB nativa)
+        if ((useShape || polyIsSbb) && sbbOvCol >= 0) {
           const v = (ws[xlsx.utils.encode_cell({r, c: sbbOvCol})] || {}).v;
           if (v != null && String(v).trim() !== '') pStr = String(v).trim();
         }
@@ -10527,7 +10981,7 @@ body {
           const re = errByRow[fmeta.path + '|' + rowNum];
 
           let polyStr = '';
-          // 1) Override SBB (normalização anterior)
+          // 1) Override SBB (normalização anterior em modo shape)
           if (useShape && sbbOvCol >= 0) {
             const v = (ws[xlsx.utils.encode_cell({r, c: sbbOvCol})] || {}).v;
             if (v != null && String(v).trim() !== '') polyStr = String(v).trim();
@@ -10616,9 +11070,10 @@ body {
 
       // Populate map polygon filter
       const sel = document.getElementById('gis-map-poly');
-      const label = useShape ? 'SBB' : 'Polígono';
+      const sbbMode = useShape || !!gisData.polyIsSbb;
+      const label = sbbMode ? 'SBB' : 'Polígono';
       if (gisData.polygons.length) {
-        sel.innerHTML = '<option value="">Selecione um ' + (useShape ? 'SBB' : 'polígono') + '</option>' +
+        sel.innerHTML = '<option value="">Selecione um ' + (sbbMode ? 'SBB' : 'polígono') + '</option>' +
           gisData.polygons.map(p => '<option value="' + p + '">' + label + ' ' + p + '</option>').join('') +
           '<option value="__all__">Todos</option>';
       } else {
@@ -10715,6 +11170,7 @@ body {
             : sp.geom.coordinates.map(ringsToLeaflet);
           const polyLayer = L.polygon(leafletCoords, {
             color, weight: 2, opacity: 0.85, fillColor: color, fillOpacity: 0.10,
+            interactive: false,  // deixa cliques passarem pros PVs/redes embaixo
           }).addTo(_gisMapLayers.polys);
           polyLayer.bindTooltip(sp.sbb, { permanent: true, direction: 'center', className: 'sbb-label' });
           const b = polyLayer.getBounds();
@@ -10745,12 +11201,14 @@ body {
 
       // PV markers (canvas-rendered CircleMarker — very fast)
       for (const [id, p] of filteredPvs) {
-        const color = p.hasError ? '#dc2626' : p.hasWarning ? '#f59e0b' : '#16a34a';
+        const isExist = !!_gisPvsExist[id];
+        const color = isExist ? '#7c3aed' : (p.hasError ? '#dc2626' : p.hasWarning ? '#f59e0b' : '#16a34a');
         const isPit = /^PIT-/i.test(id);
-        const radius = isPit ? 3 : (/^TL/i.test(id) ? 4 : 6);
+        const radius = isExist ? 8 : (isPit ? 3 : (/^TL/i.test(id) ? 4 : 6));
         const targetLayer = isPit ? _gisMapLayers.pits : _gisMapLayers.pvs;
         const marker = L.circleMarker([p.lat, p.lon], {
-          radius, fillColor: color, color: '#fff', weight: 1, opacity: 1, fillOpacity: 0.9,
+          radius, fillColor: color, color: isExist ? '#fde047' : '#fff',
+          weight: isExist ? 2 : 1, opacity: 1, fillOpacity: 0.9,
           renderer: _gisCanvasRenderer,
         }).addTo(targetLayer);
 
@@ -10776,13 +11234,35 @@ body {
             '<br><span style="background:' + t.color + ';color:#fff;padding:1px 6px;border-radius:3px;font-weight:700;font-size:10px">' + t.label + '</span>';
         }
 
+        // Bloco "PV existente" no popup: formulário pra marcar/remover
+        const existInfo = _gisPvsExist[id];
+        const idEsc = id.replace(/'/g, "\\'");
+        const cfDefault = existInfo ? existInfo.cf : (cotas[0] ? cotas[0].cf.toFixed(3) : '');
+        const ctDefault = existInfo && existInfo.ct != null ? existInfo.ct : (p.ct != null ? p.ct.toFixed(3) : '');
+        const existBlock = existInfo
+          ? '<div style="margin-top:6px;padding:6px;background:#f5f3ff;border:1.5px solid #7c3aed;border-radius:4px">' +
+              '<div style="font-weight:700;color:#5b21b6;font-size:11px;margin-bottom:4px">★ PV Existente</div>' +
+              '<div style="font-size:10px;color:#5b21b6">CF travado: <b>' + existInfo.cf.toFixed(3) + '</b>' +
+              (existInfo.ct != null ? ' · CT: <b>' + existInfo.ct.toFixed(3) + '</b>' : '') + '</div>' +
+              '<button onclick="window.gisRemovePvExistente(\'' + idEsc + '\')" style="margin-top:4px;background:#fff;color:#991b1b;border:1px solid #fca5a5;border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer;font-family:inherit">Remover marca</button>' +
+            '</div>'
+          : '<div style="margin-top:6px;padding:6px;background:#fafafa;border:1px dashed #94a3b8;border-radius:4px">' +
+              '<div style="font-size:10px;color:#475569;margin-bottom:4px;font-weight:600">Marcar como PV existente (cota travada)</div>' +
+              '<div style="display:flex;gap:4px;margin-bottom:4px">' +
+                '<label style="font-size:10px;flex:1">CF:<input id="gis-exist-cf-' + idEsc + '" value="' + cfDefault + '" style="width:100%;padding:3px;font-size:11px;border:1px solid #cbd5e1;border-radius:3px;font-family:inherit"></label>' +
+                '<label style="font-size:10px;flex:1">CT:<input id="gis-exist-ct-' + idEsc + '" value="' + ctDefault + '" style="width:100%;padding:3px;font-size:11px;border:1px solid #cbd5e1;border-radius:3px;font-family:inherit"></label>' +
+              '</div>' +
+              '<button onclick="window.gisMarkExistFromPopup(\'' + idEsc + '\')" style="background:#7c3aed;color:#fff;border:none;border-radius:3px;padding:4px 10px;font-size:10px;cursor:pointer;font-weight:700;font-family:inherit">★ Marcar como existente</button>' +
+            '</div>';
+
         marker.bindPopup(
-          '<div style="font-family:\'DM Mono\',monospace;font-size:11px;line-height:1.6;min-width:160px">' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:11px;line-height:1.6;min-width:200px">' +
           '<div style="font-size:13px;font-weight:800;border-bottom:2px solid ' + color + ';padding-bottom:3px;margin-bottom:3px">' + esc(id) + ' <span style="color:' + color + ';font-size:9px">[' + status + ']</span></div>' +
           '<span style="color:#64748b">OSEs:</span> ' + [...p.oses].join(', ') + '<br>' +
           popupCotas +
           (p.diam ? '<br><span style="color:#64748b">DN:</span>' + p.diam + 'mm' : '') +
-          '</div>', { maxWidth: 320 }
+          existBlock +
+          '</div>', { maxWidth: 360 }
         );
 
         // Label: pula PIT- pra deixar leve
