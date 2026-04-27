@@ -1,0 +1,24 @@
+{
+  "name": "Nexus — A2Z Projetos",
+  "short_name": "Nexus",
+  "description": "Gestão de projetos de saneamento — versão mobile",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#060d1b",
+  "theme_color": "#0a1224",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Dashboard", "short_name": "Dashboard", "url": "./?tab=dashboard" },
+    { "name": "Cadastrar Código", "short_name": "Novo código", "url": "./?tab=generator" },
+    { "name": "Perfil", "short_name": "Perfil", "url": "./?tab=perfil" }
+  ]
+}
