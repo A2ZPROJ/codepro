@@ -265,12 +265,21 @@
     padding-top: 60px !important;
   }
 
-  /* ────────── Topbar ────────── */
-  .topbar { padding: 8px 12px !important; gap: 8px !important; }
-  .topbar-user-email,
-  .topbar .topbar-secondary,
-  .topbar-breadcrumb,
-  .tab-bar-inner { display: none !important; }
+  /* ────────── Topbar ESCONDIDA inteira no mobile ──────────
+     A topbar do desktop (busca + Ctrl+K + sino + avatar) não faz sentido
+     no celular — ocupa espaço e tem atalhos de teclado. Estoque/Pedidos
+     já tem busca dentro da própria aba; sininho de notif é menos crítico.
+     O avatar do usuário fica acessível via sidebar drawer. */
+  html body .topbar,
+  html body .topbar-inner,
+  html body .topbar-secondary,
+  html body .topbar-breadcrumb,
+  html body .topbar-user-email,
+  html body .tab-bar-inner,
+  html body #cmdSearchBtn,
+  html body .status-bar { display: none !important; }
+  /* Garante que nada ocupa espaço no header desktop */
+  html body header, html body .app-header { display: none !important; }
 
   /* ────────── Tipografia COMPACTA pra mobile ────────── */
   html body { font-size: 13px !important; }
@@ -556,18 +565,22 @@
     padding: 12px 14px !important;
   }
 
-  /* ── Hamburger maior + safe-area ──────────────────────────── */
+  /* ── Hamburger maior + safe-area MAIOR (não cola no notch) ── */
   #mobile-hamburger {
-    top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
+    top: calc(env(safe-area-inset-top, 20px) + 8px) !important;
     left: 12px !important;
     width: 48px !important; height: 48px !important;
     border-radius: 12px !important;
+    background: var(--surface, #0f172a) !important;
+    border: 1px solid var(--border, rgba(255,255,255,.1)) !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.08) !important;
   }
-  #mobile-hamburger svg { width: 24px !important; height: 24px !important; }
+  #mobile-hamburger svg { width: 22px !important; height: 22px !important; }
 
-  /* ── Espaço pro hamburger no topo da aba ──────────────────── */
-  html body .tab-content.active > * {
-    padding-top: calc(env(safe-area-inset-top, 0px) + 70px) !important;
+  /* ── Espaço pro hamburger no topo da aba (reduzido) ───────── */
+  html body .tab-content.active > .app-body:first-child,
+  html body .tab-content.active > div:first-child {
+    padding-top: calc(env(safe-area-inset-top, 20px) + 56px) !important;
   }
   html body .tab-content.active > *:not(:first-child) {
     padding-top: 0 !important;
