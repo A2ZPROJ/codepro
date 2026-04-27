@@ -7,7 +7,7 @@
  *  - Nunca intercepta chamadas Supabase nem CDN de libs (deixa passar)
  * ============================================================ */
 
-const VERSION = 'nexus-web-v3-' + '2026-04-23-css4';
+const VERSION = 'nexus-web-v4-2026-04-27-mohmuw75';
 const SHELL_CACHE = 'nexus-shell-' + VERSION;
 const ASSET_CACHE = 'nexus-assets-' + VERSION;
 

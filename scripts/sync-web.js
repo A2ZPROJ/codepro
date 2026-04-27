@@ -41,8 +41,10 @@ fs.writeFileSync(WEB, newWebContent, 'utf8');
 // 4. Bump SW version
 const swContent = fs.readFileSync(SW, 'utf8');
 const today = new Date().toISOString().slice(0,10);
-const ver = 'nexus-web-v3-' + today + '-' + Date.now().toString(36);
-const newSw = swContent.replace(/const VERSION = ['"][^'"]+['"];/, `const VERSION = '${ver}';`);
+const ver = 'nexus-web-v4-' + today + '-' + Date.now().toString(36);
+// Regex robusto: pega a linha INTEIRA "const VERSION = ...;" mesmo se tiver
+// concatenações com + ou ternários no meio.
+const newSw = swContent.replace(/^const VERSION = .+;$/m, `const VERSION = '${ver}';`);
 fs.writeFileSync(SW, newSw, 'utf8');
 
 const oldLines = webContent.split('\n').length;
