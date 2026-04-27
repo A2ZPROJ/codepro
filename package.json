@@ -1,15 +1,15 @@
 {
   "name": "codepro",
-  "version": "2.10.13",
+  "version": "2.29.2",
   "description": "Nexus — Gestão de Projetos A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "precompile": "electron scripts/compile-bytecode.js",
+    "precompile": "node scripts/compile-obfuscate.js",
     "postrestore": "node scripts/restore-source.js",
-    "build": "npm run precompile && node -e \"setTimeout(()=>process.exit(),60000)\" && electron-builder --win && npm run postrestore",
-    "build:publish": "npm run precompile && node -e \"setTimeout(()=>process.exit(),60000)\" && electron-builder --win --publish always && npm run postrestore"
+    "build": "npm run precompile && electron-builder --win && npm run postrestore",
+    "build:publish": "npm run precompile && electron-builder --win --publish always && npm run postrestore"
   },
   "build": {
     "appId": "com.a2zprojetos.codepro",
@@ -26,7 +26,9 @@
     "files": [
       "src/**/*",
       "assets/**/*",
-      "package.json"
+      "package.json",
+      "!**/*.src",
+      "!**/*.jsc"
     ],
     "win": {
       "target": "nsis",
@@ -45,7 +47,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Nexus",
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
     },
     "publish": {
       "provider": "github",

@@ -12210,6 +12210,14 @@ body.presenting #presentingBadge { display: flex; }
           <button onclick="window.estoqueScanQR()" title="Ler QR code com a câmera" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:9px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">📷 Ler QR</button>
           <button onclick="window.estoqueEtiquetas()" title="Imprimir etiquetas com QR" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:9px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">🏷️ Etiquetas</button>
           <button onclick="window.estoqueAddItem()" style="background:var(--accent);color:white;border:none;border-radius:6px;padding:9px 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">+ Adicionar item</button>
+          <div style="display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-left:auto" title="Modo de visualização">
+            <button id="estoqueViewCards" onclick="window.estoqueSetViewMode('cards')" title="Cards com foto" style="background:var(--surface2);color:var(--text);border:none;padding:9px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            </button>
+            <button id="estoqueViewList" onclick="window.estoqueSetViewMode('list')" title="Lista compacta (sem foto)" style="background:var(--surface2);color:var(--text);border:none;padding:9px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            </button>
+          </div>
         </div>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
@@ -13968,7 +13976,104 @@ body.presenting #presentingBadge { display: flex; }
         return;
       }
 
-      grid.innerHTML = items.map(it => window.estoqueRenderCard(it)).join('');
+      // Modo de visualização: 'cards' (com foto) ou 'list' (compacto)
+      const viewMode = localStorage.getItem('estoqueViewMode') || (window.matchMedia('(max-width:768px)').matches ? 'list' : 'cards');
+      if (viewMode === 'list') {
+        grid.style.gridTemplateColumns = '1fr';
+        grid.style.gap = '6px';
+        grid.innerHTML = items.map(it => window.estoqueRenderListItem(it)).join('');
+      } else {
+        grid.style.gridTemplateColumns = 'repeat(auto-fill,minmax(280px,1fr))';
+        grid.style.gap = '14px';
+        grid.innerHTML = items.map(it => window.estoqueRenderCard(it)).join('');
+      }
+      // Atualiza visual dos botões de toggle
+      const btnCards = document.getElementById('estoqueViewCards');
+      const btnList = document.getElementById('estoqueViewList');
+      if (btnCards && btnList) {
+        const sel = 'background:var(--accent);color:white';
+        const unsel = 'background:var(--surface2);color:var(--text)';
+        btnCards.style.cssText = btnCards.style.cssText.replace(/background:[^;]+;color:[^;]+/, '') + ';' + (viewMode === 'cards' ? sel : unsel);
+        btnList.style.cssText = btnList.style.cssText.replace(/background:[^;]+;color:[^;]+/, '') + ';' + (viewMode === 'list' ? sel : unsel);
+      }
+    };
+
+    window.estoqueSetViewMode = function(mode) {
+      localStorage.setItem('estoqueViewMode', mode);
+      window.estoqueRender();
+    };
+
+    // Modo lista: linha horizontal compacta com mini-foto
+    window.estoqueRenderListItem = function(it) {
+      const qtd = Number(it.quantidade) || 0;
+      const min = it.estoque_minimo != null ? Number(it.estoque_minimo) : null;
+      let qcolor = 'var(--text)';
+      let badge = '';
+      if (qtd <= 0) { qcolor = '#dc2626'; badge = '<span style="background:#FEE2E2;color:#7F1D1D;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700">SEM</span>'; }
+      else if (min != null && qtd <= min) { qcolor = '#f59e0b'; badge = '<span style="background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700">BAIXO</span>'; }
+
+      // Vencimento
+      let vencBadge = '';
+      if (it.vencimento) {
+        const venc = new Date(it.vencimento + 'T00:00:00');
+        const today = new Date(); today.setHours(0,0,0,0);
+        const dias = Math.ceil((venc - today) / 86400000);
+        const aviso = it.vencimento_aviso_dias != null ? Number(it.vencimento_aviso_dias) : 30;
+        if (dias < 0) vencBadge = `<span style="background:#FEE2E2;color:#7F1D1D;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700">VENCIDO</span>`;
+        else if (dias <= aviso) vencBadge = `<span style="background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700">VENCE ${dias}d</span>`;
+      }
+
+      // Em campo
+      const emCampoIt = _estoqueEmUso.filter(u => u.item_id === it.id && !u.devolvido_em);
+      const emCampoQty = emCampoIt.reduce((a,u) => a + Number(u.qty||0), 0);
+      const emCampoBadge = emCampoQty > 0
+        ? `<span onclick="event.stopPropagation();window.estoqueEmCampo('${esc(it.id)}')" style="background:#FED7AA;color:#9A3412;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700;cursor:pointer">🚧 ${emCampoQty}</span>`
+        : '';
+
+      // Setor
+      const setor = it.setor_id ? _estoqueSetores.find(s => s.id === it.setor_id) : null;
+      const setorBadge = setor
+        ? `<span style="background:${esc(setor.cor||'#475569')}25;color:${esc(setor.cor||'#475569')};padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700;letter-spacing:.3px">${esc(setor.prefixo)}</span>`
+        : '';
+
+      // Responsável
+      const respn = it.responsavel_id ? _estoqueResponsaveis.find(r => r.id === it.responsavel_id) : null;
+      const respLabel = respn ? respn.nome.split(' ')[0] : '';
+
+      // Sub-itens
+      const subsLabel = it._subs_count > 0 ? `<span style="font-size:10px;color:var(--text3)">+${it._subs_count} comp.</span>` : '';
+
+      // Foto miniatura ou placeholder
+      const thumb = it.foto_url
+        ? `<img src="${esc(it.foto_url)}" style="width:42px;height:42px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--surface2);cursor:zoom-in" onclick="event.stopPropagation();window.estoqueGaleriaView('${esc(it.id)}')"/>`
+        : `<div style="width:42px;height:42px;border-radius:8px;background:var(--surface2);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:9px">—</div>`;
+
+      return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:12px;min-height:64px">
+        ${thumb}
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="font-family:'DM Mono',monospace;font-size:11px;font-weight:800;color:var(--accent);background:var(--surface2);padding:1px 6px;border-radius:4px;letter-spacing:.3px">${esc(it.codigo||it.sku||'—')}</span>
+            ${setorBadge}
+            ${badge}
+            ${vencBadge}
+            ${emCampoBadge}
+          </div>
+          <div style="font-size:13px;font-weight:600;line-height:1.25;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(it.nome)}</div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:10px;color:var(--text3)">
+            ${respLabel ? '<span style="font-weight:600;color:var(--text2)">👤 '+esc(respLabel)+'</span>' : '<span>📦 estoque</span>'}
+            ${subsLabel}
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0">
+          <div style="font-size:18px;font-weight:800;color:${qcolor};font-family:'DM Mono',monospace">${qtd}</div>
+          <div style="font-size:9px;color:var(--text3);text-transform:uppercase">${esc(it.unidade||'un')}${min!=null?' · '+min+' min':''}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+          <button class="action-btn" onclick="window.estoqueMov('${esc(it.id)}','retirada')" style="background:#FEE2E2;color:#7F1D1D;font-weight:600;font-size:11px;padding:6px 10px;min-height:34px">−</button>
+          <button class="action-btn" onclick="window.estoqueMov('${esc(it.id)}','reposicao')" style="background:#D1FAE5;color:#065F46;font-weight:600;font-size:11px;padding:6px 10px;min-height:34px">+</button>
+        </div>
+        <button class="action-btn" onclick="window.estoqueEdit('${esc(it.id)}')" style="background:var(--surface2);color:var(--text);font-weight:600;font-size:11px;padding:6px 10px;min-height:34px;flex-shrink:0">⋯</button>
+      </div>`;
     };
 
     window.estoqueRenderCard = function(it) {
