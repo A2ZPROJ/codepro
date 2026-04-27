@@ -432,9 +432,11 @@
     align-items: stretch !important;
   }
 
-  /* Mapas / canvas — altura menor mas utilizável */
-  #map, .leaflet-container, .map-container,
-  .mapWrap, [id*="map"] {
+  /* Mapas / canvas — altura menor mas utilizável.
+     CUIDADO: [id*="map"] pega "ose-mapa-path" (id do input!). Restringe
+     a containers de mapa de fato (div), excluindo inputs/textarea/etc. */
+  #map, .leaflet-container, .map-container, .mapWrap,
+  div[id*="map"]:not(input):not(textarea):not([id*="path"]) {
     height: 55vh !important;
     min-height: 280px !important;
     width: 100% !important;
