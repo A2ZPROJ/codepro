@@ -3059,6 +3059,36 @@
 </script>
 
 <style>
+/* ── ESTOQUE/PEDIDOS: força UPPERCASE em inputs textuais ──
+   Visual via CSS + JS faz upper no value de fato (ver setupEstoqueUpper).
+   Exceções: email (não faz sentido), URL, data, hora, número.            */
+#tab-estoque input[type="text"],
+#tab-estoque input:not([type]),
+#tab-estoque textarea,
+#tab-pedidos input[type="text"],
+#tab-pedidos input:not([type]),
+#tab-pedidos textarea,
+div[data-estq-modal] input[type="text"],
+div[data-estq-modal] input:not([type]),
+div[data-estq-modal] textarea,
+div[data-pedido-modal] input[type="text"],
+div[data-pedido-modal] input:not([type]),
+div[data-pedido-modal] textarea {
+  text-transform: uppercase !important;
+}
+/* Email/URL/senha NÃO viram upper mesmo dentro do estoque */
+#tab-estoque input[type="email"],
+#tab-estoque input[type="url"],
+#tab-estoque input[type="password"],
+#tab-pedidos input[type="email"],
+#tab-pedidos input[type="url"],
+div[data-estq-modal] input[type="email"],
+div[data-estq-modal] input[type="url"],
+div[data-pedido-modal] input[type="email"],
+div[data-pedido-modal] input[type="url"] {
+  text-transform: none !important;
+}
+
 /* ── THEME VARIABLES ── */
 :root {
   /* Paleta AZUL aprimorada (mantém identidade mas mais sofisticada)
@@ -13721,6 +13751,31 @@ body.presenting #presentingBadge { display: flex; }
     let _estoqueMissingV5   = false;
     let _estoqueMissingV6   = false;
     let _estoqueMissingV8   = false;
+
+    // ── Upper-case automático em todo input do Estoque/Pedidos ─────────
+    // CSS já faz visual via text-transform; aqui forçamos o VALUE real
+    // pra que o que vai pro DB também esteja em maiúscula. Preserva caret.
+    if (!window._estoqueUpperHooked) {
+      window._estoqueUpperHooked = true;
+      const ESTQ_UPPER_SEL = '#tab-estoque, #tab-pedidos, div[data-estq-modal], div[data-pedido-modal]';
+      const ESTQ_UPPER_SKIP = new Set(['email','url','password','number','date','time','datetime-local','file','color','range']);
+      document.addEventListener('input', (ev) => {
+        const t = ev.target;
+        if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA')) return;
+        if (t.type && ESTQ_UPPER_SKIP.has(t.type)) return;
+        if (!t.closest(ESTQ_UPPER_SEL)) return;
+        // Skip se data-no-upper="true" (escape)
+        if (t.dataset.noUpper === 'true') return;
+        const val = t.value || '';
+        const up = val.toUpperCase();
+        if (val !== up) {
+          // Preserva caret (senão pula pro fim a cada tecla com acento)
+          const start = t.selectionStart, end = t.selectionEnd;
+          t.value = up;
+          try { t.setSelectionRange(start, end); } catch(e) {}
+        }
+      }, true);  // capture pra rodar antes dos listeners do app
+    }
 
     window.estoqueInit = async function() {
       const search = document.getElementById('estoqueSearch');
