@@ -487,18 +487,271 @@
 /* ============================================================
  * TELAS BEM PEQUENAS (<= 480px) — ajustes finos
  * ============================================================ */
+/* @480 sem reduzir botões — o overhaul abaixo cuida do espaçamento mobile-first */
 @media (max-width: 480px) {
-  h1, .page-title { font-size: 18px !important; }
-  button, .btn { font-size: 13px !important; padding: 8px 12px !important; }
   .topbar { padding: 6px 8px !important; }
   .modal-title, [id$="-modal-title"] { font-size: 14px !important; }
-  table td, table th { font-size: 11px !important; padding: 5px 6px !important; }
+  table td, table th { font-size: 12px !important; padding: 7px 8px !important; }
+}
 
-  /* Inputs ligeiramente mais compactos mas ainda acessíveis */
-  input, select, textarea { min-height: 40px; padding: 8px 10px !important; }
+/* ════════════════════════════════════════════════════════════════════
+ * MOBILE OVERHAUL — iPhone 14 Pro Max em diante
+ * Foco: tap target 48px, fontes legíveis, modais bottom-sheet,
+ * safe-area pra notch/home indicator, espaçamento generoso.
+ * ═════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
 
-  /* Espaçamento menor */
-  .app-body, main.app-body { padding: 10px 8px 80px !important; }
+  /* Safe-area pro notch e home indicator (iPhone X+) */
+  html, body {
+    padding-top: env(safe-area-inset-top, 0) !important;
+    padding-bottom: env(safe-area-inset-bottom, 0) !important;
+  }
+  /* Quando body já tem padding=0 com !important do block anterior,
+     reativa safe-area via container interno */
+  html body {
+    --sa-top: env(safe-area-inset-top, 0px);
+    --sa-bot: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* ── Tipografia legível ───────────────────────────────────── */
+  html body { font-size: 15px !important; line-height: 1.5 !important; }
+  html body button, html body .btn, html body .action-btn,
+  html body input[type="button"], html body input[type="submit"] {
+    font-size: 14px !important;
+  }
+
+  /* ── Tap targets 48px (Apple HIG) ─────────────────────────── */
+  html body button, html body .btn, html body .action-btn,
+  html body input[type="button"], html body input[type="submit"] {
+    min-height: 48px !important;
+    padding: 12px 18px !important;
+    border-radius: 10px !important;
+  }
+  /* Botões pequenos dentro de tabelas ainda precisam ser tocáveis */
+  html body table button, html body table .action-btn,
+  html body td button, html body td .action-btn {
+    min-height: 40px !important;
+    padding: 8px 12px !important;
+  }
+  /* Ícone-só (×, fechar) pode ser quadrado menor mas ainda 44px */
+  html body button[id*="lose"], html body button[class*="close"],
+  html body button[id*="ancel"]:not([id*="onfirm"]) {
+    min-width: 44px;
+  }
+
+  /* ── Inputs maiores (16px font evita zoom no iOS) ─────────── */
+  html body input[type="text"], html body input[type="email"],
+  html body input[type="password"], html body input[type="search"],
+  html body input[type="number"], html body input[type="date"],
+  html body input[type="tel"], html body input:not([type]),
+  html body textarea, html body select {
+    font-size: 16px !important;
+    min-height: 48px !important;
+    padding: 12px 14px !important;
+    border-radius: 10px !important;
+    line-height: 1.4 !important;
+  }
+  html body textarea {
+    min-height: 80px !important;
+    padding: 12px 14px !important;
+  }
+
+  /* ── Hamburger maior + safe-area ──────────────────────────── */
+  #mobile-hamburger {
+    top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
+    left: 12px !important;
+    width: 48px !important; height: 48px !important;
+    border-radius: 12px !important;
+  }
+  #mobile-hamburger svg { width: 24px !important; height: 24px !important; }
+
+  /* ── Espaço pro hamburger no topo da aba ──────────────────── */
+  html body .tab-content.active > * {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 70px) !important;
+  }
+  html body .tab-content.active > *:not(:first-child) {
+    padding-top: 0 !important;
+  }
+
+  /* ── Page hero (cabeçalho da aba) com mais ar ─────────────── */
+  html body .page-hero, html body .page-header {
+    padding: 16px 14px !important;
+    margin-bottom: 12px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  html body .page-hero .page-title, html body .page-title {
+    font-size: 22px !important;
+    font-weight: 800 !important;
+    letter-spacing: -.02em !important;
+  }
+  html body .page-hero .page-subtitle, html body .page-subtitle {
+    font-size: 13px !important;
+    line-height: 1.45 !important;
+  }
+  /* Page-actions (toolbar de botões) vira scroll horizontal de pills */
+  html body .page-actions {
+    width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    padding: 4px 0 !important;
+    gap: 8px !important;
+  }
+  html body .page-actions::-webkit-scrollbar { display: none !important; }
+  html body .page-actions > button {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  /* ── Cards mais espaçosos e tap-friendly ──────────────────── */
+  html body .card, html body [class*="-card"] {
+    padding: 16px !important;
+    margin-bottom: 12px !important;
+    border-radius: 12px !important;
+  }
+  html body [class*="-card"] {
+    min-height: 56px;
+  }
+
+  /* ── Listas de itens (linhas verticais) ───────────────────── */
+  html body table td, html body table th {
+    padding: 12px 10px !important;
+  }
+  html body table td button { margin: 2px !important; }
+
+  /* ── MODAIS estilo bottom sheet ───────────────────────────── */
+  /* Overlay vai do topo ao fundo, modal cola no fundo, full-width,
+     com handle visual no topo. Animação slide-up. */
+  html body div[data-estq-modal],
+  html body div[data-pedido-modal],
+  html body div[style*="position:fixed"][style*="z-index:99999"]:not(#mobile-hamburger):not(#pwa-install-banner) {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  html body div[data-estq-modal] > div,
+  html body div[data-pedido-modal] > div,
+  html body div[style*="position:fixed"][style*="z-index:99999"] > div:not(.notif-panel):not(.theme-menu) {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: calc(100vh - env(safe-area-inset-top, 20px) - 8px) !important;
+    border-radius: 20px 20px 0 0 !important;
+    margin: 0 !important;
+    animation: sheet-up .25s cubic-bezier(.4,0,.2,1);
+    padding-bottom: env(safe-area-inset-bottom, 0) !important;
+  }
+  /* Handle visual no topo do bottom sheet */
+  html body div[data-estq-modal] > div::before,
+  html body div[data-pedido-modal] > div::before {
+    content: '';
+    display: block;
+    width: 36px; height: 4px;
+    background: rgba(150,150,150,.4);
+    border-radius: 2px;
+    margin: 8px auto 0;
+  }
+  @keyframes sheet-up {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+
+  /* Botões de ação do modal: sticky no fundo (zona do polegar) */
+  html body div[data-estq-modal] > div > div:last-child[style*="border-top"],
+  html body div[data-pedido-modal] > div > div:last-child[style*="border-top"] {
+    position: sticky !important;
+    bottom: 0 !important;
+    background: var(--surface) !important;
+    border-top: 1px solid var(--border) !important;
+    padding: 14px 16px !important;
+    margin: 0 !important;
+    z-index: 5;
+  }
+  html body div[data-estq-modal] > div > div:last-child[style*="border-top"] button,
+  html body div[data-pedido-modal] > div > div:last-child[style*="border-top"] button {
+    flex: 1 1 0 !important;
+    min-height: 50px !important;
+    font-size: 15px !important;
+    font-weight: 700 !important;
+  }
+
+  /* ── Sidebar drawer com largura maior ─────────────────────── */
+  html body .sidebar, html body aside.sidebar, html body #sidebar,
+  html body .sb-root, html body aside[role="navigation"] {
+    width: 86vw !important;
+    max-width: 340px !important;
+    padding-top: env(safe-area-inset-top, 0) !important;
+    padding-bottom: env(safe-area-inset-bottom, 0) !important;
+  }
+  html body .sb-item {
+    min-height: 52px !important;
+    padding: 12px 16px !important;
+    font-size: 15px !important;
+    gap: 14px !important;
+  }
+  html body .sb-icon { width: 22px !important; height: 22px !important; }
+
+  /* ── Topbar (se aparecer) com altura maior ────────────────── */
+  html body .topbar {
+    min-height: calc(env(safe-area-inset-top, 0px) + 56px) !important;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
+  }
+
+  /* ── Stats / KPI cards visíveis ───────────────────────────── */
+  html body #estoqueStats, html body #pedidosStats {
+    gap: 10px !important;
+  }
+  html body #estoqueStats > div, html body #pedidosStats > div {
+    padding: 14px 16px !important;
+    border-radius: 12px !important;
+    min-width: 140px !important;
+  }
+  html body #estoqueStats > div span:last-child,
+  html body #pedidosStats > div span:last-child {
+    font-size: 22px !important;
+  }
+
+  /* ── Filtros (selects + busca) full-width empilhados ──────── */
+  html body #estoqueFiltroEmpresa, html body #estoqueFiltroLocal,
+  html body #estoqueFiltroEstado, html body #estoqueFiltroVenc,
+  html body #estoqueSearch, html body #pedidosSearch,
+  html body #pedidosFiltroStatus, html body #pedidosFiltroFornec {
+    width: 100% !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* ── Container do grid principal ──────────────────────────── */
+  html body #estoqueGrid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* ── Toast/notifications maiores ──────────────────────────── */
+  html body .toast, html body [class*="toast"] {
+    font-size: 14px !important;
+    padding: 14px 18px !important;
+    border-radius: 12px !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 16px) !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+
+  /* ── Espaçamento de form-row e grids 2-col vira 1-col ─────── */
+  html body div[style*="grid-template-columns:1fr 1fr"],
+  html body div[style*="grid-template-columns: 1fr 1fr"],
+  html body div[style*="grid-template-columns:120px 1fr"],
+  html body div[style*="grid-template-columns: 120px 1fr"] {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+}
+
+/* iPhone 14 Pro Max e similares (430px) — aproveita melhor a largura */
+@media (min-width: 414px) and (max-width: 480px) {
+  html body .page-hero { padding: 18px 16px !important; }
+  html body .card, html body [class*="-card"] { padding: 18px !important; }
+  html body button, html body .btn { padding: 14px 20px !important; }
 }
 
 /* ============================================================
