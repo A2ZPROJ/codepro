@@ -433,14 +433,24 @@
   }
 
   /* Mapas / canvas — altura menor mas utilizável.
-     CUIDADO: [id*="map"] pega "ose-mapa-path" (id do input!). Restringe
-     a containers de mapa de fato (div), excluindo inputs/textarea/etc. */
-  #map, .leaflet-container, .map-container, .mapWrap,
-  div[id*="map"]:not(input):not(textarea):not([id*="path"]) {
+     CUIDADO: [id*="map"] pegava "ose-mapa-path" (id do input!).
+     Restringe a containers de mapa Leaflet/canvas reais. */
+  #map, .leaflet-container, .map-container, .mapWrap, .map-canvas,
+  div.map, canvas[id*="map"] {
     height: 55vh !important;
     min-height: 280px !important;
     width: 100% !important;
     max-width: 100% !important;
+  }
+  /* OVERRIDE explícito: inputs ose-*-path NUNCA esticam */
+  html body input.ose-file-input,
+  html body input[id^="ose-"][readonly],
+  html body input[id$="-path"] {
+    height: 48px !important;
+    min-height: 48px !important;
+    max-height: 60px !important;
+    line-height: 1.4 !important;
+    overflow: hidden !important;
   }
 
   /* FAB / botão primário flutuante */
