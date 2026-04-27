@@ -3055,7 +3055,16 @@
     // onUpdateAvailable é ignorado aqui: o splash é que oferece o botão "Atualizar agora".
   }
 
-  init();
+  // No PWA web, o web-login.js é assíncrono e seta __LICENSE__ depois.
+  // Se chamar init() agora sem __LICENSE__, mostra "Sessão inválida".
+  // Espera o evento nexus:login-ok do web-login antes de rodar init.
+  if (window.__NEXUS_WEB__ && !window.__LICENSE__) {
+    window.addEventListener('nexus:login-ok', () => init(), { once: true });
+    // Fallback: se nada aconteceu em 8s, roda mesmo assim (vai mostrar Sessão inválida ou login overlay)
+    setTimeout(() => { if (!window.__LICENSE__) init(); }, 8000);
+  } else {
+    init();
+  }
 </script>
 
 <style>
