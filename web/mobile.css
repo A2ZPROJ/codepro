@@ -23,6 +23,23 @@
     -webkit-overflow-scrolling: touch;
     touch-action: manipulation;
     min-height: 100vh;
+    /* CRÍTICO: nenhum container interno pode bloquear scroll do body */
+    height: auto !important;
+    position: static !important;
+  }
+  /* Tab content também precisa permitir scroll vertical interno */
+  html body .tab-content {
+    overflow-y: visible !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  html body .tab-content.active { display: block !important; }
+  /* Containers com 100vh/100% NÃO podem prender scroll */
+  html body [style*="height:100vh"]:not(.sidebar):not(#mobile-hamburger),
+  html body [style*="height: 100vh"]:not(.sidebar):not(#mobile-hamburger) {
+    height: auto !important;
+    min-height: 100vh !important;
   }
   /* Botões/links: liberar tap imediato, sem delay de 300ms nem double-tap-zoom */
   html body button,

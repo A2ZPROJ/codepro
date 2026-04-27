@@ -50,6 +50,58 @@
   window.__NEXUS_WEB__ = true;
   window.__NEXUS_ELECTRON__ = false;
 
+  // ---- Hamburger mobile ------------------------------------------
+  // Cria o botão hamburger e a lógica de abrir/fechar a sidebar.
+  // mobile.css tem o estilo (#mobile-hamburger + body.sidebar-open).
+  function isMobile(){ return window.matchMedia('(max-width: 768px)').matches; }
+  function setupMobileNav(){
+    if (document.getElementById('mobile-hamburger')) return;
+    if (!isMobile()) return; // só ativa em telas pequenas
+    var btn = document.createElement('button');
+    btn.id = 'mobile-hamburger';
+    btn.setAttribute('aria-label', 'Abrir menu');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>';
+    document.body.appendChild(btn);
+    btn.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      document.body.classList.toggle('sidebar-open');
+    });
+    // Click no overlay (backdrop ::before do body) ou em sb-item fecha
+    document.addEventListener('click', function(ev){
+      if (!document.body.classList.contains('sidebar-open')) return;
+      var sidebar = document.querySelector('.sidebar, aside.sidebar, #sidebar, .sb-root, aside[role="navigation"]');
+      if (!sidebar) return;
+      // Click DENTRO de um sb-item → fecha (após troca de aba)
+      if (ev.target.closest && ev.target.closest('.sb-item')) {
+        setTimeout(function(){ document.body.classList.remove('sidebar-open'); }, 50);
+        return;
+      }
+      // Click fora da sidebar e fora do botão → fecha
+      if (!sidebar.contains(ev.target) && ev.target !== btn && !btn.contains(ev.target)) {
+        document.body.classList.remove('sidebar-open');
+      }
+    });
+    // Tecla ESC fecha
+    document.addEventListener('keydown', function(ev){
+      if (ev.key === 'Escape') document.body.classList.remove('sidebar-open');
+    });
+  }
+  // Tenta criar imediatamente E após o app montar
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupMobileNav);
+  } else {
+    setupMobileNav();
+  }
+  // Re-tenta quando o app monta (sidebar pode aparecer depois)
+  window.addEventListener('nexus:login-ok', function(){ setTimeout(setupMobileNav, 200); });
+  // Reabilita ao redimensionar (rotação de tela)
+  window.addEventListener('resize', function(){
+    if (!isMobile()) {
+      var b = document.getElementById('mobile-hamburger'); if (b) b.remove();
+      document.body.classList.remove('sidebar-open');
+    } else setupMobileNav();
+  });
+
   // ---- Registra Service Worker ------------------------------------
   // SW cuida de cache offline + auto-update via versão do sw.js
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
@@ -85,13 +137,56 @@
   } catch(e) { /* alguns browsers não deixam redefinir */ }
 
   // ---- Store local (substitui ~/.codepro/config.json) --------------
+  // Persiste em localStorage E cookie. Safari iOS às vezes limpa o
+  // localStorage do PWA standalone — cookie tem mais chance de sobreviver.
   var STORE_KEY = 'nexus_web_store_v1';
+  var COOKIE_KEY = 'nexus_lic';
+
+  function setCookie(name, value, days) {
+    try {
+      var d = new Date(); d.setTime(d.getTime() + days*24*60*60*1000);
+      // SameSite=Lax pra cobrir navegação entre tabs sem perder
+      document.cookie = name + '=' + encodeURIComponent(value) + ';expires=' + d.toUTCString() + ';path=/;SameSite=Lax';
+    } catch(e) {}
+  }
+  function getCookie(name) {
+    try {
+      var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+      return m ? decodeURIComponent(m[1]) : null;
+    } catch(e) { return null; }
+  }
+  function delCookie(name) { setCookie(name, '', -1); }
+
   var webStore = {
-    _load: function(){ try { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch(e) { return {}; } },
-    _save: function(obj){ try { localStorage.setItem(STORE_KEY, JSON.stringify(obj)); } catch(e){} },
+    _load: function(){
+      try {
+        var ls = localStorage.getItem(STORE_KEY);
+        if (ls) return JSON.parse(ls);
+      } catch(e) {}
+      // Fallback: cookie
+      try {
+        var ck = getCookie(COOKIE_KEY);
+        if (ck) {
+          var data = JSON.parse(ck);
+          // Restaura no localStorage também
+          try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch(e){}
+          return data;
+        }
+      } catch(e) {}
+      return {};
+    },
+    _save: function(obj){
+      var json = JSON.stringify(obj);
+      try { localStorage.setItem(STORE_KEY, json); } catch(e){}
+      // Cookie só armazena dados leves (license + last_name); cookies têm limite ~4KB
+      try {
+        var lite = { license: obj.license, last_name: obj.last_name };
+        setCookie(COOKIE_KEY, JSON.stringify(lite), 30);  // 30 dias
+      } catch(e){}
+    },
     get: function(k){ var d = this._load(); return d[k]; },
     set: function(k,v){ var d = this._load(); d[k]=v; this._save(d); },
-    delete: function(k){ var d = this._load(); delete d[k]; this._save(d); },
+    delete: function(k){ var d = this._load(); delete d[k]; this._save(d); if (k === 'license') delCookie(COOKIE_KEY); },
   };
   window.__webStore = webStore;
 
