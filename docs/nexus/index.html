@@ -147,6 +147,8 @@
     window._currentUserData = currentUser;
     window._isMaster = currentUser.role === 'master';
     window._canCreate = ROLES[currentUser.role]?.canCreate ?? false;
+    // Restaura tema do user (se já tem preferences salvas no Supabase)
+    try { window.loadUserThemePreferences?.(); } catch {}
     openApp();
   }
 
@@ -1587,6 +1589,16 @@
     if(!users?.length){el.innerHTML='<div class="empty-msg">Nenhum usuário.</div>';return;}
     document.getElementById('adminUserCount').textContent=users.length;
     el.innerHTML=users.map(u=>renderUserRow(u)).join('');
+    // Carrega permissões de programas externos pra cada user (em paralelo, isolado por try)
+    setTimeout(() => {
+      try {
+        users.forEach(u => {
+          if (u.id !== window._currentUserData?.id) {
+            try { window.renderProgramasUsuario?.(u.id); } catch(e) { console.warn('[admin] prog row err:', e); }
+          }
+        });
+      } catch(e) { console.warn('[admin] outer prog err:', e); }
+    }, 100);
   };
 
   function renderUserRow(u) {
@@ -1633,7 +1645,13 @@
         ${!isMe?`<button class="action-btn" onclick="renewLicense('${esc(u.id)}','${esc(u.license_expires||'')}')">Renovar</button>`:''}
         ${!isMe?`<button class="action-btn danger" onclick="removeUser('${esc(u.id)}')">Excluir</button>`:''}
       </div>
-      ${tabsHtml?`<div style="width:100%;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center"><span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">Abas:</span>${tabsHtml}</div>`:''}
+      ${tabsHtml?`<div style="width:100%;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center">
+        <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">Abas:</span>
+        <button class="action-btn" onclick="window.adminToggleAllTabs('${esc(u.id)}',true)" style="font-size:10px;padding:3px 8px">✓ Todas</button>
+        <button class="action-btn" onclick="window.adminToggleAllTabs('${esc(u.id)}',false)" style="font-size:10px;padding:3px 8px">✗ Nenhuma</button>
+        ${tabsHtml}
+      </div>`:''}
+      ${!isMe?`<div id="prog-row-${esc(u.id)}" style="width:100%;margin-top:6px;padding-top:8px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">Programas externos:</span><span style="font-size:11px;color:var(--text3)">⏳ carregando...</span></div>`:''}
     </div>`;
   }
 
@@ -1743,6 +1761,127 @@
     // Se todos marcados, salvar null (sem restrição)
     const tabs=checked.length===all.length?null:checked;
     await sb.from('usuarios').update({allowed_tabs:tabs}).eq('id',id);
+  };
+
+  // ── Marcar/desmarcar TODAS as abas dum user de uma vez ─────────────
+  window.adminToggleAllTabs = async (userId, allOn) => {
+    const cbs = document.querySelectorAll(`.tab-perm-cb[data-uid="${userId}"]`);
+    cbs.forEach(cb => { cb.checked = allOn; });
+    // null = sem restrição (todas) | [] = nenhuma aba (bloqueia tudo)
+    const tabs = allOn ? null : [];
+    const { error } = await sb.from('usuarios').update({ allowed_tabs: tabs }).eq('id', userId);
+    if (error) { alert('Erro: ' + error.message); return; }
+    window.toastSuccess?.(allOn ? 'Liberou todas as abas' : 'Bloqueou todas as abas');
+  };
+
+  // ── Marcar/desmarcar TODOS os programas externos de uma vez ────────
+  window.adminToggleAllProgramas = async (userId, allOn) => {
+    if (!window.PROGRAMAS_EXTERNOS) return;
+    const userMeta = window._currentUserData;
+    try {
+      for (const p of window.PROGRAMAS_EXTERNOS) {
+        const { data: existing } = await sb.from('programas_acessos')
+          .select('id').eq('usuario_id', userId).eq('programa', p.key).maybeSingle();
+        if (existing) {
+          await sb.from('programas_acessos').update({
+            ativo: allOn, atualizado_em: new Date().toISOString()
+          }).eq('id', existing.id);
+        } else if (allOn) {
+          await sb.from('programas_acessos').insert({
+            usuario_id: userId, programa: p.key, ativo: true,
+            criado_por: userMeta?.id || null, criado_por_nome: userMeta?.nome || null,
+          });
+        }
+      }
+      window.toastSuccess?.(allOn ? 'Liberou todos os programas' : 'Bloqueou todos os programas');
+      window.renderProgramasUsuario(userId);
+    } catch (e) { alert('Erro: ' + e.message); }
+  };
+
+  // ── Programas externos (Civil 3D, futuros) ──────────────────────────
+  // Lista de programas suportados. Adicionar aqui quando criar novos plugins.
+  window.PROGRAMAS_EXTERNOS = [
+    { key: 'civil3d', label: 'Civil 3D', icon: '🏗️' },
+  ];
+
+  window.renderProgramasUsuario = async (userId) => {
+    const row = document.getElementById('prog-row-' + userId);
+    if (!row) return;
+    // Master tem acesso total automático — não precisa configurar
+    const { data: u } = await sb.from('usuarios').select('role').eq('id', userId).single();
+    if (u?.role === 'master') {
+      row.innerHTML = '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">Programas externos:</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--accent);border-radius:6px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:600">🔓 Master · acesso total automático (todos os programas, sem expiração)</span>';
+      return;
+    }
+    const { data: acessos, error } = await sb.from('programas_acessos')
+      .select('*').eq('usuario_id', userId);
+    if (error) {
+      row.innerHTML = '<span style="font-size:11px;color:#dc2626">Erro: ' + esc(error.message) + ' — rode o SQL programas_acessos</span>';
+      return;
+    }
+    const btnsAll = `<button class="action-btn" onclick="window.adminToggleAllProgramas('${esc(userId)}',true)" style="font-size:10px;padding:3px 8px">✓ Todos</button><button class="action-btn" onclick="window.adminToggleAllProgramas('${esc(userId)}',false)" style="font-size:10px;padding:3px 8px">✗ Nenhum</button>`;
+    const html = window.PROGRAMAS_EXTERNOS.map(p => {
+      const ac = (acessos||[]).find(a => a.programa === p.key);
+      const ativo = ac?.ativo === true;
+      const exp = ac?.expires_at || '';
+      const venceuClass = exp && new Date(exp) < new Date(new Date().toDateString())
+        ? 'background:#FEE2E2;color:#7F1D1D' : '';
+      return `<div style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)" data-prog-card="${p.key}">
+        <span>${p.icon}</span>
+        <span style="font-size:11px;font-weight:600;color:var(--text)">${esc(p.label)}</span>
+        <label style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--text2);cursor:pointer">
+          <input type="checkbox" ${ativo?'checked':''} onchange="window.toggleProgramaAcesso('${esc(userId)}','${p.key}',this.checked)" style="cursor:pointer">
+          <span>${ativo?'Liberado':'Bloqueado'}</span>
+        </label>
+        <span style="font-size:10px;color:var(--text3)">expira:</span>
+        <input type="date" value="${esc(exp)}" data-prog-uid="${esc(userId)}" data-prog-key="${esc(p.key)}" onchange="window.setProgramaExpiracao(this.dataset.progUid,this.dataset.progKey,this.value)" style="font-size:11px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:inherit;${venceuClass};color-scheme:dark"/>
+        ${exp?`<button data-prog-uid="${esc(userId)}" data-prog-key="${esc(p.key)}" onclick="window.setProgramaExpiracao(this.dataset.progUid,this.dataset.progKey,'')" title="Limpar data" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:2px 4px;font-size:11px">×</button>`:''}
+      </div>`;
+    }).join('');
+    row.innerHTML = '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">Programas externos:</span>' + btnsAll + html;
+  };
+
+  window.toggleProgramaAcesso = async (userId, programa, ativo) => {
+    try {
+      const { data: existing } = await sb.from('programas_acessos')
+        .select('id').eq('usuario_id', userId).eq('programa', programa).maybeSingle();
+      const userMeta = window._currentUserData;
+      if (existing) {
+        await sb.from('programas_acessos').update({
+          ativo, atualizado_em: new Date().toISOString()
+        }).eq('id', existing.id);
+      } else {
+        await sb.from('programas_acessos').insert({
+          usuario_id: userId, programa, ativo,
+          criado_por: userMeta?.id || null, criado_por_nome: userMeta?.nome || null,
+        });
+      }
+      window.toastSuccess?.(programa + ' ' + (ativo?'liberado':'bloqueado'));
+      window.renderProgramasUsuario(userId);
+    } catch (e) { alert('Erro: ' + e.message); }
+  };
+
+  window.setProgramaExpiracao = async (userId, programa, expDate) => {
+    try {
+      const { data: existing } = await sb.from('programas_acessos')
+        .select('id').eq('usuario_id', userId).eq('programa', programa).maybeSingle();
+      const userMeta = window._currentUserData;
+      const payload = {
+        expires_at: expDate || null,
+        atualizado_em: new Date().toISOString(),
+      };
+      if (existing) {
+        await sb.from('programas_acessos').update(payload).eq('id', existing.id);
+      } else {
+        await sb.from('programas_acessos').insert({
+          usuario_id: userId, programa, ativo: true, ...payload,
+          criado_por: userMeta?.id || null, criado_por_nome: userMeta?.nome || null,
+        });
+      }
+      window.toastSuccess?.('Expiração atualizada');
+      window.renderProgramasUsuario(userId);
+    } catch (e) { alert('Erro: ' + e.message); }
   };
 
   window.exportExcel=()=>{
@@ -5312,7 +5451,16 @@ body.presenting #presentingBadge { display: flex; }
   z-index: 200;
   display: none;
   animation: themeMenuIn .18s ease;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) transparent;
 }
+.theme-menu::-webkit-scrollbar { width: 8px; }
+.theme-menu::-webkit-scrollbar-track { background: transparent; }
+.theme-menu::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+.theme-menu::-webkit-scrollbar-thumb:hover { background: var(--text3); }
 .theme-menu.open { display: block; }
 @keyframes themeMenuIn {
   from { opacity: 0; transform: translateY(-4px); }
@@ -6170,6 +6318,11 @@ body.presenting #presentingBadge { display: flex; }
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11H6a2 2 0 00-2 2v7a2 2 0 002 2h12a2 2 0 002-2v-7a2 2 0 00-2-2h-3"/><polyline points="9 11 9 5 15 5 15 11"/><circle cx="9" cy="17" r="1"/><circle cx="15" cy="17" r="1"/></svg>
           <span class="sb-label">Pedidos</span>
           <span class="sb-badge" id="pedidosSbBadge" style="display:none;background:#f59e0b">0</span>
+        </button>
+        <button class="sb-item" data-label="Civil 3D" id="civil3dSbBtn" data-requires-online="1" onclick="window.openCivil3DModal&&window.openCivil3DModal()">
+          <svg class="sb-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M11.05 2 2 22h4.5l1.55-3.6h7.9L17.5 22H22L12.95 2h-1.9zm-1.4 12.3 2.35-5.6 2.35 5.6H9.65z"/></svg>
+          <span class="sb-label">Civil 3D</span>
+          <span class="sb-badge" id="civil3dSbBadge" style="display:none;background:#22c55e;color:#fff">●</span>
         </button>
         <button class="sb-item" data-tab="admin" data-label="Admin" id="adminSbBtn" data-requires-online="1" style="display:none" onclick="switchTab('admin',this);setTimeout(()=>window.loadInvites&&window.loadInvites(),300);">
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -12005,6 +12158,11 @@ body.presenting #presentingBadge { display: flex; }
           <button onclick="saveProfile()" style="width:100%;padding:10px;background:var(--gray-900);color:white;border:none;border-radius:6px;font-family:inherit;font-size:14px;font-weight:500;cursor:pointer">Salvar alterações</button>
         </div>
       </div>
+      <div id="trayPrefBox" style="display:none;background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);margin-top:12px;padding:16px 20px">
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Comportamento ao fechar</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px" id="trayPrefStatus"></div>
+        <button onclick="window.resetTrayPref()" style="padding:8px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer">Voltar a perguntar ao fechar</button>
+      </div>
       <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);margin-top:12px;overflow:hidden">
         <div style="padding:14px 20px;border-bottom:1px solid var(--border);font-size:14px;font-weight:600;color:var(--text)">Meus códigos</div>
         <div id="myCodes" style="padding:8px"><div class="empty-msg">Nenhum código ainda.</div></div>
@@ -14221,6 +14379,9 @@ body.presenting #presentingBadge { display: flex; }
       }
 
       const ov = document.createElement('div');
+      // data-estq-modal habilita o listener global de uppercase (linha ~13935):
+      // sem isso, os inputs do cadastro continuam minúsculos no DB.
+      ov.setAttribute('data-estq-modal', 'item');
       ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
       const md = document.createElement('div');
       md.style.cssText = 'background:var(--surface);color:var(--text);border-radius:12px;border:1px solid var(--border);width:1000px;max-width:96vw;max-height:92vh;display:flex;flex-direction:column;overflow:hidden';
@@ -14231,6 +14392,9 @@ body.presenting #presentingBadge { display: flex; }
         // Revoga blob URLs pendentes pra não vazar memória
         pendingFotos.forEach(p => { try { URL.revokeObjectURL(p.blobUrl); } catch{} });
         pendingFotos = [];
+        // Fotos pendentes anexadas a componentes pendentes
+        pendingComps.forEach(c => { if (c.pendingFoto?.blobUrl) { try { URL.revokeObjectURL(c.pendingFoto.blobUrl); } catch{} } });
+        pendingComps = [];
         document.body.removeChild(ov);
         if (typeof onClose === 'function') onClose();
       };
@@ -14312,11 +14476,14 @@ body.presenting #presentingBadge { display: flex; }
           return pendingComps.map((c, i) => {
             const e = c.estado ? _estadoMap[c.estado] : null;
             const eBadge = e ? `<span style="background:${e.bg};color:${e.fg};padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700;margin-left:6px">${e.label.toUpperCase()}</span>` : '';
+            const thumb = c.pendingFoto?.blobUrl
+              ? `<img src="${c.pendingFoto.blobUrl}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--surface2);flex-shrink:0"/>`
+              : `<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f59e0b;font-weight:700">PEND.</div>`;
             return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border)">
-              <div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f59e0b;font-weight:700">PEND.</div>
+              ${thumb}
               <div style="flex:1;min-width:0">
                 <div style="font-size:12px;font-weight:600">${esc(c.nome)}${eBadge}</div>
-                <div style="font-size:10px;color:var(--text3)">${esc(c.sku||'—')} · qty ${Number(c.quantidade)||0} ${esc(c.unidade||'un')}</div>
+                <div style="font-size:10px;color:var(--text3)">${esc(c.sku||'—')} · qty ${Number(c.quantidade)||0} ${esc(c.unidade||'un')}${c.pendingFoto?' · 📷 1 foto':''}</div>
               </div>
               <button data-pcidx="${i}" class="estq-pcomp-del" type="button" style="background:#FEE2E2;color:#7F1D1D;border:none;border-radius:5px;padding:4px 8px;font-size:11px;cursor:pointer;font-weight:700">×</button>
             </div>`;
@@ -14361,35 +14528,105 @@ body.presenting #presentingBadge { display: flex; }
               window.estoqueAddItem(null, savedItem.id, refreshComponentes);
               return;
             }
-            // Modo pendente — modal simples pra capturar dados básicos do componente
-            const estadoOpts = [{value:'',label:'(não informado)'}].concat(_ESTADOS.map(e=>({value:e.v,label:e.label})));
-            const unidadeOpts = _UNIDADES.map(u=>({value:u.v,label:u.label}));
-            const r = await window.askPrompt({
-              title:'Novo componente (pendente)',
-              fields:[
-                {type:'text',name:'nome',label:'Nome *',value:''},
-                {type:'text',name:'sku',label:'SKU / Código',value:''},
-                {type:'select',name:'unidade',label:'Unidade',value:'un',options:unidadeOpts},
-                {type:'text',name:'qtd',label:'Quantidade',value:'1'},
-                {type:'select',name:'estado',label:'Estado de uso',value:'',options:estadoOpts},
-              ],
+            // Modo pendente — modal customizado com input de foto.
+            // (askPrompt simples não aceita file; foto fica em memória até o
+            // item pai ser salvo, aí sobe junto no onSave.)
+            const estadoOpts = [{v:'',label:'(não informado)'}].concat(_ESTADOS.map(e=>({v:e.v,label:e.label})));
+            const unidadeOpts = _UNIDADES.slice();
+            await new Promise((resolve) => {
+              const ovC = document.createElement('div');
+              ovC.setAttribute('data-estq-modal', 'comp-pendente');
+              ovC.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px';
+              const mdC = document.createElement('div');
+              mdC.style.cssText = 'background:var(--surface);color:var(--text);border-radius:10px;border:1px solid var(--border);padding:20px;max-width:520px;width:100%;max-height:90vh;overflow:auto;box-sizing:border-box';
+              const inpStyle = 'width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);font-family:inherit;outline:none;box-sizing:border-box';
+              const lblStyle = 'display:block;font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px';
+              const unidOpts = unidadeOpts.map(u => `<option value="${esc(u.v)}"${u.v==='un'?' selected':''}>${esc(u.label)}</option>`).join('');
+              const estOpts = estadoOpts.map(e => `<option value="${esc(e.v)}">${esc(e.label)}</option>`).join('');
+              mdC.innerHTML = `
+                <div style="font-size:14px;font-weight:700;margin-bottom:14px">Novo componente <span style="font-size:10px;font-weight:500;color:#f59e0b;margin-left:6px">(pendente — sobe junto com o item)</span></div>
+                <div style="margin-bottom:10px"><label style="${lblStyle}">Nome *</label><input id="pcNome" type="text" style="${inpStyle}"/></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+                  <div><label style="${lblStyle}">SKU / Código</label><input id="pcSku" type="text" style="${inpStyle}"/></div>
+                  <div><label style="${lblStyle}">Unidade</label><select id="pcUnid" style="${inpStyle}">${unidOpts}</select></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+                  <div><label style="${lblStyle}">Quantidade</label><input id="pcQtd" type="text" value="1" style="${inpStyle}"/></div>
+                  <div><label style="${lblStyle}">Estado de uso</label><select id="pcEst" style="${inpStyle}">${estOpts}</select></div>
+                </div>
+                <div style="margin-bottom:14px">
+                  <label style="${lblStyle}">📷 Foto (opcional)</label>
+                  <input id="pcFoto" type="file" accept="image/*" capture="environment" style="${inpStyle};padding:6px"/>
+                  <div id="pcFotoPrev" style="margin-top:8px;display:none">
+                    <img id="pcFotoImg" style="width:100%;max-height:160px;object-fit:contain;border-radius:6px;background:var(--surface2)"/>
+                    <button id="pcFotoRm" type="button" style="margin-top:6px;background:#FEE2E2;color:#7F1D1D;border:none;border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:600">Remover foto</button>
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end">
+                  <button id="pcCancel" type="button" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 14px;font-size:13px;cursor:pointer">Cancelar</button>
+                  <button id="pcOk" type="button" style="background:var(--accent);color:white;border:none;border-radius:6px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600">Adicionar</button>
+                </div>`;
+              ovC.appendChild(mdC); document.body.appendChild(ovC);
+              setTimeout(() => mdC.querySelector('#pcNome')?.focus(), 30);
+
+              let pendingPhoto = null; // { file, blobUrl }
+              const fileInp = mdC.querySelector('#pcFoto');
+              const prev = mdC.querySelector('#pcFotoPrev');
+              const prevImg = mdC.querySelector('#pcFotoImg');
+              fileInp.addEventListener('change', () => {
+                if (pendingPhoto?.blobUrl) { try { URL.revokeObjectURL(pendingPhoto.blobUrl); } catch{} pendingPhoto = null; }
+                const f = fileInp.files?.[0];
+                if (!f) { prev.style.display = 'none'; return; }
+                if (!/^image\//.test(f.type)) { alert('Selecione um arquivo de imagem.'); fileInp.value = ''; return; }
+                if (f.size > 8 * 1024 * 1024) { alert('Imagem maior que 8MB. Reduza antes de enviar.'); fileInp.value = ''; return; }
+                const blobUrl = URL.createObjectURL(f);
+                pendingPhoto = { file: f, blobUrl };
+                prevImg.src = blobUrl;
+                prev.style.display = 'block';
+              });
+              mdC.querySelector('#pcFotoRm').addEventListener('click', () => {
+                if (pendingPhoto?.blobUrl) { try { URL.revokeObjectURL(pendingPhoto.blobUrl); } catch{} }
+                pendingPhoto = null;
+                fileInp.value = '';
+                prev.style.display = 'none';
+              });
+
+              const closeC = () => {
+                if (ovC.parentNode) document.body.removeChild(ovC);
+                resolve();
+              };
+              mdC.querySelector('#pcCancel').onclick = () => {
+                if (pendingPhoto?.blobUrl) { try { URL.revokeObjectURL(pendingPhoto.blobUrl); } catch{} }
+                closeC();
+              };
+              mdC.querySelector('#pcOk').onclick = () => {
+                const nome = mdC.querySelector('#pcNome').value.trim();
+                if (!nome) { alert('Nome é obrigatório.'); return; }
+                const qtd = parseFloat((mdC.querySelector('#pcQtd').value||'1').replace(',','.'));
+                if (isNaN(qtd)) { alert('Quantidade inválida.'); return; }
+                pendingComps.push({
+                  nome,
+                  sku: mdC.querySelector('#pcSku').value.trim() || null,
+                  unidade: mdC.querySelector('#pcUnid').value.trim() || 'un',
+                  quantidade: qtd,
+                  estado: mdC.querySelector('#pcEst').value || null,
+                  pendingFoto: pendingPhoto,  // null ou { file, blobUrl }
+                });
+                rerenderCompSection();
+                closeC();
+              };
+              mdC.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') { e.preventDefault(); mdC.querySelector('#pcCancel').click(); }
+              });
             });
-            if (r === null) return;
-            const nome = (r.nome||'').trim();
-            if (!nome) { alert('Nome é obrigatório.'); return; }
-            const qtd = parseFloat((r.qtd||'1').replace(',','.'));
-            if (isNaN(qtd)) { alert('Quantidade inválida.'); return; }
-            pendingComps.push({
-              nome, sku:(r.sku||'').trim()||null,
-              unidade:(r.unidade||'un').trim()||'un',
-              quantidade:qtd, estado:r.estado||null,
-            });
-            rerenderCompSection();
+            return;
           };
         }
         // Pendente: remover
         md.querySelectorAll('.estq-pcomp-del').forEach(b => b.onclick = () => {
           const idx = parseInt(b.dataset.pcidx, 10);
+          const pc = pendingComps[idx];
+          if (pc?.pendingFoto?.blobUrl) { try { URL.revokeObjectURL(pc.pendingFoto.blobUrl); } catch{} }
           pendingComps.splice(idx, 1);
           rerenderCompSection();
         });
@@ -14896,11 +15133,12 @@ body.presenting #presentingBadge { display: flex; }
           pendingFotos = [];
         }
 
-        // Insert componentes pendentes
-        let compsOk = 0, compsErr = 0;
+        // Insert componentes pendentes (+ upload da foto pendente de cada um, se houver)
+        let compsOk = 0, compsErr = 0, compsFotosOk = 0;
         if (pendingComps.length) {
           setBtnState(true, 'Salvando componentes...');
-          for (const c of pendingComps) {
+          for (let ci = 0; ci < pendingComps.length; ci++) {
+            const c = pendingComps[ci];
             const cPayload = {
               nome: c.nome, sku: c.sku, descricao: null, unidade: c.unidade,
               quantidade: c.quantidade, estoque_minimo: null,
@@ -14910,16 +15148,38 @@ body.presenting #presentingBadge { display: flex; }
               responsavel_id: savedItem.responsavel_id || null,
               atualizado_em: new Date().toISOString(),
             };
-            const { error: cErr } = await sb.from('estoque_items').insert(cPayload);
+            const { data: cInserted, error: cErr } = await sb.from('estoque_items').insert(cPayload).select().single();
             if (cErr) { console.error('[estoque] insert componente falhou:', cErr); compsErr++; continue; }
             compsOk++;
+
+            // Upload da foto pendente do componente, se houver
+            if (c.pendingFoto?.file && cInserted?.id) {
+              try {
+                setBtnState(true, `Foto comp. ${ci+1}/${pendingComps.length}...`);
+                const f = c.pendingFoto.file;
+                const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
+                const path = cInserted.id + '/' + Date.now() + '_' + Math.random().toString(36).slice(2,8) + '.' + ext;
+                const { error: upErr } = await sb.storage.from('estoque-fotos').upload(path, f, { contentType: f.type });
+                if (upErr) { console.error('[estoque] upload foto componente falhou:', upErr); }
+                else {
+                  const { data: urlData } = sb.storage.from('estoque-fotos').getPublicUrl(path);
+                  const url = urlData?.publicUrl;
+                  if (url) {
+                    await sb.from('estoque_fotos').insert({ item_id: cInserted.id, url, ordem: Math.floor(Date.now()/1000) });
+                    await sb.from('estoque_items').update({ foto_url: url, atualizado_em: new Date().toISOString() }).eq('id', cInserted.id);
+                    compsFotosOk++;
+                  }
+                }
+              } catch (e) { console.error('[estoque] foto componente exception:', e); }
+              try { URL.revokeObjectURL(c.pendingFoto.blobUrl); } catch{}
+            }
           }
           pendingComps = [];
         }
 
         const partes = ['Item cadastrado'];
         if (fotosOk) partes.push(fotosOk + ' foto(s)');
-        if (compsOk) partes.push(compsOk + ' componente(s)');
+        if (compsOk) partes.push(compsOk + ' componente(s)' + (compsFotosOk ? ' c/ ' + compsFotosOk + ' foto(s)' : ''));
         if (fotosErr || compsErr) partes.push('· ' + (fotosErr+compsErr) + ' falha(s)');
         window.toastSuccess?.(partes.join(' · '));
         await window.estoqueLoad();
@@ -26685,7 +26945,68 @@ function toggleTheme(){
   document.documentElement.setAttribute('data-theme', next);
   localStorage.setItem('codepro_theme', next);
   updateThemeModeUI(next);
+  saveUserThemePreferences();
 }
+
+// ─── Persistência de tema POR USUÁRIO via Supabase ───
+// localStorage é por PC; isto sobe pra coluna usuarios.preferencias (jsonb)
+// pra que o tema siga o user em qualquer máquina onde ele logar.
+let _saveThemeTimer = null;
+window.saveUserThemePreferences = function() {
+  clearTimeout(_saveThemeTimer);
+  _saveThemeTimer = setTimeout(async () => {
+    try {
+      const u = window._currentUserData;
+      if (!u?.id) return;
+      const sb = window.sb || window.supabase;
+      if (!sb) return;
+      const themePrefs = {
+        theme_mode:    localStorage.getItem('codepro_theme')         || 'light',
+        theme_color:   localStorage.getItem('codepro_theme_color')   || 'azul',
+        theme_pattern: localStorage.getItem('codepro_theme_pattern') || 'none',
+        theme_density: localStorage.getItem('codepro_density')        || 'comfortable',
+      };
+      // Lê preferences atuais e merge (preserva outras chaves se houver)
+      const { data, error } = await sb.from('usuarios').select('preferencias').eq('id', u.id).maybeSingle();
+      if (error) { console.warn('saveUserThemePreferences select', error); return; }
+      const merged = { ...(data?.preferencias || {}), ...themePrefs };
+      const { error: e2 } = await sb.from('usuarios').update({ preferencias: merged }).eq('id', u.id);
+      if (e2) console.warn('saveUserThemePreferences update', e2);
+    } catch(e) { console.warn('saveUserThemePreferences', e); }
+  }, 500);
+};
+
+window.loadUserThemePreferences = async function() {
+  try {
+    const u = window._currentUserData;
+    if (!u?.id) return;
+    const sb = window.sb || window.supabase;
+    if (!sb) return;
+    const { data, error } = await sb.from('usuarios').select('preferencias').eq('id', u.id).maybeSingle();
+    if (error || !data?.preferencias) return;
+    const p = data.preferencias;
+    if (p.theme_mode) {
+      document.documentElement.setAttribute('data-theme', p.theme_mode);
+      localStorage.setItem('codepro_theme', p.theme_mode);
+      updateThemeModeUI(p.theme_mode);
+    }
+    if (p.theme_color) {
+      document.documentElement.setAttribute('data-theme-color', p.theme_color);
+      localStorage.setItem('codepro_theme_color', p.theme_color);
+      updateThemeColorUI(p.theme_color);
+    }
+    if (p.theme_pattern) {
+      document.documentElement.setAttribute('data-theme-pattern', p.theme_pattern);
+      localStorage.setItem('codepro_theme_pattern', p.theme_pattern);
+      updateThemePatternUI(p.theme_pattern);
+    }
+    if (p.theme_density) {
+      document.body.setAttribute('data-density', p.theme_density);
+      localStorage.setItem('codepro_density', p.theme_density);
+      if (typeof updateDensityUI === 'function') updateDensityUI(p.theme_density);
+    }
+  } catch(e) { console.warn('loadUserThemePreferences', e); }
+};
 // Helper: renderiza ícones Lucide em runtime.
 // Chamado no init + após qualquer mutação que insere <i data-lucide="..."> no DOM.
 function renderLucide() {
@@ -26708,6 +27029,7 @@ function setThemeColor(color){
   document.documentElement.setAttribute('data-theme-color', color);
   localStorage.setItem('codepro_theme_color', color);
   updateThemeColorUI(color);
+  saveUserThemePreferences();
 }
 
 // Presets combinam cor + padrão + modo claro/escuro de uma vez
@@ -26740,9 +27062,10 @@ function applyThemePreset(name) {
   document.documentElement.setAttribute('data-theme', p.mode);
   localStorage.setItem('codepro_theme', p.mode);
   updateThemeModeUI(p.mode);
-  // Seta cor e padrão
+  // Seta cor e padrão (esses já chamam saveUserThemePreferences)
   setThemeColor(p.color);
   setThemePattern(p.pattern);
+  saveUserThemePreferences();
   if (window.toastSuccess) window.toastSuccess('Preset aplicado: ' + name);
 }
 window.applyThemePreset = applyThemePreset;
@@ -26751,6 +27074,7 @@ function setThemePattern(pattern){
   document.documentElement.setAttribute('data-theme-pattern', pattern);
   localStorage.setItem('codepro_theme_pattern', pattern);
   updateThemePatternUI(pattern);
+  saveUserThemePreferences();
 }
 function updateThemeColorUI(color){
   document.querySelectorAll('.theme-swatch').forEach(s => {
@@ -26774,6 +27098,7 @@ function toggleDensity(){
   document.body.setAttribute('data-density', next);
   try { localStorage.setItem('codepro_density', next); } catch {}
   updateDensityUI(next);
+  saveUserThemePreferences();
   if (window.toastInfo) window.toastInfo(next === 'compact' ? 'Modo compacto ativado' : 'Modo confortável', 1800);
 }
 window.toggleDensity = toggleDensity;
@@ -30868,6 +31193,218 @@ window.confetti = (opts = {}) => {
       badge.textContent = total;
     }
   }
+})();
+</script>
+
+<!-- ──────────── CIVIL 3D — Modal de extração da DLL embedded ──────────── -->
+<div id="c3dModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,.78);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:60px 20px;overflow-y:auto">
+  <div style="background:linear-gradient(180deg,#0f172a,#0a1424);border:1px solid #1e293b;border-radius:16px;width:100%;max-width:560px;color:#e2e8f0;box-shadow:0 25px 70px rgba(0,0,0,.6);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:14px;padding:22px 26px;border-bottom:1px solid #1e293b;background:linear-gradient(180deg,rgba(37,99,235,.18),transparent)">
+      <div style="width:46px;height:46px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;color:#fff">N</div>
+      <div style="flex:1">
+        <div style="font-size:18px;font-weight:700;color:#f1f5f9">Civil 3D</div>
+        <div style="font-size:11px;color:#60a5fa;font-weight:600;letter-spacing:.4px">A2Z Projetos · Plugin externo</div>
+      </div>
+      <button onclick="window.closeCivil3DModal()" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;padding:4px 10px">✕</button>
+    </div>
+    <div id="c3dModalBody" style="padding:24px 26px">
+      <div style="text-align:center;color:#94a3b8;font-size:13px">Carregando...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // PWA não tem electron — esconde botão e função vira no-op
+  let ipcRenderer = null;
+  try { ipcRenderer = require('electron').ipcRenderer; } catch {}
+  if (!ipcRenderer) {
+    const btn = document.getElementById('civil3dSbBtn');
+    if (btn) btn.style.display = 'none';
+    window.openCivil3DModal = function(){ alert('Civil 3D só funciona no Nexus desktop, não no celular/web.'); };
+    return;
+  }
+
+  window.openCivil3DModal = async function() {
+    document.getElementById('c3dModal').style.display = 'flex';
+    await renderC3DModal();
+  };
+
+  window.closeCivil3DModal = function() {
+    document.getElementById('c3dModal').style.display = 'none';
+  };
+
+  async function renderC3DModal() {
+    const body = document.getElementById('c3dModalBody');
+    const u = window._currentUserData;
+    if (!u) {
+      body.innerHTML = '<div style="text-align:center;color:#fca5a5">Faça login no Nexus pra continuar.</div>';
+      return;
+    }
+
+    let temAcesso = false;
+    let exp = null;
+    let masterBypass = false;
+    if (u.role === 'master') {
+      temAcesso = true; masterBypass = true;
+    } else {
+      try {
+        const sb = window.sb || window.supabase;
+        const { data } = await sb.from('programas_acessos')
+          .select('ativo,expires_at')
+          .eq('usuario_id', u.id).eq('programa', 'civil3d').maybeSingle();
+        if (data && data.ativo) {
+          if (!data.expires_at || new Date(data.expires_at) >= new Date(new Date().toDateString())) {
+            temAcesso = true;
+            exp = data.expires_at;
+          }
+        }
+      } catch(e) { console.warn('c3d acesso check', e); }
+    }
+
+    if (!temAcesso) {
+      body.innerHTML = `
+        <div style="background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.35);border-radius:10px;padding:18px;margin-bottom:18px">
+          <div style="font-weight:700;color:#fca5a5;margin-bottom:6px">🔒 Sem permissão</div>
+          <div style="font-size:13px;color:#cbd5e1;line-height:1.5">Sua conta não tem acesso liberado pro Civil 3D. Peça pro admin liberar na aba Admin.</div>
+        </div>
+        <div style="text-align:center">
+          <a href="https://wa.me/5566992357575?text=Ol%C3%A1!%20Preciso%20de%20acesso%20ao%20Civil%203D%20no%20Nexus." target="_blank" style="display:inline-flex;align-items:center;gap:8px;padding:12px 20px;background:#22c55e;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px">💬 Falar no WhatsApp</a>
+        </div>`;
+      return;
+    }
+
+    const status = await ipcRenderer.invoke('civil3d:status');
+    const extracted = !!status?.extracted;
+
+    body.innerHTML = `
+      <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.35);border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;gap:12px">
+        <div style="font-size:20px">${masterBypass ? '🔓' : '✅'}</div>
+        <div>
+          <div style="font-weight:700;color:#86efac;font-size:13px">Acesso liberado</div>
+          <div style="font-size:11px;color:#94a3b8">${masterBypass ? 'Master · acesso total' : (exp ? 'Expira em ' + new Date(exp).toLocaleDateString('pt-BR') : 'Sem expiração')}</div>
+        </div>
+      </div>
+
+      <div style="font-size:13px;color:#cbd5e1;line-height:1.6;margin-bottom:18px">
+        Clique em <b style="color:#60a5fa">Liberar plugin</b> pra extrair a DLL. Depois, no Civil 3D, digite <code style="background:#0a1220;padding:2px 8px;border-radius:4px;border:1px solid #1e293b;color:#60a5fa;font-family:Cascadia Mono,monospace">NETLOAD</code> e selecione o arquivo.
+      </div>
+
+      <div id="c3dPathBox" style="display:${extracted ? 'block' : 'none'};background:#0a1220;border:1px solid #1e293b;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-family:Cascadia Mono,monospace;font-size:11px;color:#86efac;word-break:break-all">
+        ${extracted ? esc(status.path) : ''}
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button id="c3dBtnExtract" onclick="window.civil3dExtract()" style="flex:1;min-width:160px;padding:14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">${extracted ? '🔄 Re-extrair plugin' : '🔓 Liberar plugin'}</button>
+        ${extracted ? '<button onclick="window.civil3dCopyPath()" style="padding:14px 18px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer">📋 Copiar caminho</button>' : ''}
+        ${extracted ? '<button onclick="window.civil3dCleanup()" style="padding:14px 18px;background:#7f1d1d;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer">🗑 Apagar</button>' : ''}
+      </div>
+
+      <div style="margin-top:18px;padding-top:14px;border-top:1px solid #1e293b;font-size:11px;color:#64748b;line-height:1.6">
+        <b style="color:#94a3b8">⚠ Importante:</b> a DLL é apagada quando você fecha o Nexus. Mantenha o Nexus aberto enquanto usa o Civil 3D.
+      </div>`;
+
+    function esc(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  }
+
+  window.civil3dExtract = async function() {
+    const btn = document.getElementById('c3dBtnExtract');
+    if (btn) { btn.disabled = true; btn.textContent = 'Extraindo...'; }
+    try {
+      const res = await ipcRenderer.invoke('civil3d:extract');
+      if (res.ok) {
+        window.toastSuccess?.('DLL liberada');
+        // Tenta NETLOAD automático se Civil 3D já estiver aberto
+        if (btn) btn.textContent = 'Tentando carregar no Civil 3D...';
+        const netload = await ipcRenderer.invoke('civil3d:netload');
+        if (netload.ok) {
+          window.toastSuccess?.('Plugin carregado no Civil 3D automaticamente!');
+        } else {
+          window.toastInfo?.('DLL pronta. Faça NETLOAD no Civil 3D pra carregar.') ||
+            window.toastSuccess?.('DLL pronta. Faça NETLOAD no Civil 3D pra carregar.');
+        }
+        await renderC3DModal();
+        window.civil3dUpdateBadge?.();
+      } else {
+        window.toastError?.('Falha: ' + res.error);
+        if (btn) { btn.disabled = false; btn.textContent = '🔓 Liberar plugin'; }
+      }
+    } catch(e) {
+      window.toastError?.('Erro: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = '🔓 Liberar plugin'; }
+    }
+  };
+
+  window.civil3dCopyPath = async function() {
+    const status = await ipcRenderer.invoke('civil3d:status');
+    if (status?.path) {
+      try {
+        await navigator.clipboard.writeText(status.path);
+        window.toastSuccess?.('Caminho copiado');
+      } catch { window.toastError?.('Não consegui copiar — copie manualmente do campo'); }
+    }
+  };
+
+  window.civil3dCleanup = async function() {
+    if (!confirm('Apagar a DLL extraída? Você precisará liberar de novo se quiser usar.')) return;
+    await ipcRenderer.invoke('civil3d:cleanup');
+    window.toastSuccess?.('DLL apagada');
+    await renderC3DModal();
+    window.civil3dUpdateBadge?.();
+  };
+
+  // Atualiza badge na sidebar (ponto verde se DLL extraída)
+  window.civil3dUpdateBadge = async function() {
+    try {
+      const status = await ipcRenderer.invoke('civil3d:status');
+      const badge = document.getElementById('civil3dSbBadge');
+      if (badge) badge.style.display = status?.extracted ? 'inline-flex' : 'none';
+    } catch {}
+  };
+
+  // Atualiza badge na inicialização e a cada 30s
+  setTimeout(() => window.civil3dUpdateBadge?.(), 2000);
+  setInterval(() => window.civil3dUpdateBadge?.(), 30000);
+
+  // ─── Tray preference (perfil) ───
+  window.resetTrayPref = async function() {
+    await ipcRenderer.invoke('tray:reset-preference');
+    window.toastSuccess?.('OK — vamos perguntar de novo na próxima vez que você fechar');
+    refreshTrayPrefBox();
+  };
+
+  async function refreshTrayPrefBox() {
+    try {
+      const box = document.getElementById('trayPrefBox');
+      const status = document.getElementById('trayPrefStatus');
+      if (!box || !status) return;
+      const res = await ipcRenderer.invoke('tray:get-preference');
+      if (res?.pref) {
+        box.style.display = 'block';
+        status.textContent = res.pref === 'tray'
+          ? 'Atualmente: minimizar pra bandeja ao clicar no X (Nexus continua rodando em segundo plano)'
+          : 'Atualmente: encerrar tudo ao clicar no X';
+      } else {
+        box.style.display = 'none';
+      }
+    } catch {}
+  }
+  setTimeout(refreshTrayPrefBox, 2500);
+  document.querySelector('.sb-item[data-tab="perfil"]')?.addEventListener('click', () => {
+    setTimeout(refreshTrayPrefBox, 200);
+  });
+
+  // Fecha modal com ESC
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.getElementById('c3dModal').style.display === 'flex') {
+      window.closeCivil3DModal();
+    }
+  });
+
+  // Fecha clicando fora do conteúdo
+  document.getElementById('c3dModal').addEventListener('click', (e) => {
+    if (e.target.id === 'c3dModal') window.closeCivil3DModal();
+  });
 })();
 </script>
 
