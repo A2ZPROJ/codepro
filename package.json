@@ -1,15 +1,17 @@
 {
   "name": "codepro",
-  "version": "2.29.2",
+  "version": "2.55.99",
   "description": "Nexus — Gestão de Projetos A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "precompile": "node scripts/compile-obfuscate.js",
+    "embed-civil3d": "node scripts/embed-civil3d.js",
+    "precompile": "node scripts/embed-civil3d.js && node scripts/compile-obfuscate.js && node scripts/obfuscate-html.js",
     "postrestore": "node scripts/restore-source.js",
     "build": "npm run precompile && electron-builder --win && npm run postrestore",
-    "build:publish": "npm run precompile && electron-builder --win --publish always && npm run postrestore"
+    "build:publish": "npm run precompile && electron-builder --win --publish always && npm run postrestore",
+    "test": "vitest run"
   },
   "build": {
     "appId": "com.a2zprojetos.codepro",
@@ -74,7 +76,8 @@
   "devDependencies": {
     "electron": "^29.1.0",
     "electron-builder": "^24.13.3",
-    "javascript-obfuscator": "^5.4.1"
+    "javascript-obfuscator": "^5.4.1",
+    "vitest": "^1.6.0"
   },
   "author": {
     "name": "A2Z Projetos",
