@@ -40,7 +40,7 @@
         '<div style="text-align:center;margin-bottom:22px">'+
           '<div style="font-size:12px;font-weight:700;color:#64748b;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">A2Z Projetos</div>'+
           '<div style="font-size:24px;font-weight:800;color:#f1f5f9;letter-spacing:.5px">NEXUS <span style="font-size:11px;font-weight:500;color:#3b82f6;background:rgba(59,130,246,.12);padding:3px 7px;border-radius:6px;vertical-align:middle;margin-left:4px">MOBILE</span></div>'+
-          '<div style="font-size:12px;color:#475569;margin-top:4px">Gestão de projetos de saneamento</div>'+
+          '<div style="font-size:12px;color:#475569;margin-top:4px">Gestão Integrada</div>'+
         '</div>'+
         '<div style="margin-bottom:14px">'+
           '<label style="display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Nome completo</label>'+

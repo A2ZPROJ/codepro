@@ -15166,7 +15166,11 @@ body.presenting #presentingBadge { display: flex; }
       const M=window._cronoAtiv||{};
       const projs=(window._projects||[]).filter(p=>M[p.id]&&(!f||(p.name||'').toLowerCase().includes(f)));
       if(!projs.length){ el.innerHTML='<div style="padding:24px;color:var(--text3)">Nenhuma atividade. (Cronograma importado do Excel.)</div>'; return; }
-      projs.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+      // Ordena por DATA DE ENTREGA (próxima previsão asc); sem previsão vai pro fim; empate por nome.
+      projs.sort((a,b)=>{
+        const pa=(M[a.id]&&M[a.id].prox)||'9999-99-99', pb=(M[b.id]&&M[b.id].prox)||'9999-99-99';
+        const d=pa.localeCompare(pb); return d!==0?d:(a.name||'').localeCompare(b.name||'');
+      });
       let h='<div class="crono-row crono-head"><div>Cidade / Distrito</div><div>Atividades</div><div>Próxima previsão</div><div>Atrasos</div></div>';
       projs.forEach(p=>{ const s=M[p.id];
         const late=s.late>0?'<span style="color:#dc2626;font-weight:600">'+s.late+' atrasada(s)</span>':'<span style="color:#16a34a">em dia</span>';
