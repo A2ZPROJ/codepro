@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "2.55.100",
+  "version": "2.78.0",
   "description": "Nexus — Gestão de Projetos A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
@@ -61,13 +61,17 @@
     }
   },
   "dependencies": {
+    "@napi-rs/canvas": "^0.1.100",
     "@supabase/supabase-js": "^2.102.1",
+    "adm-zip": "^0.5.17",
     "bytenode": "^1.5.7",
     "docx": "^9.6.1",
+    "docx-preview": "^0.3.7",
     "docxtemplater": "^3.68.4",
     "electron-updater": "^6.1.7",
     "exceljs": "^4.4.0",
     "html2canvas": "^1.4.1",
+    "pdf-to-png-converter": "^3.18.0",
     "pdfmake": "^0.3.7",
     "pizzip": "^3.2.0",
     "shapefile": "^0.6.6",

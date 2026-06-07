@@ -1,10 +1,54 @@
-const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, dialog, screen, Tray, Menu, nativeImage, desktopCapturer } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const isDev = process.argv.includes('--dev');
+
+// ── GOOGLE GEOLOCATION API KEY ──
+// Sem essa key, navigator.geolocation no Electron falha silenciosamente
+// (Chromium delegou pro Google location service que exige authentication).
+// Origem da key (em ordem de precedência):
+//   1) env var GOOGLE_GEOLOCATION_API_KEY
+//   2) %USERPROFILE%\.codepro\google-key.txt (1 linha = a key)
+// IMPORTANTE: precisa ser appended ANTES de app.whenReady() pra Chromium pegar.
+(function setupGoogleApiKey() {
+  let key = process.env.GOOGLE_GEOLOCATION_API_KEY || '';
+  if (!key) {
+    try {
+      const p = path.join(os.homedir(), '.codepro', 'google-key.txt');
+      if (fs.existsSync(p)) key = fs.readFileSync(p, 'utf8').trim();
+    } catch {}
+  }
+  if (key) {
+    app.commandLine.appendSwitch('google-api-key', key);
+    console.log('[main] Google API key carregada — geolocation precisão de rua HABILITADA');
+  } else {
+    console.log('[main] sem Google API key — geolocation cai pra IP-based (precisão de cidade)');
+  }
+})();
+
+// ── SINGLE INSTANCE LOCK ──
+// Impede múltiplas instâncias do Nexus rodando ao mesmo tempo. Sem isso,
+// uma install corrompida ou crash loop spawna vários processos em loop —
+// o user vê "mil janelas de inicialização" e o PC trava.
+// Se esta NÃO é a primeira instância, sai imediatamente.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+  process.exit(0);
+}
+app.on('second-instance', () => {
+  // Outra instância tentou subir → foca a janela existente em vez de criar outra.
+  // Usa BrowserWindow.getAllWindows() como fallback se mainWindow/splashWindow
+  // ainda não estiverem definidas (startup muito rápido).
+  const existing = mainWindow || splashWindow || BrowserWindow.getAllWindows()[0];
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore();
+    existing.focus();
+  }
+});
 
 // ── Supabase client (dashboard público) ──
 const SUPA_URL = 'https://xszpzsmdpbgaiodeqcpi.supabase.co';
@@ -31,7 +75,8 @@ async function pushDashboardToSupabase(parsedData) {
 // Snapshot diário p/ Curva S — upsert por snap_date, último valor do dia prevalece
 async function pushDashboardHistory(parsedData) {
   try {
-    const muns = parsedData.municipalities || [];
+    // Filtra distritos (seq tipo "20.1") — município pai já agrega seus distritos.
+    const muns = (parsedData.municipalities || []).filter(m => !String(m.seq).includes('.'));
     if (!muns.length) return;
     const SVC_KEYS = ['topo','stream','sondT','sondS','projB','projR','projE'];
     let sumPct = 0, cnt = 0;
@@ -67,28 +112,42 @@ async function pushDashboardHistory(parsedData) {
 
 async function getDashboardHistory() {
   try {
+    // Limita a 365 snapshots (1 ano) pra Curva S — mais que isso não cabe no gráfico
+    // e só onera a query. Se futuramente precisar histórico longo, paginar.
     const { data, error } = await supabase
       .from('dashboard_history')
       .select('snap_date, avanco_geral')
-      .order('snap_date', { ascending: true });
+      .order('snap_date', { ascending: false })
+      .limit(365);
     if (error) return { ok: false, error: error.message, data: [] };
-    return { ok: true, data: data || [] };
+    // Reordena ascendente para manter contrato com renderer
+    return { ok: true, data: (data || []).sort((a, b) => a.snap_date.localeCompare(b.snap_date)) };
   } catch (e) {
     return { ok: false, error: e.message, data: [] };
   }
 }
 
-// Log de atualização para diagnóstico
+// Log de atualização para diagnóstico — com rotação a cada 1MB pra não crescer
+// indefinidamente no %USERPROFILE%.
 const UPDATE_LOG = path.join(os.homedir(), 'codepro-update.log');
+const LOG_MAX_BYTES = 1024 * 1024; // 1MB
 function logUpdate(msg) {
   try {
+    // Se passou do limite, trunca pra metade (keeps últimas linhas).
+    try {
+      const st = fs.statSync(UPDATE_LOG);
+      if (st.size > LOG_MAX_BYTES) {
+        const buf = fs.readFileSync(UPDATE_LOG, 'utf8');
+        fs.writeFileSync(UPDATE_LOG, buf.slice(Math.floor(buf.length / 2)));
+      }
+    } catch(_) {}
     const line = `[${new Date().toISOString()}] ${msg}\n`;
     fs.appendFileSync(UPDATE_LOG, line);
   } catch(e) {}
 }
 
-autoUpdater.autoDownload = false;          // download controlado manualmente
-autoUpdater.autoInstallOnAppQuit = true;   // fallback: instala se o app fechar com update pendente
+autoUpdater.autoDownload = false;           // download controlado manualmente
+autoUpdater.autoInstallOnAppQuit = false;   // NÃO instalar ao fechar sem confirmação do user (evita surpresa)
 
 let splashWindow, mainWindow, sessionUser = null;
 
@@ -122,6 +181,51 @@ if (!isDev) {
   });
 }
 
+let bootWindow = null;
+
+function createBootWindow() {
+  // Janela transparente fullscreen só com a logo Nexus centralizada.
+  // Fecha depois de ~3s (renderer dispara o evento). Separada do splash
+  // pra não quebrar o login/update se transparent: true falhar em algum PC.
+  try {
+    const primary = screen.getPrimaryDisplay();
+    const wa = primary.workArea;
+    bootWindow = new BrowserWindow({
+      x: wa.x, y: wa.y, width: wa.width, height: wa.height,
+      resizable: false,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      hasShadow: false,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false,
+      },
+      show: false,
+    });
+    bootWindow.loadFile(path.join(__dirname, 'boot.html'));
+    bootWindow.once('ready-to-show', () => {
+      if (bootWindow && !bootWindow.isDestroyed()) bootWindow.show();
+    });
+    bootWindow.on('closed', () => { bootWindow = null; });
+  } catch (e) {
+    // Se transparent quebrar, ignora e segue sem boot window
+    console.warn('boot window falhou:', e.message);
+    bootWindow = null;
+  }
+}
+
+ipcMain.on('boot:done', () => {
+  // Cria o splash DEPOIS da boot animation terminar — assim o user vê só
+  // a logo transparente sozinha, sem o splash opaco por trás.
+  if (!splashWindow) createSplash();
+  if (bootWindow && !bootWindow.isDestroyed()) {
+    try { bootWindow.close(); } catch {}
+    bootWindow = null;
+  }
+});
+
 function createSplash(){
   splashWindow = new BrowserWindow({
     width: 480,
@@ -140,9 +244,113 @@ function createSplash(){
   splashWindow.loadFile(path.join(__dirname,'splash.html'));
   splashWindow.once('ready-to-show', ()=>{
     splashWindow.show();
-    if(!isDev) setTimeout(()=> checkForUpdates(), 2500);
+    if(!isDev) setTimeout(()=> checkForUpdates(), 200);
   });
 }
+
+// ────────────────────────────────────────────────────────────────────
+// TRAY — Nexus em segundo plano (bandeja do Windows)
+// ────────────────────────────────────────────────────────────────────
+let tray = null;
+let isQuitting = false;
+let trayBalloonShown = false;
+
+const TRAY_PREF_PATH = path.join(os.homedir(), 'AppData', 'Roaming', 'Nexus', 'tray-pref.json');
+
+function loadTrayPref() {
+  try {
+    if (fs.existsSync(TRAY_PREF_PATH)) {
+      return JSON.parse(fs.readFileSync(TRAY_PREF_PATH, 'utf8')).pref || null;
+    }
+  } catch {}
+  return null;
+}
+
+function saveTrayPref(pref) {
+  try {
+    fs.mkdirSync(path.dirname(TRAY_PREF_PATH), { recursive: true });
+    fs.writeFileSync(TRAY_PREF_PATH, JSON.stringify({ pref, updated: new Date().toISOString() }));
+  } catch {}
+}
+
+function showMainWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+  } else if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.show();
+    splashWindow.focus();
+  }
+}
+
+function createTray() {
+  if (tray) return;
+  try {
+    const iconPath = path.join(__dirname, '../assets/icon.ico');
+    tray = new Tray(iconPath);
+    tray.setToolTip('Nexus — A2Z Projetos');
+    rebuildTrayMenu();
+
+    tray.on('click', () => showMainWindow());
+    tray.on('double-click', () => showMainWindow());
+
+    // Atualiza menu a cada 5s pra refletir status do Civil 3D
+    setInterval(() => { try { rebuildTrayMenu(); } catch {} }, 5000);
+  } catch (e) {
+    logUpdate('createTray error: ' + e.message);
+  }
+}
+
+function rebuildTrayMenu() {
+  if (!tray) return;
+  const c3dExtracted = fs.existsSync(C3D_PLUGIN_PATH);
+  const menu = Menu.buildFromTemplate([
+    { label: 'Nexus · A2Z Projetos', enabled: false },
+    { type: 'separator' },
+    { label: '🪟  Mostrar Nexus', click: () => showMainWindow() },
+    { type: 'separator' },
+    {
+      label: c3dExtracted ? '✓  Civil 3D ativo (plugin liberado)' : '○  Civil 3D inativo',
+      enabled: false,
+    },
+    { type: 'separator' },
+    { label: '❌  Sair (encerra tudo)', click: () => quitApp() },
+  ]);
+  tray.setContextMenu(menu);
+}
+
+function minimizeToTray() {
+  if (!tray) createTray();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+
+  if (tray && !trayBalloonShown) {
+    try {
+      tray.displayBalloon({
+        title: 'Nexus continua rodando',
+        content: 'O Nexus está na bandeja (canto inferior direito). Clique no ícone pra reabrir. Civil 3D continua funcionando enquanto isso.',
+        iconType: 'info',
+      });
+      trayBalloonShown = true;
+    } catch {}
+  }
+}
+
+function quitApp() {
+  isQuitting = true;
+  try { c3dCleanupSync(); } catch {}
+  try { if (tray) { tray.destroy(); tray = null; } } catch {}
+  app.quit();
+}
+
+ipcMain.handle('tray:reset-preference', () => {
+  try { if (fs.existsSync(TRAY_PREF_PATH)) fs.unlinkSync(TRAY_PREF_PATH); } catch {}
+  return { ok: true };
+});
+
+ipcMain.handle('tray:get-preference', () => {
+  return { ok: true, pref: loadTrayPref() };
+});
 
 function createMain(licenseData){
   const licArg = licenseData
@@ -150,6 +358,8 @@ function createMain(licenseData){
     : '--codepro-lic=';
 
   mainWindow = new BrowserWindow({
+    // Dimensões base — a janela é MAXIMIZADA no ready-to-show (ver abaixo).
+    // Estes valores são o tamanho caso o user restaure da maximização.
     width: 1280,
     height: 820,
     minWidth: 960,
@@ -170,23 +380,96 @@ function createMain(licenseData){
   const licQuery = licenseData ? Buffer.from(JSON.stringify(licenseData)).toString('base64') : '';
   mainWindow.loadFile(path.join(__dirname,'app','index.html'), { query: licQuery ? { lic: licQuery } : {} });
 
-  // CSP removido — com webSecurity:false + nodeIntegration:true, o CSP causava
-  // bloqueio de CDNs legítimos (esm.sh, fonts.googleapis, Chart.js) sem ganho
-  // real de segurança. A proteção do app vem de: DevTools bloqueado, anti-debug,
-  // bytenode, ASAR, e bloqueio de navegação/janelas externas no main process.
+  // Reuniões (Fase 8): wire dos handlers de permission + display-media-request
+  // pra essa sessão. Sem isso, getDisplayMedia retorna "Permission denied".
+  try { _wireReuniaoCapture(mainWindow); } catch (e) { console.warn('wireReuniaoCapture falhou:', e); }
 
-  // Desativa DevTools em produção
+  // CSP via <meta> no index.html (linhas ~50). Whitelist de connect-src pra
+  // limitar exfiltração via XSS. 'unsafe-inline'/'unsafe-eval' são necessários
+  // pelo nodeIntegration:true + inline scripts do app. Proteção adicional:
+  // DevTools bloqueado, anti-debug, bytenode, ASAR, bloqueio de navegação/janelas.
+
+  // Desativa DevTools em produção EXCETO via atalho secreto Ctrl+Shift+Alt+D
+  // (assim o user pode debugar bugs sem dar lockdown total).
+  let allowDevTools = false;
   if (!isDev) {
     mainWindow.webContents.on('devtools-opened', () => {
-      mainWindow.webContents.closeDevTools();
+      if (!allowDevTools) mainWindow.webContents.closeDevTools();
     });
   }
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    // Ctrl+Shift+Alt+D em qualquer modo → abre DevTools
+    if (input.control && input.shift && input.alt && (input.key || '').toLowerCase() === 'd') {
+      allowDevTools = true;
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
+    // F12 só em dev
+    if (isDev && input.key === 'F12') {
+      if (mainWindow.webContents.isDevToolsOpened()) mainWindow.webContents.closeDevTools();
+      else { allowDevTools = true; mainWindow.webContents.openDevTools(); }
+    }
+  });
+
+  // Intercepta close (botão X) — pergunta se quer minimizar pra bandeja
+  // ou fechar de vez. Lembra a escolha (a menos que user desmarque).
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return;  // chamado por quitApp() ou sign-out — pode fechar
+
+    const pref = loadTrayPref();
+
+    if (pref === 'tray') {
+      event.preventDefault();
+      minimizeToTray();
+      return;
+    }
+    if (pref === 'quit') {
+      // user escolheu sempre fechar de vez → garante cleanup do Civil3D
+      isQuitting = true;
+      try { c3dCleanupSync(); } catch {}
+      try { if (tray) { tray.destroy(); tray = null; } } catch {}
+      return;
+    }
+
+    // Primeira vez (ou sem pref): pergunta
+    event.preventDefault();
+    const c3dActive = fs.existsSync(C3D_PLUGIN_PATH);
+    const detail = c3dActive
+      ? '⚠ Você está com o plugin do Civil 3D liberado!\n\n• Bandeja: Nexus continua rodando em segundo plano e o Civil 3D continua funcionando.\n• Fechar de vez: o plugin do Civil 3D vai parar de validar e o NETLOAD ficará bloqueado.'
+      : '• Bandeja: Nexus continua rodando em segundo plano (necessário pra usar o Civil 3D depois).\n• Fechar de vez: encerra tudo agora.';
+
+    dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      title: 'Fechar Nexus?',
+      message: 'Como você quer fechar o Nexus?',
+      detail,
+      buttons: ['Minimizar pra bandeja', 'Fechar de vez', 'Cancelar'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+      checkboxLabel: 'Lembrar minha escolha (não perguntar de novo)',
+      checkboxChecked: true,
+      icon: path.join(__dirname, '../assets/icon.ico'),
+    }).then(result => {
+      if (result.response === 2) return;  // cancelar
+      const choice = result.response === 0 ? 'tray' : 'quit';
+      if (result.checkboxChecked) saveTrayPref(choice);
+      if (choice === 'tray') {
+        minimizeToTray();
+      } else {
+        quitApp();
+      }
+    }).catch(err => logUpdate('close-dialog error: ' + err.message));
+  });
 
   mainWindow.once('ready-to-show', ()=>{
     if(splashWindow){ splashWindow.close(); splashWindow=null; }
+    mainWindow.maximize();  // abre sempre maximizado (user pediu 2026-04-18)
     mainWindow.show();
     // Sempre verifica ao abrir — se já havia um update pendente, renderer consulta via get-update-state
     if(!isDev) checkForUpdates();
+    // Dashboard watcher + push inicial — adiado pra depois de mostrar a janela
+    // (não bloqueia startup com I/O do xlsx do OneDrive).
+    setImmediate(() => { try { initDashboardBackground(); } catch(e) { logUpdate('initDashboard error: ' + e.message); } });
   });
 
   mainWindow.webContents.setWindowOpenHandler(({url})=>{
@@ -194,19 +477,7 @@ function createMain(licenseData){
     return {action:'deny'};
   });
 
-  // F12 abre DevTools APENAS em modo dev (--dev). Em produção fica bloqueado
-  // pelo handler global em app.on('web-contents-created') + devtools-opened closer.
-  if (isDev) {
-    mainWindow.webContents.on('before-input-event', (event, input) => {
-      if (input.key === 'F12') {
-        if (mainWindow.webContents.isDevToolsOpened()) {
-          mainWindow.webContents.closeDevTools();
-        } else {
-          mainWindow.webContents.openDevTools();
-        }
-      }
-    });
-  }
+  // (handler de F12/Ctrl+Shift+Alt+D já registrado acima)
 
   mainWindow.on('closed',()=>{ mainWindow=null; });
 }
@@ -220,19 +491,44 @@ ipcMain.on('get-session-sync', (event)=>{
   event.returnValue = sessionUser || null;
 });
 
+// Versão do app — fallback síncrono quando o preload não consegue ler o package.json
+ipcMain.on('get-app-version', (event)=>{
+  event.returnValue = app.getVersion();
+});
+
 // Renderer pode consultar estado atual do update (resolve race condition)
 ipcMain.on('get-update-state', (event)=>{
   event.returnValue = updateState;
 });
 
 app.whenReady().then(()=>{
-  createSplash();
+  // Fase D: permite geolocation pra coletor de auditoria (precisão de rua).
+  // Por default Electron nega geolocation silenciosamente; aqui aprovamos
+  // automaticamente porque é app interno corporativo.
+  try {
+    const { session } = require('electron');
+    session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
+      if (permission === 'geolocation') return callback(true);
+      callback(false);
+    });
+  } catch (e) { console.warn('setPermissionRequestHandler falhou:', e.message); }
+
+  createBootWindow();
+  // Fallback: se boot:done não chegar em 4s, cria splash de qualquer jeito
+  setTimeout(() => { if (!splashWindow && !mainWindow) createSplash(); }, 4000);
+
+  // Instala/atualiza bundle do plugin Civil 3D em segundo plano.
+  // Civil 3D carrega a DLL automaticamente do %APPDATA%\Autodesk\
+  // ApplicationPlugins\Nexus.bundle\ — Lucas só precisa abrir o CAD.
+  setTimeout(() => { try { c3dAutoInstallBundleOnStartup(); } catch {} }, 500);
   app.on('activate',()=>{
     if(!mainWindow && !splashWindow) createSplash();
   });
 });
 
 app.on('window-all-closed',()=>{
+  // Se tá rodando na bandeja (tray ativo + user pediu manter), NÃO fecha o app
+  if (tray && !isQuitting) return;
   if(process.platform!=='darwin') app.quit();
 });
 
@@ -256,8 +552,20 @@ autoUpdater.on('update-available', info=>{
   updateState = { status: 'available', version: info.version };
   splashWindow?.webContents.send('update-available', info.version);
   mainWindow?.webContents.send('update-available', info.version);
-  // Inicia download automaticamente em background
+  // NÃO baixa automaticamente — usuário decide no splash (botão "Atualizar agora")
+});
+
+// Renderer pede pra iniciar o download (após user confirmar)
+ipcMain.on('download-update', () => {
+  logUpdate('download-update requested');
+  updateState.status = 'downloading';
   autoUpdater.downloadUpdate().catch(err => logUpdate('downloadUpdate error: ' + err));
+});
+
+// Renderer (aba Sobre) pede verificação manual
+ipcMain.on('check-for-updates', () => {
+  logUpdate('check-for-updates requested (manual)');
+  autoUpdater.checkForUpdates().catch(err => logUpdate('manual checkForUpdates error: ' + err));
 });
 
 autoUpdater.on('download-progress', progress=>{
@@ -277,21 +585,134 @@ autoUpdater.on('error', (err)=>{ logUpdate('autoUpdater error: ' + err); });
 
 ipcMain.on('install-update', ()=> {
   logUpdate('install-update requested — quitAndInstall (silent)');
-  // Fecha janelas e remove guard de window-all-closed pra garantir que o app finaliza
-  // antes do NSIS rodar. isSilent=true evita o diálogo "não foi possível fechar o Nexus".
+  // O TRAY segura o processo vivo mesmo sem janelas — se ele continuar ativo
+  // durante quitAndInstall, o NSIS não consegue substituir o binário (em uso),
+  // o pending fica no disco e na próxima abertura o updater tenta de novo:
+  // loop infinito de "abre → tenta atualizar → falha → reabre". Por isso:
+  //   1. isQuitting=true → window-all-closed deixa o quit rolar
+  //   2. tray.destroy() → libera o processo
+  //   3. removeAllListeners → defesa extra contra qualquer guard
+  isQuitting = true;
   try {
     app.removeAllListeners('window-all-closed');
+    if (tray) { try { tray.destroy(); } catch {} tray = null; }
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
     if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy();
   } catch (e) { logUpdate('pré-quit error: ' + e.message); }
   setImmediate(() => autoUpdater.quitAndInstall(true, true));
 });
 
+// ── REUNIÕES (Fase 8) — desktopCapturer pra gravação de tela+áudio ──
+// Estratégia (Electron 29+):
+//  1) UI chama IPC 'get-screen-sources' pra mostrar picker próprio
+//  2) UI escolhe source e chama 'set-source-id' pra registrar a escolha no main
+//  3) UI chama navigator.mediaDevices.getDisplayMedia({video:true, audio:true})
+//  4) main intercepta via setDisplayMediaRequestHandler e retorna o source escolhido
+//
+// Permissões 'media' e 'display-capture' precisam ser explicitamente permitidas
+// pelo main process — sem isso, o Chromium nega com "Permission denied".
+let _reuniaoSelectedSource = null;
+// Cache pra que o setDisplayMediaRequestHandler responda síncrono — chamadas
+// assíncronas dentro do handler causaram bad IPC message (reason 263) que mata
+// o renderer no Electron 29 + Windows.
+let _reuniaoSourcesCache = [];
+
+ipcMain.handle('reunioes:get-screen-sources', async () => {
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 320, height: 180 },
+      fetchWindowIcons: true,
+    });
+    _reuniaoSourcesCache = sources; // pré-popula cache pro handler síncrono
+    return sources.map(s => ({
+      id: s.id,
+      name: s.name,
+      thumbnailDataURL: s.thumbnail?.toDataURL?.() || null,
+      appIconDataURL: s.appIcon?.toDataURL?.() || null,
+      display_id: s.display_id || null,
+    }));
+  } catch (e) {
+    console.error('[reunioes:get-screen-sources]', e);
+    return [];
+  }
+});
+
+ipcMain.handle('reunioes:set-source-id', (_e, id) => {
+  _reuniaoSelectedSource = id || null;
+  return { ok: true };
+});
+
+function _wireReuniaoCapture(win) {
+  if (!win || !win.webContents) return;
+  const sess = win.webContents.session;
+  // Permite captura de tela + media (mic, áudio do sistema). Sem isso, Chromium nega.
+  sess.setPermissionRequestHandler((wc, permission, callback) => {
+    if (permission === 'media' || permission === 'display-capture'
+        || permission === 'mediaKeySystem' || permission === 'background-sync') {
+      return callback(true);
+    }
+    callback(false);
+  });
+  sess.setPermissionCheckHandler((wc, permission) => {
+    if (permission === 'media' || permission === 'display-capture') return true;
+    return false;
+  });
+  // Handler SÍNCRONO — usa cache pré-populada via 'get-screen-sources'.
+  // `audio: 'loopback'` SÓ funciona quando source é tela inteira (screen:),
+  // não em janela individual. Pra janelas, retornamos só vídeo — caso
+  // contrário o getDisplayMedia falha com "Could not start audio source".
+  sess.setDisplayMediaRequestHandler((request, callback) => {
+    try {
+      const sources = _reuniaoSourcesCache;
+      if (!sources || sources.length === 0) {
+        console.warn('[setDisplayMediaRequestHandler] cache vazia — aborta');
+        return callback({});
+      }
+      let src = null;
+      if (_reuniaoSelectedSource) src = sources.find(s => s.id === _reuniaoSelectedSource);
+      if (!src) src = sources.find(s => s.id.startsWith('screen:')) || sources[0];
+      if (!src) return callback({});
+      const isScreen = (src.id || '').startsWith('screen:');
+      if (isScreen) {
+        callback({ video: src, audio: 'loopback' });
+      } else {
+        callback({ video: src }); // janela individual — só vídeo
+      }
+    } catch (e) {
+      console.error('[setDisplayMediaRequestHandler]', e);
+      try { callback({}); } catch {}
+    }
+  }, { useSystemPicker: false });
+}
+
+// ── AUDIT LOG (escrita JSONL local + fetch IP/geo via main) ──
+const auditLog = require('./auditLog');
+ipcMain.handle('audit-log:append', (_e, entry) => auditLog.appendLog(entry || {}));
+ipcMain.handle('audit-log:dir', () => auditLog.LOG_DIR);
+ipcMain.handle('audit-log:list', () => auditLog.listLogs());
+ipcMain.handle('audit-log:fetch-ip-geo', async () => {
+  try { return await auditLog.fetchIpGeo(); } catch (e) { return { ip: null, geo: null, error: e.message }; }
+});
+ipcMain.handle('audit-log:fetch-geo-fine', async () => {
+  try { return await auditLog.fetchGeoFine(); } catch (e) { return { error: e.message }; }
+});
+
 // ── CONFERÊNCIA DE ARQUIVOS ──
-ipcMain.handle('select-folder', async () => {
+ipcMain.handle('select-folder', async (_e, defaultPath) => {
   if (!mainWindow) return null;
-  const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
+  const opts = { properties: ['openDirectory'] };
+  if (defaultPath && fs.existsSync(defaultPath)) opts.defaultPath = defaultPath;
+  const result = await dialog.showOpenDialog(mainWindow, opts);
   return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('select-folders', async (_e, defaultPath) => {
+  if (!mainWindow) return [];
+  const opts = { properties: ['openDirectory', 'multiSelections'] };
+  if (defaultPath && fs.existsSync(defaultPath)) opts.defaultPath = defaultPath;
+  const result = await dialog.showOpenDialog(mainWindow, opts);
+  return result.canceled ? [] : result.filePaths;
 });
 
 ipcMain.handle('read-dir', async (event, folderPath) => {
@@ -311,12 +732,44 @@ ipcMain.handle('select-file', async (event, filters) => {
   return result.canceled ? null : result.filePaths[0];
 });
 
+ipcMain.handle('select-files', async (event, filters, defaultPath) => {
+  if (!mainWindow) return [];
+  const opts = {
+    properties: ['openFile', 'multiSelections'],
+    filters: filters || [{ name: 'Todos os arquivos', extensions: ['*'] }]
+  };
+  if (defaultPath && fs.existsSync(defaultPath)) opts.defaultPath = defaultPath;
+  const result = await dialog.showOpenDialog(mainWindow, opts);
+  return result.canceled ? [] : result.filePaths;
+});
+
 ipcMain.handle('parse-ose', async (event, { mapaDxf, perfisDxf, excelPath }) => {
   try {
     const { parseOse } = require('./parseOse');
     const data = parseOse({ mapaDxf, perfisDxf, excelPath });
     return { ok: true, data };
   } catch(e) {
+    // Erro estruturado quando um dos DXF não é ASCII — o renderer desenha
+    // um banner vermelho com instruções de como reexportar.
+    if (e && e.code === 'DXF_FORMAT') {
+      return {
+        ok: false,
+        error: e.message,
+        errorType: 'dxf_format',
+        dxfFormat: e.format,
+        dxfFile: e.fileName,
+      };
+    }
+    // DXF gigante: aborta rápido com mensagem clara em vez de deixar a UI travada.
+    if (e && e.code === 'DXF_TOO_LARGE') {
+      return {
+        ok: false,
+        error: e.message,
+        errorType: 'dxf_too_large',
+        dxfFile: e.fileName,
+        sizeMB: e.sizeMB,
+      };
+    }
     return { ok: false, error: e.message };
   }
 });
@@ -337,14 +790,28 @@ ipcMain.handle('rename-files', async (event, { folder, items }) => {
 const { buildOseWorkbook } = require('./exportOse');
 
 
-ipcMain.handle('export-ose-xlsx', async (event, { data, projectName }) => {
+ipcMain.handle('export-ose-xlsx', async (event, { data, projectName, tipoObra, excelFilename }) => {
   if (!mainWindow) return false;
   const result = await dialog.showSaveDialog(mainWindow, {
     defaultPath: (projectName || 'Relatório OSE') + '.xlsx',
     filters: [{ name: 'Excel', extensions: ['xlsx'] }]
   });
   if (result.canceled) return false;
-  const wb = buildOseWorkbook(data);
+  const wb = buildOseWorkbook(data, { tipoObra, excelFilename });
+  await wb.xlsx.writeFile(result.filePath);
+  return true;
+});
+
+const { buildCronogramaWorkbook } = require('./exportCronograma');
+
+ipcMain.handle('export-cronograma-xlsx', async (event, { rows, params, fileName }) => {
+  if (!mainWindow) return false;
+  const result = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: (fileName || 'Cronograma_2S_E-Agua') + '.xlsx',
+    filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+  });
+  if (result.canceled) return false;
+  const wb = buildCronogramaWorkbook(rows || [], params || {});
   await wb.xlsx.writeFile(result.filePath);
   return true;
 });
@@ -417,15 +884,18 @@ ipcMain.handle('dashboard:get-public-link', async () => {
   try {
     const cfg = readDashboardConfig();
     if (cfg.publicLink && cfg.publicLinkVersion === PUBLIC_LINK_VERSION) return { ok: true, url: cfg.publicLink };
-    // Tenta gerar via is.gd com alias custom; se já existir/falhar usa o default
+    // Tenta gerar via is.gd com alias custom; se já existir/falhar usa o default.
+    // Timeout de 5s pra não pendurar o renderer se is.gd estiver fora do ar.
     const https = require('https');
     const apiUrl = `https://is.gd/create.php?format=simple&url=${encodeURIComponent(PUBLIC_URL_FULL)}&shorturl=dashboard2seng`;
     const result = await new Promise((resolve) => {
-      https.get(apiUrl, (res) => {
+      const req = https.get(apiUrl, (res) => {
         let body = '';
         res.on('data', (c) => body += c);
         res.on('end', () => resolve(body.trim()));
-      }).on('error', () => resolve(null));
+      });
+      req.on('error', () => resolve(null));
+      req.setTimeout(5000, () => { req.destroy(); resolve(null); });
     });
     const url = (result && result.startsWith('https://is.gd/')) ? result : PUBLIC_URL_SHORT_DEFAULT;
     writeDashboardConfig({ ...cfg, publicLink: url, publicLinkVersion: PUBLIC_LINK_VERSION });
@@ -451,25 +921,744 @@ ipcMain.handle('dashboard:pick-file', async () => {
   return loadDashboardData();
 });
 
-app.whenReady().then(() => {
+// Dashboard setup — ADIADO pra depois do main carregar. Antes rodava em
+// app.whenReady (bloqueava startup com fs.readFileSync do xlsx do OneDrive,
+// que pode ser lento se OneDrive estiver sincronizando). Agora só dispara
+// quando o main estiver pronto (ver createMain → ready-to-show).
+function initDashboardBackground() {
   setupDashboardWatcher();
-  // Push inicial ao abrir
   const initRes = loadDashboardData();
   if (initRes.ok) pushDashboardToSupabase(initRes.data);
   dashboardInterval = setInterval(() => {
-    const res = loadDashboardData();
-    if (res.ok) {
-      mainWindow?.webContents.send('dashboard:data-updated', res.data);
-      pushDashboardToSupabase(res.data);
+    if (!dashboardWatchPath) {
+      setupDashboardWatcher();
+      const res = loadDashboardData();
+      if (res.ok) {
+        mainWindow?.webContents.send('dashboard:data-updated', res.data);
+        pushDashboardToSupabase(res.data);
+      }
     }
-    // Re-tenta configurar o watcher caso o arquivo apareça depois
-    if (!dashboardWatchPath) setupDashboardWatcher();
-  }, 60 * 1000); // 1 min (era 5)
+  }, 5 * 60 * 1000);
+}
+
+// ────────────────────────────────────────────────────────────────────
+// CIVIL 3D — extração da DLL embedded encriptada
+// ────────────────────────────────────────────────────────────────────
+//
+// A DLL do plugin Civil 3D fica criptografada em src/app/assets/civil3d.bin
+// (gerada por scripts/embed-civil3d.js). Quando o user com acesso clica
+// "Liberar Civil 3D" no Nexus, decryptamos pra %APPDATA%\Nexus\plugins\
+// e a DLL passa a poder ser carregada via NETLOAD.
+//
+// Quando o Nexus fecha, a DLL é apagada (lifecycle binding).
+// Sem Nexus aberto → DLL não existe no disco em formato utilizável.
+
+const C3D_KEY_SEED = 'NexusCivil3D-A2Z-Embed-2026-v1-SecureKeyDerivation';
+const C3D_PLUGIN_DIR  = path.join(os.homedir(), 'AppData', 'Roaming', 'Nexus', 'plugins');
+const C3D_PLUGIN_PATH = path.join(C3D_PLUGIN_DIR, 'GerarProjetoMND.dll');
+
+// Bundle permanente — instalado em %APPDATA%\Autodesk\ApplicationPlugins\Nexus.bundle\
+// Civil 3D carrega automaticamente sem precisar do Nexus rodar.
+const C3D_BUNDLE_ROOT = path.join(os.homedir(), 'AppData', 'Roaming', 'Autodesk', 'ApplicationPlugins', 'Nexus.bundle');
+const C3D_BUNDLE_DLL_DIR = path.join(C3D_BUNDLE_ROOT, 'Contents', 'Civil3D', '2026');
+const C3D_BUNDLE_DLL = path.join(C3D_BUNDLE_DLL_DIR, 'GerarProjetoMND.dll');
+const C3D_BUNDLE_XML = path.join(C3D_BUNDLE_ROOT, 'PackageContents.xml');
+const C3D_BUNDLE_VERSION_FILE = path.join(C3D_BUNDLE_ROOT, 'Version.txt');
+
+function c3dDeriveKey() {
+  const crypto = require('crypto');
+  return crypto.createHash('sha256').update(C3D_KEY_SEED, 'utf8').digest();
+}
+
+function c3dDecryptBlob(blob) {
+  const crypto = require('crypto');
+  if (blob.length < 4 + 1 + 12 + 16 + 4) throw new Error('blob inválido');
+  const magic = blob.slice(0, 4).toString('ascii');
+  if (magic !== 'NXC3') throw new Error('blob com magic incorreto');
+  const version = blob[4];
+  if (version !== 1) throw new Error('versão do blob não suportada: ' + version);
+  const iv  = blob.slice(5, 17);
+  const tag = blob.slice(17, 33);
+  const size = blob.readUInt32LE(33);
+  const ciphertext = blob.slice(37);
+
+  const key = c3dDeriveKey();
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  if (plain.length !== size) throw new Error('tamanho descriptografado incorreto');
+  return plain;
+}
+
+function c3dGetBlobPath() {
+  // No build (asar): o asset fica em <resources>/app.asar/src/app/assets/civil3d.bin
+  // No dev: D:\PROGRAMAÇÃO\NEXUS\src\app\assets\civil3d.bin
+  return path.join(__dirname, 'app', 'assets', 'civil3d.bin');
+}
+
+ipcMain.handle('civil3d:extract', async () => {
+  try {
+    const blobPath = c3dGetBlobPath();
+    if (!fs.existsSync(blobPath)) {
+      return { ok: false, error: 'Blob da DLL não encontrado no bundle. Build incompleto?' };
+    }
+    const blob = fs.readFileSync(blobPath);
+    const dll  = c3dDecryptBlob(blob);
+
+    fs.mkdirSync(C3D_PLUGIN_DIR, { recursive: true });
+    fs.writeFileSync(C3D_PLUGIN_PATH, dll);
+
+    return { ok: true, path: C3D_PLUGIN_PATH, size: dll.length };
+  } catch (e) {
+    logUpdate('civil3d:extract error: ' + e.message);
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('civil3d:cleanup', async () => {
+  return c3dCleanupSync();
+});
+
+ipcMain.handle('civil3d:status', async () => {
+  return {
+    ok: true,
+    extracted: fs.existsSync(C3D_PLUGIN_PATH),
+    path: C3D_PLUGIN_PATH,
+  };
+});
+
+// Tenta NETLOAD automático via COM Automation do AutoCAD/Civil 3D
+// Se Civil 3D não estiver aberto ou COM falhar, retorna ok:false (UI mostra
+// instrução manual). Roda PowerShell pra acessar AutoCAD.Application.
+ipcMain.handle('civil3d:netload', async () => {
+  try {
+    if (!fs.existsSync(C3D_PLUGIN_PATH)) {
+      return { ok: false, error: 'DLL não foi extraída ainda' };
+    }
+    const { spawn } = require('child_process');
+    const escapedPath = C3D_PLUGIN_PATH.replace(/'/g, "''");
+    const ps = `
+      $ErrorActionPreference = 'Stop';
+      try {
+        $acad = [Runtime.InteropServices.Marshal]::GetActiveObject('AutoCAD.Application');
+        $doc  = $acad.ActiveDocument;
+        $cmd  = '(command "_.NETLOAD" "' + '${escapedPath}'.Replace('\\\\','/') + '") ';
+        $doc.SendCommand($cmd);
+        Write-Output 'OK';
+      } catch {
+        Write-Output 'NO_INSTANCE';
+      }
+    `.trim();
+
+    return new Promise((resolve) => {
+      const p = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { windowsHide: true });
+      let out = '';
+      p.stdout.on('data', d => out += d.toString());
+      p.stderr.on('data', d => out += d.toString());
+      const timer = setTimeout(() => { try { p.kill(); } catch {} resolve({ ok:false, error:'timeout' }); }, 10000);
+      p.on('close', () => {
+        clearTimeout(timer);
+        if (out.trim() === 'OK') resolve({ ok: true });
+        else resolve({ ok: false, error: out.trim() || 'falha desconhecida' });
+      });
+    });
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+function c3dCleanupSync() {
+  try {
+    if (fs.existsSync(C3D_PLUGIN_PATH)) fs.unlinkSync(C3D_PLUGIN_PATH);
+    return { ok: true };
+  } catch (e) {
+    logUpdate('civil3d:cleanup error: ' + e.message);
+    return { ok: false, error: e.message };
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Bundle permanente — Civil 3D carrega no startup sem precisar do Nexus
+// ────────────────────────────────────────────────────────────────────
+
+function c3dGetBundleInstalledVersion() {
+  try {
+    if (!fs.existsSync(C3D_BUNDLE_VERSION_FILE)) return null;
+    return fs.readFileSync(C3D_BUNDLE_VERSION_FILE, 'utf8').trim();
+  } catch { return null; }
+}
+
+const C3D_DEPS_SRC_DIR = path.join(__dirname, 'app', 'assets', 'civil3d-deps');
+
+function c3dCopyDepsSync(destDir) {
+  try {
+    if (!fs.existsSync(C3D_DEPS_SRC_DIR)) return;
+    const walk = (src, dst) => {
+      for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+        const s = path.join(src, entry.name);
+        const d = path.join(dst, entry.name);
+        if (entry.isDirectory()) {
+          fs.mkdirSync(d, { recursive: true });
+          walk(s, d);
+        } else {
+          try { fs.copyFileSync(s, d); } catch (e) {
+            if (e.code !== 'EBUSY' && e.code !== 'EPERM') throw e;
+          }
+        }
+      }
+    };
+    walk(C3D_DEPS_SRC_DIR, destDir);
+  } catch (e) {
+    logUpdate('civil3d:bundle deps copy error: ' + e.message);
+  }
+}
+
+function c3dBundleIsInstalled() {
+  return fs.existsSync(C3D_BUNDLE_DLL) && fs.existsSync(C3D_BUNDLE_XML);
+}
+
+function c3dBuildPackageContents(version) {
+  return `<?xml version="1.0" encoding="utf-8"?>
+<ApplicationPackage SchemaVersion="1.0"
+    ProductType="Application"
+    Name="Nexus"
+    AppVersion="${version}"
+    Description="Nexus Civil 3D Plugin — A2Z Projetos"
+    Author="Lucas Nasser Santos Abdala">
+  <CompanyDetails Name="A2Z Projetos" />
+  <Components Description="Nexus Civil 3D 2026">
+    <RuntimeRequirements
+        OS="Win64"
+        Platform="Civil3D"
+        SeriesMin="R25.1"
+        SeriesMax="R25.1" />
+    <ComponentEntry
+        AppName="Nexus"
+        Version="${version}"
+        ModuleName="./Contents/Civil3D/2026/GerarProjetoMND.dll"
+        AppDescription="Nexus Civil 3D Plugin"
+        LoadOnAutoCADStartup="True"
+        PerDocument="True" />
+  </Components>
+</ApplicationPackage>
+`;
+}
+
+// Instala/atualiza o bundle. Idempotente — se já está instalado com a mesma
+// versão, não faz nada. Se Civil 3D estiver aberto, falha o write da DLL e
+// retorna { ok: false, restartCad: true }.
+function c3dInstallBundleSync() {
+  try {
+    const blobPath = c3dGetBlobPath();
+    if (!fs.existsSync(blobPath)) {
+      return { ok: false, error: 'Blob da DLL não encontrado.' };
+    }
+
+    const blob = fs.readFileSync(blobPath);
+    const dll  = c3dDecryptBlob(blob);
+    const version = (require('../package.json').version || '0.0.0');
+
+    // Skip se já instalado com mesma versão E DLL idêntica
+    const installedVersion = c3dGetBundleInstalledVersion();
+    if (installedVersion === version && fs.existsSync(C3D_BUNDLE_DLL)) {
+      try {
+        const existing = fs.readFileSync(C3D_BUNDLE_DLL);
+        if (existing.length === dll.length && existing.compare(dll) === 0) {
+          return { ok: true, alreadyInstalled: true, version };
+        }
+      } catch {}
+    }
+
+    fs.mkdirSync(C3D_BUNDLE_DLL_DIR, { recursive: true });
+
+    // Tenta escrever a DLL — se Civil 3D estiver aberto, vai dar EBUSY
+    try {
+      fs.writeFileSync(C3D_BUNDLE_DLL, dll);
+    } catch (e) {
+      if (e.code === 'EBUSY' || e.code === 'EPERM') {
+        return { ok: false, restartCad: true,
+          error: 'Civil 3D está aberto. Feche-o pra atualizar a DLL.' };
+      }
+      throw e;
+    }
+
+    fs.writeFileSync(C3D_BUNDLE_XML, c3dBuildPackageContents(version));
+    fs.writeFileSync(C3D_BUNDLE_VERSION_FILE, version + '\n');
+
+    c3dCopyDepsSync(C3D_BUNDLE_DLL_DIR);
+
+    logUpdate(`civil3d:bundle: instalado v${version} em ${C3D_BUNDLE_ROOT}`);
+    return { ok: true, version, path: C3D_BUNDLE_ROOT };
+  } catch (e) {
+    logUpdate('civil3d:bundle install error: ' + e.message);
+    return { ok: false, error: e.message };
+  }
+}
+
+// Flag levantada quando o auto-install detecta que o Civil 3D estava aberto e
+// segurou a DLL antiga (write deu EBUSY). Significa que o bundle está stale —
+// o user precisa fechar o CAD e abrir o Nexus de novo pra DLL nova entrar.
+let _c3dNeedsCadRestart = false;
+
+function _c3dEmitNeedsCadRestartToAllWindows() {
+  if (!_c3dNeedsCadRestart) return;
+  try {
+    const wins = require('electron').BrowserWindow.getAllWindows();
+    for (const w of wins) {
+      try { w.webContents.send('civil3d:bundle:needs-cad-restart'); } catch {}
+    }
+  } catch {}
+}
+
+ipcMain.handle('civil3d:bundle:status', async () => {
+  return {
+    ok: true,
+    installed: c3dBundleIsInstalled(),
+    version: c3dGetBundleInstalledVersion(),
+    path: C3D_BUNDLE_ROOT,
+    nexusVersion: (require('../package.json').version || '0.0.0'),
+    needsCadRestart: _c3dNeedsCadRestart,
+  };
+});
+
+ipcMain.handle('civil3d:bundle:install', async () => {
+  return c3dInstallBundleSync();
+});
+
+ipcMain.handle('civil3d:bundle:uninstall', async () => {
+  try {
+    if (fs.existsSync(C3D_BUNDLE_ROOT)) {
+      fs.rmSync(C3D_BUNDLE_ROOT, { recursive: true, force: true });
+    }
+    return { ok: true };
+  } catch (e) {
+    if (e.code === 'EBUSY' || e.code === 'EPERM') {
+      return { ok: false, restartCad: true, error: 'Civil 3D aberto.' };
+    }
+    return { ok: false, error: e.message };
+  }
+});
+
+// ── TOPOGRAFIA: Relatórios em lote a partir de TXTs GNSS RTK ──
+// Roda no main process pq usa chartjs-node-canvas (canvas nativo) + docx.
+// Carregamento lazy: só require quando o usuário ativa o fluxo TXT.
+ipcMain.handle('topografia:listar-cidades', async (_e, pastaRaiz) => {
+  try {
+    if (!pastaRaiz || !fs.existsSync(pastaRaiz)) return { ok: false, error: 'Pasta não encontrada' };
+
+    // Conta .txt recursivamente em uma pasta (o processador também varre recursivo).
+    const contarTxtRecursivo = (dir) => {
+      let total = 0;
+      try {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) total += contarTxtRecursivo(full);
+          else if (entry.isFile() && entry.name.toLowerCase().endsWith('.txt')) total++;
+        }
+      } catch {}
+      return total;
+    };
+
+    // Limpa nome da cidade: tira prefixo "NNN.", "NNN-", "NNN_" se houver e normaliza espaços.
+    const limparNome = (raw) => (raw || '').replace(/^\s*\d+\s*[.\-_]\s*/, '').trim() || raw;
+
+    const entries = fs.readdirSync(pastaRaiz, { withFileTypes: true });
+    const subdirsComTxt = entries
+      .filter(d => d.isDirectory())
+      .map(d => {
+        const dir = path.join(pastaRaiz, d.name);
+        return { pasta: dir, nome: limparNome(d.name), qtdTxt: contarTxtRecursivo(dir) };
+      })
+      .filter(c => c.qtdTxt > 0);
+
+    // Caso 1: pasta-raiz com subpastas/cidade — devolve a lista das subpastas.
+    if (subdirsComTxt.length > 0) {
+      return { ok: true, cidades: subdirsComTxt };
+    }
+
+    // Caso 2: pasta apontada É uma cidade (TXTs diretos dentro).
+    const qtdDireto = entries.filter(e => e.isFile() && e.name.toLowerCase().endsWith('.txt')).length;
+    if (qtdDireto > 0) {
+      return {
+        ok: true,
+        cidades: [{ pasta: pastaRaiz, nome: limparNome(path.basename(pastaRaiz)), qtdTxt: qtdDireto }],
+      };
+    }
+
+    return { ok: true, cidades: [] };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('topografia:gerar-lote', async (event, { cidades, pastaSaida, assinatura, uf }) => {
+  try {
+    const { gerarRelatorioCidade } = require('./modulos/topografia/src');
+    // Sanitiza nome de cidade pra pasta válida no Windows
+    const sanitize = (s) => String(s || '').replace(/[<>:"/\\|?*\x00-\x1F]/g, '').trim() || 'sem-nome';
+
+    const cidadesIn = (cidades || []).map(c => ({
+      pastaCidade: c.pasta,
+      municipio: c.municipio || c.nome,
+      uf: c.uf || uf || 'PR',
+      extensaoKm: c.extensaoKm,
+      mapaAbrangenciaPng: c.mapaAbrangenciaPng || undefined,
+      fotosEquipe: Array.isArray(c.fotosEquipe) ? c.fotosEquipe : [],
+      artImagens: Array.isArray(c.artImagens) ? c.artImagens : [],
+    }));
+
+    const debug = cidadesIn.map(c => ({
+      municipio: c.municipio,
+      fotos_enviadas: (c.fotosEquipe || []).length,
+      fotos_existem: (c.fotosEquipe || []).filter(f => f.caminho && fs.existsSync(f.caminho)).length,
+      art_enviada: (c.artImagens || []).length,
+      mapa: c.mapaAbrangenciaPng ? path.basename(c.mapaAbrangenciaPng) : null,
+    }));
+    try { console.log('[topografia:gerar-lote] payload:', JSON.stringify(debug, null, 2)); } catch {}
+
+    // Cada cidade vai pra subpasta "RELATÓRIOS - <Município>" dentro de pastaSaida.
+    const resultados = [];
+    const total = cidadesIn.length;
+    for (let idx = 0; idx < total; idx++) {
+      const c = cidadesIn[idx];
+      const cidadePastaSaida = path.join(pastaSaida, 'RELATÓRIOS - ' + sanitize(c.municipio));
+      try {
+        const r = await gerarRelatorioCidade({
+          ...c,
+          pastaSaida: cidadePastaSaida,
+          onProgresso: (etapa, pct) => {
+            try { event.sender.send('topografia:progresso', { municipio: c.municipio, idx, total, etapa, pct }); } catch {}
+          },
+        });
+        resultados.push({ municipio: c.municipio, sucesso: true, caminhoDocx: r.caminhoDocx });
+      } catch (err) {
+        resultados.push({ municipio: c.municipio, sucesso: false, erro: err.message });
+      }
+    }
+
+    return { ok: true, resultados, debug };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// Pré-visualização: gera DOCX (pra UMA cidade) numa pasta temp e devolve o caminho.
+// O renderer lê esse arquivo via fs e renderiza com docx-preview embed dentro do app.
+ipcMain.handle('topografia:preview-cidade', async (event, params) => {
+  try {
+    const { gerarRelatorioCidade } = require('./modulos/topografia/src');
+    const tmpRoot = path.join(app.getPath('temp'), 'nexus-topo-preview');
+    if (!fs.existsSync(tmpRoot)) fs.mkdirSync(tmpRoot, { recursive: true });
+    const pastaSaida = path.join(tmpRoot, 'preview-' + Date.now());
+    fs.mkdirSync(pastaSaida, { recursive: true });
+    const r = await gerarRelatorioCidade({
+      pastaCidade: params.pasta,
+      municipio: params.municipio || params.nome,
+      uf: params.uf || 'PR',
+      pastaSaida,
+      extensaoKm: params.extensaoKm,
+      mapaAbrangenciaPng: params.mapaAbrangenciaPng || undefined,
+      fotosEquipe: Array.isArray(params.fotosEquipe) ? params.fotosEquipe : [],
+      artImagens: Array.isArray(params.artImagens) ? params.artImagens : [],
+      onProgresso: (etapa, pct) => {
+        try { event.sender.send('topografia:progresso', { municipio: params.municipio || params.nome, idx: 0, total: 1, etapa, pct }); } catch {}
+      },
+    });
+    const buf = fs.readFileSync(r.caminhoDocx);
+    return { ok: true, caminho: r.caminhoDocx, base64: buf.toString('base64'), stats: r.stats };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// Escaneia pasta de fotos e tenta auto-detectar data + equipe.
+// Procura padrão de data (DD-MM-YYYY/YY com separadores . _ - /) e equipe
+// (Equipe NN / EqNN) PRIMEIRO no nome do arquivo, depois no nome da pasta-pai,
+// depois na pasta-avó. Usuário organiza por pastas com nomes tipo "Equipe 01 - 11-12-2025".
+ipcMain.handle('topografia:scan-fotos', async (_e, pastaFotos) => {
+  try {
+    if (!pastaFotos || !fs.existsSync(pastaFotos)) return { ok: false, error: 'Pasta não encontrada' };
+    const exts = new Set(['.jpg', '.jpeg', '.png']);
+    // Prefere ISO YYYY-MM-DD (4 dígitos primeiro), cai pra BR DD-MM-YYYY.
+    const reDataISO = /(?:^|[^0-9])(20\d{2})[-_./](\d{2})[-_./](\d{2})(?:[^0-9]|$)/;
+    const reDataBR  = /(?:^|[^0-9])(\d{2})[-_./](\d{2})[-_./](\d{2,4})(?:[^0-9]|$)/;
+    const reEquipe = /(?:equipe|eq)\s*[_\s-]?(\d{1,3})/i;
+    const ano4 = (y) => y.length === 2 ? ('20' + y) : y;
+
+    const extrair = (str) => {
+      if (!str) return { data: null, equipe: null };
+      let data = null;
+      const mISO = str.match(reDataISO);
+      if (mISO) {
+        // YYYY-MM-DD → DD/MM/YYYY
+        data = `${mISO[3]}/${mISO[2]}/${mISO[1]}`;
+      } else {
+        const mBR = str.match(reDataBR);
+        if (mBR) data = `${mBR[1]}/${mBR[2]}/${ano4(mBR[3])}`;
+      }
+      const mEq = str.match(reEquipe);
+      return {
+        data,
+        equipe: mEq ? `Equipe ${String(parseInt(mEq[1], 10)).padStart(2, '0')}` : null,
+      };
+    };
+
+    const pastaPaiNome = path.basename(pastaFotos);
+    const pastaAvoNome = path.basename(path.dirname(pastaFotos));
+    const ctxPai = extrair(pastaPaiNome);
+    const ctxAvo = extrair(pastaAvoNome);
+
+    const arquivos = fs.readdirSync(pastaFotos, { withFileTypes: true })
+      .filter(e => e.isFile())
+      .filter(e => exts.has(path.extname(e.name).toLowerCase()));
+
+    const fotos = arquivos.map(e => {
+      const baseNoExt = path.basename(e.name, path.extname(e.name));
+      const ctxArq = extrair(baseNoExt);
+      const data = ctxArq.data || ctxPai.data || ctxAvo.data;
+      const equipe = ctxArq.equipe || ctxPai.equipe || ctxAvo.equipe;
+      return {
+        caminho: path.join(pastaFotos, e.name),
+        nome: e.name,
+        data, equipe,
+        valido: !!(data && equipe),
+        origem: ctxArq.data && ctxArq.equipe ? 'arquivo' : (ctxPai.data || ctxPai.equipe ? 'pasta' : 'avo'),
+      };
+    });
+
+    return { ok: true, fotos };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// Config persistente do módulo topografia (ART do contrato, caminhos default, etc.)
+function getTopografiaConfigPath() {
+  return path.join(app.getPath('userData'), 'topografia-config.json');
+}
+function readTopografiaConfig() {
+  try { return JSON.parse(fs.readFileSync(getTopografiaConfigPath(), 'utf8')); } catch (_) { return {}; }
+}
+function writeTopografiaConfig(obj) {
+  try {
+    fs.mkdirSync(path.dirname(getTopografiaConfigPath()), { recursive: true });
+    fs.writeFileSync(getTopografiaConfigPath(), JSON.stringify(obj, null, 2));
+  } catch (e) { logUpdate('topografia-config write error: ' + e.message); }
+}
+
+ipcMain.handle('topografia:config-get', async () => {
+  return readTopografiaConfig();
+});
+ipcMain.handle('topografia:config-set', async (_e, patch) => {
+  const cur = readTopografiaConfig();
+  writeTopografiaConfig({ ...cur, ...patch });
+  return { ok: true };
+});
+
+// Mesma lógica de extração mas pra lista de arquivos individuais (usuário entrou na pasta
+// e selecionou as fotos no Explorer). Tenta extrair data/equipe do nome do arquivo e
+// cai pra nome da pasta-pai/avó como fallback.
+ipcMain.handle('topografia:scan-fotos-arquivos', async (_e, caminhos) => {
+  try {
+    const arr = Array.isArray(caminhos) ? caminhos : [caminhos];
+    const exts = new Set(['.jpg', '.jpeg', '.png']);
+    // Prefere ISO YYYY-MM-DD (4 dígitos primeiro), cai pra BR DD-MM-YYYY.
+    const reDataISO = /(?:^|[^0-9])(20\d{2})[-_./](\d{2})[-_./](\d{2})(?:[^0-9]|$)/;
+    const reDataBR  = /(?:^|[^0-9])(\d{2})[-_./](\d{2})[-_./](\d{2,4})(?:[^0-9]|$)/;
+    const reEquipe = /(?:equipe|eq)\s*[_\s-]?(\d{1,3})/i;
+    const ano4 = (y) => y.length === 2 ? ('20' + y) : y;
+    const extrair = (str) => {
+      if (!str) return { data: null, equipe: null };
+      let data = null;
+      const mISO = str.match(reDataISO);
+      if (mISO) {
+        // YYYY-MM-DD → DD/MM/YYYY
+        data = `${mISO[3]}/${mISO[2]}/${mISO[1]}`;
+      } else {
+        const mBR = str.match(reDataBR);
+        if (mBR) data = `${mBR[1]}/${mBR[2]}/${ano4(mBR[3])}`;
+      }
+      const mEq = str.match(reEquipe);
+      return {
+        data,
+        equipe: mEq ? `Equipe ${String(parseInt(mEq[1], 10)).padStart(2, '0')}` : null,
+      };
+    };
+
+    const fotos = arr
+      .filter(cam => cam && fs.existsSync(cam) && exts.has(path.extname(cam).toLowerCase()))
+      .map(cam => {
+        const dir = path.dirname(cam);
+        const nome = path.basename(cam);
+        const baseNoExt = path.basename(nome, path.extname(nome));
+        const ctxArq = extrair(baseNoExt);
+        const ctxPai = extrair(path.basename(dir));
+        const ctxAvo = extrair(path.basename(path.dirname(dir)));
+        const data = ctxArq.data || ctxPai.data || ctxAvo.data;
+        const equipe = ctxArq.equipe || ctxPai.equipe || ctxAvo.equipe;
+        return {
+          caminho: cam,
+          nome,
+          data, equipe,
+          valido: !!(data && equipe),
+          origem: ctxArq.data && ctxArq.equipe ? 'arquivo' : (ctxPai.data || ctxPai.equipe ? 'pasta' : 'avo'),
+        };
+      });
+    return { ok: true, fotos };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// ART: aceita PDF (converte cada página em PNG via pdf-to-png-converter) ou PNG/JPG direto.
+// Retorna paths absolutos de PNGs prontos pra serem injetados no template.
+ipcMain.handle('topografia:converter-art', async (_e, caminhos) => {
+  try {
+    const arr = Array.isArray(caminhos) ? caminhos : [caminhos];
+    const resultadoPngs = [];
+    for (const cam of arr) {
+      if (!cam || !fs.existsSync(cam)) continue;
+      const ext = path.extname(cam).toLowerCase();
+      if (ext === '.png' || ext === '.jpg' || ext === '.jpeg') {
+        resultadoPngs.push(cam);
+        continue;
+      }
+      if (ext === '.pdf') {
+        try {
+          // Polyfill — pdf-to-png-converter usa pdfjs que precisa DOMMatrix/ImageData/Path2D.
+          // Em Node esses globais não existem; @napi-rs/canvas fornece. Idempotente.
+          try {
+            const _napi = require('@napi-rs/canvas');
+            if (!global.DOMMatrix && _napi.DOMMatrix) global.DOMMatrix = _napi.DOMMatrix;
+            if (!global.ImageData && _napi.ImageData) global.ImageData = _napi.ImageData;
+            if (!global.Path2D && _napi.Path2D) global.Path2D = _napi.Path2D;
+            if (!global.DOMPoint && _napi.DOMPoint) global.DOMPoint = _napi.DOMPoint;
+            if (!global.DOMRect && _napi.DOMRect) global.DOMRect = _napi.DOMRect;
+          } catch {}
+          const { pdfToPng } = require('pdf-to-png-converter');
+          const outDir = path.join(app.getPath('temp'), 'nexus-art-' + Date.now());
+          fs.mkdirSync(outDir, { recursive: true });
+          const pages = await pdfToPng(cam, {
+            outputFolder: outDir,
+            outputFileMask: 'art_pagina',
+            viewportScale: 2.0,
+          });
+          for (const p of pages) resultadoPngs.push(p.path);
+        } catch (e) {
+          return { ok: false, error: `Falha ao converter PDF ${path.basename(cam)}: ${e.message}` };
+        }
+      }
+    }
+    return { ok: true, pngs: resultadoPngs };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('topografia:abrir-pasta', async (_e, p) => {
+  try { await shell.openPath(p); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// Auto-install/refresh no startup do Nexus. Roda silencioso; falhas (Civil
+// 3D aberto, etc) ficam no log e podem ser tentadas de novo via UI.
+function c3dAutoInstallBundleOnStartup() {
+  try {
+    // Sempre chama c3dInstallBundleSync — ele compara byte-a-byte e faz skip se
+    // a DLL no bundle já é idêntica. Comparar só pela versão deixa passar
+    // updates onde a versão "bate" mas a DLL embedded mudou (ex: hot-fix).
+    const r = c3dInstallBundleSync();
+    if (r.ok) {
+      logUpdate(`civil3d:bundle: auto-install ok v${r.version}`);
+      _c3dNeedsCadRestart = false;
+      try { c3dEnsureTrustedPath(); } catch {}
+    }
+    else if (r.restartCad) {
+      logUpdate('civil3d:bundle: skip (CAD aberto) — bundle stale, flagged needs-cad-restart');
+      _c3dNeedsCadRestart = true;
+      // Emite pra janelas já abertas; também temos hook em browser-window-created
+      // pra pegar janelas que ainda vão subir.
+      _c3dEmitNeedsCadRestartToAllWindows();
+    }
+    else logUpdate('civil3d:bundle: auto-install falhou: ' + (r.error || ''));
+  } catch (e) {
+    logUpdate('civil3d:bundle: auto-install exception: ' + e.message);
+  }
+}
+
+// Quando qualquer janela termina de carregar, se a flag estiver ativa, manda o
+// aviso. Cobre o caso do auto-install rodar antes do mainWindow existir.
+app.on('browser-window-created', (_e, win) => {
+  try {
+    win.webContents.on('did-finish-load', () => {
+      if (_c3dNeedsCadRestart) {
+        try { win.webContents.send('civil3d:bundle:needs-cad-restart'); } catch {}
+      }
+    });
+  } catch {}
+});
+
+// Adiciona o path do bundle ao TRUSTEDPATHS do Civil 3D 2026 via registro,
+// pra DLL carregar sem o prompt SECURELOAD ("DLL não confiável, deseja carregar?").
+// O TRUSTEDPATHS fica em:
+//   HKCU\Software\Autodesk\AutoCAD\R25.1\<ProductKey>\Profiles\<Profile>\General
+//   ValueName: TrustedPaths (REG_SZ, paths separados por ;)
+function c3dEnsureTrustedPath() {
+  try {
+    const { execSync } = require('child_process');
+    const trustedDir = C3D_BUNDLE_DLL_DIR;  // …\Nexus.bundle\Contents\Civil3D\2026
+    // PowerShell que percorre todos os profiles do Civil 3D 2026 e garante o path.
+    // Idempotente: se path já está presente, não duplica.
+    const ps = `
+$ErrorActionPreference = 'SilentlyContinue';
+$bundlePath = '${trustedDir.replace(/'/g, "''")}';
+$baseRegPath = 'HKCU:\\Software\\Autodesk\\AutoCAD\\R25.1';
+if (-not (Test-Path $baseRegPath)) { exit 0; }
+
+Get-ChildItem $baseRegPath -ErrorAction SilentlyContinue | ForEach-Object {
+  $productKey = $_.PSChildName;
+  $profilesPath = "$baseRegPath\\$productKey\\Profiles";
+  if (-not (Test-Path $profilesPath)) { return; }
+
+  Get-ChildItem $profilesPath -ErrorAction SilentlyContinue | ForEach-Object {
+    $profile = $_.PSChildName;
+    $generalPath = "$profilesPath\\$profile\\General";
+    if (-not (Test-Path $generalPath)) {
+      New-Item -Path $generalPath -Force | Out-Null;
+    }
+    $current = (Get-ItemProperty -Path $generalPath -Name 'TrustedPaths' -ErrorAction SilentlyContinue).TrustedPaths;
+    if (-not $current) { $current = ''; }
+    $parts = $current -split ';' | Where-Object { $_ -and $_.Trim() };
+    if ($parts -notcontains $bundlePath) {
+      $newValue = if ($current) { "$current;$bundlePath" } else { $bundlePath };
+      Set-ItemProperty -Path $generalPath -Name 'TrustedPaths' -Value $newValue -Type String -Force;
+    }
+  };
+};
+exit 0;
+`.trim();
+
+    execSync(`powershell.exe -NoProfile -NonInteractive -Command "${ps.replace(/"/g, '\\"')}"`, {
+      windowsHide: true,
+      timeout: 8000,
+      stdio: 'ignore',
+    });
+    logUpdate(`civil3d:bundle: TrustedPaths atualizado pra incluir ${trustedDir}`);
+  } catch (e) {
+    logUpdate('civil3d:bundle: TrustedPaths falhou: ' + e.message);
+  }
+}
+
+// Apaga a DLL extraída quando o Nexus fecha (lifecycle binding).
+// Civil 3D pode ainda estar aberto e ter a DLL em memória — isso é OK,
+// o que importa é que a DLL no disco desaparece junto com o Nexus.
+app.on('before-quit', () => {
+  try { c3dCleanupSync(); } catch {}
 });
 
 ipcMain.on('sign-out', ()=>{
   sessionUser = null;
   updateState = { status: 'idle', version: null };
+  try { c3dCleanupSync(); } catch {}
   if (mainWindow) { mainWindow.close(); mainWindow = null; }
   createSplash();
 });
