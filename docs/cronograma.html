@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cronograma de Entregas — 2S Engenharia · E-Água</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',-apple-system,sans-serif;font-size:14px;background:#0a0f1e;color:#f1f5f9;min-height:100vh}
+.topbar{background:#060d1a;border-bottom:1px solid rgba(8,145,178,.25);height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:100}
+.brand{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;color:#fff}
+.brand img{height:30px;width:auto;object-fit:contain;border-radius:6px;background:#fff;padding:2px}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 10px #4ade80;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.live-label{font-size:12px;color:#4ade80;font-weight:500}
+.body{max-width:1140px;margin:0 auto;padding:24px 20px 60px}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.stat-card{background:#111827;border:1px solid #1e293b;border-radius:10px;padding:16px}
+.stat-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;opacity:.7}
+.stat-val{font-size:30px;font-weight:700}
+.stat-sub{font-size:11px;color:#64748b;margin-top:3px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;margin-bottom:14px}
+@media(max-width:820px){.grid2{grid-template-columns:1fr}}
+.card{background:#111827;border:1px solid #1e293b;border-radius:10px;overflow:hidden}
+.card-hdr{padding:12px 20px;border-bottom:1px solid #1e293b;font-size:13px;font-weight:600;color:#f1f5f9;display:flex;align-items:center;justify-content:space-between}
+.chart-pad{padding:16px;height:280px;position:relative}
+.row{display:grid;grid-template-columns:1.4fr 1fr 90px 110px;gap:10px;align-items:center;padding:10px 18px;border-bottom:1px solid #1e293b;font-size:12px}
+.row.head{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#64748b;font-weight:700;background:#0d1424;position:sticky;top:56px}
+.row:hover:not(.head){background:#1e293b}
+.bar{height:7px;background:#1e293b;border-radius:5px;overflow:hidden}
+.bar>div{height:100%;background:#0891b2}
+.badge{font-size:10px;padding:1px 8px;border-radius:8px;font-weight:700}
+.empty{padding:32px;text-align:center;color:#475569;font-size:13px}
+.footer{text-align:center;font-size:11px;color:#334155;margin-top:40px}
+.tabs{display:flex;gap:6px;margin-bottom:14px}
+.tab{padding:6px 14px;border-radius:8px;border:1px solid #1e293b;background:#111827;color:#94a3b8;font-size:12px;font-weight:600;cursor:pointer}
+.tab.on{background:#0891b2;color:#fff;border-color:#0891b2}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">
+    <img src="nexus/assets/logo-2s.png" onerror="this.style.display='none'" alt="2S">
+    <span>Cronograma de Entregas<span style="color:#38bdf8;font-weight:400"> · 2S Engenharia × E-Água</span></span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="live-dot"></div><span class="live-label">Tempo real</span>
+  </div>
+</div>
+
+<div class="body">
+  <div class="stats">
+    <div class="stat-card"><div class="stat-label" style="color:#94a3b8">Atividades</div><div class="stat-val" id="sTotal">—</div><div class="stat-sub" id="sCidades"></div></div>
+    <div class="stat-card"><div class="stat-label" style="color:#16a34a">Concluídas</div><div class="stat-val" id="sConcl" style="color:#4ade80">—</div><div class="stat-sub" id="sConclPct"></div></div>
+    <div class="stat-card"><div class="stat-label" style="color:#2563eb">Em andamento</div><div class="stat-val" id="sAnda" style="color:#60a5fa">—</div></div>
+    <div class="stat-card"><div class="stat-label" style="color:#dc2626">Atrasadas</div><div class="stat-val" id="sAtras" style="color:#f87171">—</div><div class="stat-sub" id="sNoPrazo"></div></div>
+    <div class="stat-card"><div class="stat-label" style="color:#0891b2">Progresso</div><div class="stat-val" id="sProg" style="color:#38bdf8">—</div><div class="bar" style="margin-top:8px"><div id="sProgBar" style="width:0%"></div></div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card"><div class="card-hdr">Status das atividades</div><div class="chart-pad"><canvas id="chStatus"></canvas></div></div>
+    <div class="card"><div class="card-hdr">Progresso por etapa</div><div class="chart-pad"><canvas id="chEtapa"></canvas></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hdr">
+      <span>Cidades / distritos</span>
+      <div class="tabs" id="sortTabs">
+        <span class="tab on" data-sort="atraso">Mais atrasadas</span>
+        <span class="tab" data-sort="nome">A-Z</span>
+        <span class="tab" data-sort="prox">Próxima entrega</span>
+      </div>
+    </div>
+    <div class="row head"><div>Cidade</div><div>Progresso</div><div>Atrasos</div><div>Próxima</div></div>
+    <div id="cityList"><div class="empty">Carregando…</div></div>
+  </div>
+
+  <div class="footer">Atualizado em tempo real · Nexus — A2Z Projetos / 2S Engenharia</div>
+</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const sb = createClient(
+  'https://xszpzsmdpbgaiodeqcpi.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhzenB6c21kcGJnYWlvZGVxY3BpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzMTI5ODYsImV4cCI6MjA4OTg4ODk4Nn0.Wv_tcovD5nc13tmrfkgsVb6M6tS-CC7q6HVjphpzTrQ'
+);
+
+const ATIV_LBL={STREAM:'STREAM',PROJ_BASICO:'Projeto Básico',PROJ_EXECUTIVO:'Projeto Executivo',EEE_LRE:'EEE + LRE'};
+const today=new Date().toISOString().slice(0,10);
+const isDone=a=>/CONCLU|Aprovado/i.test(a.status||'')||!!a.real_fim;
+const isLate=a=>a.previsao_fim&&a.previsao_fim<today&&!isDone(a);
+const fmtD=s=>{ if(!s)return '—'; const x=String(s).slice(0,10).split('-'); return x.length===3?x[2]+'/'+x[1]+'/'+x[0]:s; };
+let DATA=[], SORT='atraso', chS=null, chE=null;
+
+async function load(){
+  const {data,error}=await sb.rpc('cronograma_publico');
+  if(error){ document.getElementById('cityList').innerHTML='<div class="empty">Erro ao carregar: '+error.message+'</div>'; return; }
+  DATA=data||[]; render();
+}
+
+function render(){
+  const n=DATA.length, done=DATA.filter(isDone).length, late=DATA.filter(isLate).length;
+  const anda=DATA.filter(a=>!isDone(a)&&!isLate(a)&&(a.real_inicio||/Elabora|revis|execut/i.test(a.status||''))).length;
+  const cidades=new Set(DATA.map(a=>a.municipio)).size;
+  const pct=n?Math.round(done/n*100):0;
+  const noPrazo=n?Math.round((n-late)/n*100):0;
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  set('sTotal',n); set('sCidades',cidades+' cidades'); set('sConcl',done); set('sConclPct',pct+'% do total');
+  set('sAnda',anda); set('sAtras',late); set('sNoPrazo',noPrazo+'% no prazo'); set('sProg',pct+'%');
+  document.getElementById('sProgBar').style.width=pct+'%';
+
+  // Doughnut status
+  const buckets={'Concluído':0,'Em andamento':0,'Atrasada':0,'A iniciar':0};
+  DATA.forEach(a=>{ if(isDone(a))buckets['Concluído']++; else if(isLate(a))buckets['Atrasada']++; else if(/Elabora|revis|execut/i.test(a.status||'')||a.real_inicio)buckets['Em andamento']++; else buckets['A iniciar']++; });
+  drawDoughnut(buckets);
+
+  // Bar por etapa
+  const etapas={STREAM:{d:0,t:0},PROJ_BASICO:{d:0,t:0},PROJ_EXECUTIVO:{d:0,t:0},EEE_LRE:{d:0,t:0}};
+  DATA.forEach(a=>{ const e=etapas[a.atividade]; if(!e)return; e.t++; if(isDone(a))e.d++; });
+  drawEtapa(etapas);
+
+  // Cidades
+  const byCity={};
+  DATA.forEach(a=>{ const k=a.municipio||'—'; const c=byCity[k]||(byCity[k]={nome:k,ord:a.ord,n:0,done:0,late:0,prox:null});
+    c.n++; if(isDone(a))c.done++; if(isLate(a))c.late++;
+    if(!isDone(a)&&a.previsao_fim&&(!c.prox||a.previsao_fim<c.prox))c.prox=a.previsao_fim; });
+  let cities=Object.values(byCity);
+  if(SORT==='nome')cities.sort((a,b)=>a.nome.localeCompare(b.nome));
+  else if(SORT==='prox')cities.sort((a,b)=>(a.prox||'9999').localeCompare(b.prox||'9999'));
+  else cities.sort((a,b)=>b.late-a.late||(b.done/b.n)-(a.done/a.n));
+  const el=document.getElementById('cityList');
+  el.innerHTML=cities.map(c=>{ const p=Math.round(c.done/c.n*100);
+    const lateB=c.late>0?'<span class="badge" style="background:#7f1d1d;color:#fca5a5">'+c.late+' atrasada(s)</span>':'<span class="badge" style="background:#14532d;color:#86efac">em dia</span>';
+    return '<div class="row"><div style="font-weight:600">'+esc(c.nome)+'</div>'+
+      '<div><div class="bar"><div style="width:'+p+'%;background:'+(p>=100?'#16a34a':'#0891b2')+'"></div></div><div style="font-size:10px;color:#64748b;margin-top:3px">'+c.done+'/'+c.n+' · '+p+'%</div></div>'+
+      '<div>'+lateB+'</div><div style="color:#94a3b8">'+fmtD(c.prox)+'</div></div>';
+  }).join('')||'<div class="empty">Sem dados.</div>';
+}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+
+function drawDoughnut(b){
+  const ctx=document.getElementById('chStatus');
+  const cfg={type:'doughnut',data:{labels:Object.keys(b),datasets:[{data:Object.values(b),backgroundColor:['#16a34a','#2563eb','#dc2626','#475569'],borderColor:'#0a0f1e',borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#cbd5e1',font:{size:12},padding:12}}}}};
+  if(chS)chS.destroy(); chS=new Chart(ctx,cfg);
+}
+function drawEtapa(e){
+  const labels=Object.keys(e).map(k=>ATIV_LBL[k]);
+  const pcts=Object.values(e).map(x=>x.t?Math.round(x.d/x.t*100):0);
+  const ctx=document.getElementById('chEtapa');
+  const cfg={type:'bar',data:{labels,datasets:[{label:'% concluído',data:pcts,backgroundColor:'#0891b2',borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',scales:{x:{max:100,ticks:{color:'#64748b',callback:v=>v+'%'},grid:{color:'#1e293b'}},y:{ticks:{color:'#cbd5e1'},grid:{display:false}}},plugins:{legend:{display:false}}}};
+  if(chE)chE.destroy(); chE=new Chart(ctx,cfg);
+}
+
+document.getElementById('sortTabs').addEventListener('click',e=>{
+  const t=e.target.closest('.tab'); if(!t)return;
+  document.querySelectorAll('#sortTabs .tab').forEach(x=>x.classList.remove('on')); t.classList.add('on');
+  SORT=t.dataset.sort; render();
+});
+
+load();
+sb.channel('crono-pub').on('postgres_changes',{event:'*',schema:'public',table:'cronograma_atividades'},load).subscribe();
+setInterval(load,60000);
+</script>
+</body>
+</html>
