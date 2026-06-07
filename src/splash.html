@@ -17,7 +17,7 @@ body{
   user-select:none;
   -webkit-app-region:drag;
   overflow:hidden;
-  background: #0a0a0a;
+  background: #0a0f1e;
 }
 
 button,input{-webkit-app-region:no-drag}
@@ -45,7 +45,7 @@ button,input{-webkit-app-region:no-drag}
   display:flex;align-items:center;gap:14px;
   padding:16px 18px 15px;
   border-bottom:1px solid rgba(255,255,255,.08);
-  background:linear-gradient(180deg,rgba(10,10,10,.07) 0%,rgba(255,255,255,.01) 100%);
+  background:linear-gradient(180deg,rgba(37,99,235,.07) 0%,rgba(255,255,255,.01) 100%);
   flex-shrink:0;position:relative;z-index:1;
 }
 .brand-logo{height:40px;width:auto;opacity:.95}
@@ -79,25 +79,25 @@ button,input{-webkit-app-region:no-drag}
 .product-icon{
   width:46px;height:46px;flex-shrink:0;
   background:linear-gradient(135deg,#1a3358 0%,#0d1829 100%);
-  border:1.5px solid rgba(10,10,10,.45);
+  border:1.5px solid rgba(37,99,235,.45);
   border-radius:13px;
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 0 22px rgba(10,10,10,.22),inset 0 1px 0 rgba(255,255,255,.06);
+  box-shadow:0 0 22px rgba(37,99,235,.22),inset 0 1px 0 rgba(255,255,255,.06);
 }
 .product-info{flex:1;min-width:0}
 .product-name{
   font-size:21px;font-weight:800;
   letter-spacing:-.5px;color:#fff;line-height:1;
 }
-.product-name span{color:#9E9E9E}
+.product-name span{color:#3b82f6}
 .product-sub{
   font-size:11px;font-weight:500;
   color:#c7c7cc;text-transform:uppercase;letter-spacing:1.5px;margin-top:4px;
 }
 .version-pill{
   font-size:11px;font-weight:600;
-  background:rgba(10,10,10,.12);color:#c7c7cc;
-  border:1px solid rgba(10,10,10,.22);
+  background:rgba(37,99,235,.12);color:#c7c7cc;
+  border:1px solid rgba(37,99,235,.22);
   padding:3px 10px;border-radius:20px;
   font-family:'JetBrains Mono',monospace;
   white-space:nowrap;align-self:flex-start;margin-top:3px;flex-shrink:0;
@@ -152,7 +152,7 @@ button,input{-webkit-app-region:no-drag}
 }
 .upd-dot.checking{background:#f59e0b;animation:dotPulse 1s ease-in-out infinite}
 .upd-dot.ok{background:#22c55e;box-shadow:0 0 7px rgba(34,197,94,.55)}
-.upd-dot.avail{background:#9E9E9E;box-shadow:0 0 7px rgba(59,130,246,.55)}
+.upd-dot.avail{background:#3b82f6;box-shadow:0 0 7px rgba(59,130,246,.55)}
 .upd-dot.dl{background:#8b5cf6;animation:dotPulse .8s ease-in-out infinite}
 @keyframes dotPulse{0%,100%{opacity:.4}50%{opacity:1}}
 .upd-lbl{
@@ -163,19 +163,19 @@ button,input{-webkit-app-region:no-drag}
 
 .upd-progress{margin-top:9px;display:none}
 .upd-bar{height:3px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;margin-bottom:4px}
-.upd-fill{height:100%;background:linear-gradient(90deg,#0a0a0a,#c7c7cc);border-radius:3px;transition:width .3s;width:0%}
+.upd-fill{height:100%;background:linear-gradient(90deg,#2563eb,#c7c7cc);border-radius:3px;transition:width .3s;width:0%}
 .upd-pct{font-size:11px;color:#475569;text-align:right;font-family:'JetBrains Mono',monospace}
 
 .btn-dl-update{
   display:none;margin-top:8px;width:100%;
   padding:7px 12px;
-  background:rgba(10,10,10,.12);
-  border:1px solid rgba(10,10,10,.3);
+  background:rgba(37,99,235,.12);
+  border:1px solid rgba(37,99,235,.3);
   border-radius:7px;color:#c7c7cc;
   font-family:'Segoe UI Variable','Segoe UI',system-ui,sans-serif;font-size:12px;font-weight:600;
   cursor:pointer;transition:all .15s;text-align:center;
 }
-.btn-dl-update:hover{background:rgba(10,10,10,.22)}
+.btn-dl-update:hover{background:rgba(37,99,235,.22)}
 .btn-restart-update{
   display:none;margin-top:8px;width:100%;
   padding:7px 12px;
@@ -190,15 +190,15 @@ button,input{-webkit-app-region:no-drag}
 /* Buttons */
 .btn-primary{
   width:100%;padding:13px;
-  background:linear-gradient(135deg,#0a0a0a 0%,#000000 100%);
+  background:linear-gradient(135deg,#2563eb 0%,#1e40af 100%);
   color:#fff;border:none;border-radius:10px;
   font-family:'Segoe UI Variable','Segoe UI',system-ui,sans-serif;font-size:14px;font-weight:700;
   cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
   transition:all .2s;
-  box-shadow:0 4px 18px rgba(10,10,10,.35),inset 0 1px 0 rgba(255,255,255,.1);
+  box-shadow:0 4px 18px rgba(37,99,235,.35),inset 0 1px 0 rgba(255,255,255,.1);
   margin-top:auto;
 }
-.btn-primary:hover{background:linear-gradient(135deg,#000000 0%,#1e40af 100%);transform:translateY(-1px);box-shadow:0 7px 24px rgba(10,10,10,.5)}
+.btn-primary:hover{background:linear-gradient(135deg,#1e40af 0%,#2563eb 100%);transform:translateY(-1px);box-shadow:0 7px 24px rgba(37,99,235,.5)}
 .btn-primary:active{transform:translateY(0)}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
 
@@ -230,7 +230,7 @@ button,input{-webkit-app-region:no-drag}
   font-family:'Segoe UI Variable','Segoe UI',system-ui,sans-serif;font-size:14px;outline:none;
   transition:border-color .15s,background .15s;
 }
-.field input:focus{border-color:#0a0a0a;background:rgba(10,10,10,.08)}
+.field input:focus{border-color:#2563eb;background:rgba(37,99,235,.08)}
 .code-input{
   font-family:'JetBrains Mono',monospace !important;
   font-size:18px !important;font-weight:500 !important;
@@ -346,7 +346,7 @@ button,input{-webkit-app-region:no-drag}
       </div>
     </div>
     <div class="lv-name">Ne<span>x</span>us</div>
-    <div class="lv-sub">Gestão e Projetos</div>
+    <div class="lv-sub">Gestão Integrada</div>
     <div class="lv-dots"><span></span><span></span><span></span></div>
     <!-- A2Z menor, embaixo -->
     <div class="lv-brand-bottom">
@@ -387,7 +387,7 @@ button,input{-webkit-app-region:no-drag}
   </div>
   <div class="product-info">
     <div class="product-name">Ne<span style="color:#3b82f6">x</span>us</div>
-    <div class="product-sub">Gestão e Projetos</div>
+    <div class="product-sub">Gestão Integrada</div>
   </div>
   <div class="version-pill" id="versionBadge">v...</div>
 </div>
@@ -562,7 +562,7 @@ button,input{-webkit-app-region:no-drag}
   <div id="signupSuccessView" style="display:none">
     <div class="form-title">Tudo pronto!</div>
     <div class="form-sub">Seu período de teste de 7 dias começou agora. Salve este código de acesso pra entrar:</div>
-    <div style="margin:20px 0;padding:18px;background:rgba(10,10,10,.08);border:1px solid rgba(10,10,10,.25);border-radius:10px;text-align:center">
+    <div style="margin:20px 0;padding:18px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.25);border-radius:10px;text-align:center">
       <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">SEU CÓDIGO</div>
       <div id="signupCodeOut" style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:600;color:#f0f4ff;letter-spacing:2px"></div>
       <button onclick="copySignupCode()" style="margin-top:10px;background:rgba(255,255,255,.06);color:#cbd5e1;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer">Copiar código</button>
@@ -596,7 +596,7 @@ const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 
 const ROLES_INFO = {
   master:       { label:'Master',       color:'#7c3aed' },
-  editor:       { label:'Editor',       color:'#0a0a0a' },
+  editor:       { label:'Editor',       color:'#2563eb' },
   visualizador: { label:'Visualizador', color:'#d97706' },
 };
 
