@@ -4,13 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nexus</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Fontes locais: Segoe UI Variable (Win11) / Segoe UI (Win10) -->
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 body{
-  font-family:'Inter',sans-serif;
-  background:#060d1b;
+  font-family:'Segoe UI Variable','Segoe UI',system-ui,sans-serif;
   color:#f0f4ff;
   height:100vh;
   display:flex;
@@ -18,24 +17,26 @@ body{
   user-select:none;
   -webkit-app-region:drag;
   overflow:hidden;
+  background: #0a0a0a;
 }
+
 button,input{-webkit-app-region:no-drag}
 
-/* Subtle background glow */
-body::before{
+/* Subtle background glow — dentro do loadingView (aparece junto com fundo escuro) */
+#loadingView::before{
   content:'';
-  position:fixed;
+  position:absolute;
   top:-120px;right:-80px;
   width:380px;height:380px;
-  background:radial-gradient(circle,rgba(37,99,235,.1) 0%,transparent 65%);
+  background:radial-gradient(circle,rgba(37,99,235,.14) 0%,transparent 65%);
   pointer-events:none;z-index:0;
 }
-body::after{
+#loadingView::after{
   content:'';
-  position:fixed;
+  position:absolute;
   bottom:-80px;left:-60px;
   width:280px;height:280px;
-  background:radial-gradient(circle,rgba(37,99,235,.06) 0%,transparent 65%);
+  background:radial-gradient(circle,rgba(37,99,235,.08) 0%,transparent 65%);
   pointer-events:none;z-index:0;
 }
 
@@ -44,7 +45,7 @@ body::after{
   display:flex;align-items:center;gap:14px;
   padding:16px 18px 15px;
   border-bottom:1px solid rgba(255,255,255,.08);
-  background:linear-gradient(180deg,rgba(37,99,235,.07) 0%,rgba(255,255,255,.01) 100%);
+  background:linear-gradient(180deg,rgba(10,10,10,.07) 0%,rgba(255,255,255,.01) 100%);
   flex-shrink:0;position:relative;z-index:1;
 }
 .brand-logo{height:40px;width:auto;opacity:.95}
@@ -78,25 +79,25 @@ body::after{
 .product-icon{
   width:46px;height:46px;flex-shrink:0;
   background:linear-gradient(135deg,#1a3358 0%,#0d1829 100%);
-  border:1.5px solid rgba(37,99,235,.45);
+  border:1.5px solid rgba(10,10,10,.45);
   border-radius:13px;
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 0 22px rgba(37,99,235,.22),inset 0 1px 0 rgba(255,255,255,.06);
+  box-shadow:0 0 22px rgba(10,10,10,.22),inset 0 1px 0 rgba(255,255,255,.06);
 }
 .product-info{flex:1;min-width:0}
 .product-name{
   font-size:21px;font-weight:800;
   letter-spacing:-.5px;color:#fff;line-height:1;
 }
-.product-name span{color:#3b82f6}
+.product-name span{color:#9E9E9E}
 .product-sub{
   font-size:11px;font-weight:500;
-  color:#60a5fa;text-transform:uppercase;letter-spacing:1.5px;margin-top:4px;
+  color:#c7c7cc;text-transform:uppercase;letter-spacing:1.5px;margin-top:4px;
 }
 .version-pill{
   font-size:11px;font-weight:600;
-  background:rgba(37,99,235,.12);color:#60a5fa;
-  border:1px solid rgba(37,99,235,.22);
+  background:rgba(10,10,10,.12);color:#c7c7cc;
+  border:1px solid rgba(10,10,10,.22);
   padding:3px 10px;border-radius:20px;
   font-family:'JetBrains Mono',monospace;
   white-space:nowrap;align-self:flex-start;margin-top:3px;flex-shrink:0;
@@ -151,7 +152,7 @@ body::after{
 }
 .upd-dot.checking{background:#f59e0b;animation:dotPulse 1s ease-in-out infinite}
 .upd-dot.ok{background:#22c55e;box-shadow:0 0 7px rgba(34,197,94,.55)}
-.upd-dot.avail{background:#3b82f6;box-shadow:0 0 7px rgba(59,130,246,.55)}
+.upd-dot.avail{background:#9E9E9E;box-shadow:0 0 7px rgba(59,130,246,.55)}
 .upd-dot.dl{background:#8b5cf6;animation:dotPulse .8s ease-in-out infinite}
 @keyframes dotPulse{0%,100%{opacity:.4}50%{opacity:1}}
 .upd-lbl{
@@ -162,26 +163,26 @@ body::after{
 
 .upd-progress{margin-top:9px;display:none}
 .upd-bar{height:3px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;margin-bottom:4px}
-.upd-fill{height:100%;background:linear-gradient(90deg,#2563eb,#60a5fa);border-radius:3px;transition:width .3s;width:0%}
+.upd-fill{height:100%;background:linear-gradient(90deg,#0a0a0a,#c7c7cc);border-radius:3px;transition:width .3s;width:0%}
 .upd-pct{font-size:11px;color:#475569;text-align:right;font-family:'JetBrains Mono',monospace}
 
 .btn-dl-update{
   display:none;margin-top:8px;width:100%;
   padding:7px 12px;
-  background:rgba(37,99,235,.12);
-  border:1px solid rgba(37,99,235,.3);
-  border-radius:7px;color:#60a5fa;
-  font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
+  background:rgba(10,10,10,.12);
+  border:1px solid rgba(10,10,10,.3);
+  border-radius:7px;color:#c7c7cc;
+  font-family:'Segoe UI Variable','Segoe UI',system-ui,sans-serif;font-size:12px;font-weight:600;
   cursor:pointer;transition:all .15s;text-align:center;
 }
-.btn-dl-update:hover{background:rgba(37,99,235,.22)}
+.btn-dl-update:hover{background:rgba(10,10,10,.22)}
 .btn-restart-update{
   display:none;margin-top:8px;width:100%;
   padding:7px 12px;
   background:rgba(22,163,74,.1);
   border:1px solid rgba(22,163,74,.28);
   border-radius:7px;color:#4ade80;
-  font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
+  font-family:'Segoe UI Variable','Segoe UI',system-ui,sans-serif;font-size:12px;font-weight:600;
   cursor:pointer;transition:all .15s;text-align:center;
 }
 .btn-restart-update:hover{background:rgba(22,163,74,.2)}
@@ -189,15 +190,15 @@ body::after{
 /* Buttons */
 .btn-primary{
   width:100%;padding:13px;
-  background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);
+  background:linear-gradient(135deg,#0a0a0a 0%,#000000 100%);
   color:#fff;border:none;border-radius:10px;
-  font-family:'Inter',sans-serif;font-size:14px;font-weight:700;
+  font-family:'Segoe UI Variable','Segoe UI',system-ui,sans-serif;font-size:14px;font-weight:700;
   cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
   transition:all .2s;
-  box-shadow:0 4px 18px rgba(37,99,235,.35),inset 0 1px 0 rgba(255,255,255,.1);
+  box-shadow:0 4px 18px rgba(10,10,10,.35),inset 0 1px 0 rgba(255,255,255,.1);
   margin-top:auto;
 }
-.btn-primary:hover{background:linear-gradient(135deg,#1d4ed8 0%,#1e40af 100%);transform:translateY(-1px);box-shadow:0 7px 24px rgba(37,99,235,.5)}
+.btn-primary:hover{background:linear-gradient(135deg,#000000 0%,#1e40af 100%);transform:translateY(-1px);box-shadow:0 7px 24px rgba(10,10,10,.5)}
 .btn-primary:active{transform:translateY(0)}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
 
@@ -206,7 +207,7 @@ body::after{
   background:transparent;
   color:#475569;border:1px solid rgba(255,255,255,.09);
   border-radius:8px;
-  font-family:'Inter',sans-serif;font-size:13px;font-weight:500;
+  font-family:'Segoe UI Variable','Segoe UI',system-ui,sans-serif;font-size:13px;font-weight:500;
   cursor:pointer;transition:all .15s;margin-top:8px;
 }
 .btn-secondary:hover{background:rgba(255,255,255,.05);color:#64748b}
@@ -226,10 +227,10 @@ body::after{
   background:rgba(255,255,255,.05);
   border:1.5px solid rgba(255,255,255,.1);
   border-radius:8px;color:#f1f5f9;
-  font-family:'Inter',sans-serif;font-size:14px;outline:none;
+  font-family:'Segoe UI Variable','Segoe UI',system-ui,sans-serif;font-size:14px;outline:none;
   transition:border-color .15s,background .15s;
 }
-.field input:focus{border-color:#2563eb;background:rgba(37,99,235,.08)}
+.field input:focus{border-color:#0a0a0a;background:rgba(10,10,10,.08)}
 .code-input{
   font-family:'JetBrains Mono',monospace !important;
   font-size:18px !important;font-weight:500 !important;
@@ -265,48 +266,49 @@ body::after{
   display:flex;flex-direction:column;
   align-items:center;justify-content:center;
   z-index:999;
-  animation:lvFadeIn .3s ease forwards;
+  opacity:0;
+  animation: loadingIn .4s ease forwards;
   transition:opacity .35s ease;
 }
+@keyframes loadingIn { to { opacity: 1; } }
 #loadingView.out{opacity:0;pointer-events:none}
 
 .lv-wrap{display:flex;flex-direction:column;align-items:center;gap:10px}
-/* A2Z brand within loading */
-.lv-brand-top{
-  display:flex;align-items:center;gap:10px;
-  margin-bottom:10px;
-  animation:lvUp .4s ease .05s both;
-}
-.lv-brand-top-logo{height:32px;opacity:.85}
-.lv-brand-top-name{font-size:13px;font-weight:700;color:#64748b;letter-spacing:1.5px;text-transform:uppercase}
-.lv-divider{
-  width:1px;height:22px;background:rgba(255,255,255,.12);
-}
-.lv-icon-wrap{position:relative;width:76px;height:76px;display:flex;align-items:center;justify-content:center}
+.lv-icon-wrap{position:relative;width:88px;height:88px;display:flex;align-items:center;justify-content:center}
 .lv-ring{
   position:absolute;inset:-15px;border-radius:50%;
-  border:1.5px solid rgba(37,99,235,.3);
+  border:1.5px solid rgba(59,130,246,.38);
   animation:lvRing 2.2s ease-in-out infinite;
 }
 .lv-ring2{
   position:absolute;inset:-28px;border-radius:50%;
-  border:1px solid rgba(37,99,235,.11);
+  border:1px solid rgba(59,130,246,.16);
   animation:lvRing 2.2s ease-in-out .65s infinite;
 }
 .lv-icon{
-  width:64px;height:64px;
-  background:linear-gradient(135deg,#1a3358 0%,#0d1829 100%);
-  border:1.5px solid rgba(37,99,235,.42);
-  border-radius:16px;
+  width:74px;height:74px;
+  background:linear-gradient(135deg,#11223f 0%,#0a1322 100%);
+  border:1.5px solid rgba(59,130,246,.45);
+  border-radius:18px;
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 0 32px rgba(37,99,235,.28),inset 0 1px 0 rgba(255,255,255,.06);
+  box-shadow:0 0 34px rgba(37,99,235,.4),inset 0 1px 0 rgba(255,255,255,.08);
   animation:lvIconIn .6s cubic-bezier(.34,1.56,.64,1) .1s both;
 }
-.lv-name{font-size:26px;font-weight:800;letter-spacing:-.5px;color:#fff;animation:lvUp .4s ease .18s both}
+.lv-name{font-size:28px;font-weight:800;letter-spacing:-.5px;color:#fff;margin-top:4px;animation:lvUp .4s ease .18s both}
 .lv-name span{color:#3b82f6}
-.lv-sub{font-size:11px;font-weight:500;color:#60a5fa;text-transform:uppercase;letter-spacing:1.8px;animation:lvUp .4s ease .28s both}
-.lv-dots{display:flex;gap:6px;margin-top:4px;animation:lvUp .4s ease .38s both}
-.lv-dots span{width:6px;height:6px;border-radius:50%;background:rgba(37,99,235,.85)}
+.lv-sub{font-size:11px;font-weight:500;color:#94a3b8;text-transform:uppercase;letter-spacing:1.8px;animation:lvUp .4s ease .28s both}
+.lv-dots{display:flex;gap:6px;margin-top:6px;animation:lvUp .4s ease .38s both}
+.lv-dots span{width:6px;height:6px;border-radius:50%;background:#3b82f6}
+/* A2Z menor, embaixo */
+.lv-brand-bottom{
+  display:flex;align-items:center;gap:8px;
+  margin-top:26px;padding-top:16px;
+  border-top:1px solid rgba(255,255,255,.08);
+  animation:lvUp .4s ease .46s both;
+}
+.lv-by{font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1.5px}
+.lv-brand-bottom-logo{height:22px;width:auto;background:#fff;border-radius:5px;padding:3px;opacity:.95}
+.lv-brand-bottom-name{font-size:12px;font-weight:600;color:#94a3b8;letter-spacing:.5px}
 .lv-dots span:nth-child(1){animation:lvDot 1.3s ease-in-out 0s infinite}
 .lv-dots span:nth-child(2){animation:lvDot 1.3s ease-in-out .22s infinite}
 .lv-dots span:nth-child(3){animation:lvDot 1.3s ease-in-out .44s infinite}
@@ -329,28 +331,29 @@ body::after{
 <!-- ── LOADING OVERLAY ── -->
 <div id="loadingView">
   <div class="lv-wrap">
-    <!-- A2Z brand prominent no topo da animação -->
-    <div class="lv-brand-top">
-      <img class="lv-brand-top-logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAAAGaklEQVR4nO1X3Ytd1RVfa+99Z3rvnZn0Zr4iksloO0oQRamVlkyh6EMpVNIHg9AXQenHk0boQwUlD9oXFRpQ2pemf0CQWkuhrQjTB6kt2NJImpgYa3InydiZazJz7j337o+19urD7NM5c5P5siAVZsFhc9bZe+3f+q2PvQ/AruzK51xEBEVEi4jZ5NHHjh1TnyUolTbGT7HWiMi2we5ogwRIISIXuoWFhYnR0dFpRNyPiOMAMBxjrAAAA0BHRFqIeDmEcLFer18p2VIAAIgYd4JhQymHaGVl5Q7v/bNE9DYzX5NtCDNnRPS3EMKLeZ7f3w/0f5IilK1Wa4SZXxGR7nZAbSQxRmHm15aXl7+0FcgtQ5wWS6fTmahWq3/QWt8LABEAFABAjLEFAKdijGdEpKmUuu69J6210VqPiMitiHgnIt6nlLo1mWUA0DHGJWvtw/V6/a8ioj5VuFNBKCKaSwS4FLJ57/2Psiwb246d5eXlhnPuCBGdSnZCsvPvdrs9UezTv25TBkVEA0DsdDoPDg0NvRVj7InIgIh8EEL4Vq1WawIAhhAeEpGvIeJtiDgsIhEAlkXkIiK+a4x5GxEtAMDc3Jw5dOjQG0qpBwHAIWLdOfdMrVZ7+WYYtgKIiChnz54dHhoa2lPoY4z5gQMHrocQvquUekEpdddmdmKM7xPRsatXr/52enq61m63lVJqfwhBAACUUr2RkZGFhKdT7hIbAixyIoTwM2PM12OMDgAMAGRa62+HEA4bY35TYEgPpzkIAJRGDSlfnXNHK5XK95RS0wBgk17SOJBsfRMRz2yak0XVZlk2zsy2vwq73e6jzPy+iEQR8Wn8b5Eyc+hbEpL+7865n29R5PcUBEHh2U1EiwjWarXvKKUGAcAnRhgAOlrrryql7kwMVdLoQghPe+/vDiHcRUSPAMAniSENAKiUul0ptVLmovQUYdUbRbXMoAIAIKI3k1dU8vCC9/4nItJmZpcYjkT06347zHw+reGiAxDRY71e73nn3FsF44V9Zj4jIntl9Xy/efoV4Lrd7pSI9JKBSESLyVDHOfdSnueHrbUz1tqZdrs9MTc3Z0RkxHv/DSJ6jpk/KAGIIkLMTM1ms9putyeZ+ULSF+3mUrfbnSpj2AigSew9lTbwIiLW2idF5HJBIzP/vljjvZ9l5hPMfKkvnygBKEC8IiJjzPxxKTeFmRettQfT/puHuBTedwoGmDlPx9ybJd18lmUHieh3faC8pGZeFmb+VZZlY8x8uuw4M7fzPH+gTM6W4Ky1B5mZitwgornE1DPJeO69P1oKI8lanhWAHBGdYuZXvfez58+fH2Tmd0vgIjP7EMJDae/KpuD6wvtcMtRLAH8sIibP8wdEREIIvySi19McJ6ndMPM7RPSs9352aWlpuGybiF5P7YcTOA4hHAYAOHny5IZhXVcpslo5GGP8h1LqblgtfRVjvKKUsmn+Lc65nw4ODj5fWqq8938OIZwwxiwyszLGDDLzFxBRxxjriHhHCGG+Xq/Paq0fZuYfGGNOiEgdAELJFpdPkjI4ncJ4f4xRZH3zLYfuPefcL0qh3baEEP5prX01sXhaRJoicjE9H6bxaDma5aREAACt9SPJgwAAlRhjTyl1PcYYlVIqxvgXY8x+AKCkk7L3G0QqAoBBRIuIKr33n9+SMDTKSlMKLS8sLNQB4AlY7eY6ffv+/Pz8G9Vq1YyNjXGr1cKJiYmLAGCUuqFdbV6FAKMiMrLBvCLdBsrKYiIiYrTWTonIqRgjy2pFu06n88epqaneOldFfggAg7B2VHIybGCVeYa1SwAlfdRar6Rqbab55eIoLsF/Kr1v76cpgZUsy75srR1fWlp6b2BgYJKZF8fHx5GZxycnJz8EADhy5Ig+fvx4w1pbExHbaDTGrbUfGWNuqVQqLQAA7/3ovn37/rWdvW8AKDceMwKJYSJ63FpLzrmWMWa2UqmcrlQqHSKy3nujlLpsrb1tz549+2OMH1lrzzHzfbVabckYU2Vm45yjarX6FWvta8PDwxcSa+VrVSxfs3b627kPET9uNpvV0dHRvczsmXmoXq/vtdZeEpEZZr7SaDRUnudfvHbt2jlrbWVmZgZDCDNEtMjMTik1VavVziFiJulSvBMc/1ey4x/35C2KrHMaYa1NFB8QEaOsXZvWfQMA+Vwztyu7siu78hnJfwCrkJITavOoUQAAAABJRU5ErkJggg==" alt="A2Z Projetos"/>
-      <div class="lv-divider"></div>
-      <span class="lv-brand-top-name">A2Z Projetos</span>
-    </div>
+    <!-- Nexus em destaque (logo azul) -->
     <div class="lv-icon-wrap">
       <div class="lv-ring"></div>
       <div class="lv-ring2"></div>
       <div class="lv-icon">
-        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="34" height="34">
-          <rect x="4" y="4" width="11" height="24" rx="3" fill="#2563eb"/>
-          <rect x="17" y="4" width="11" height="4" rx="2" fill="#2563eb"/>
-          <rect x="17" y="10" width="11" height="4" rx="2" fill="#2563eb"/>
-          <rect x="17" y="16" width="11" height="4" rx="2" fill="#2563eb"/>
-          <rect x="17" y="22" width="7" height="4" rx="2" fill="#60a5fa"/>
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="46" height="46">
+          <rect x="4" y="4" width="11" height="24" rx="3" fill="#3b82f6"/>
+          <rect x="17" y="4" width="11" height="4" rx="2" fill="#3b82f6"/>
+          <rect x="17" y="10" width="11" height="4" rx="2" fill="#3b82f6"/>
+          <rect x="17" y="16" width="11" height="4" rx="2" fill="#3b82f6"/>
+          <rect x="17" y="22" width="7" height="4" rx="2" fill="#93c5fd"/>
         </svg>
       </div>
     </div>
-    <div class="lv-name">Nexus</div>
-    <div class="lv-sub">Gestão de Projetos</div>
+    <div class="lv-name">Ne<span>x</span>us</div>
+    <div class="lv-sub">Gestão e Projetos</div>
     <div class="lv-dots"><span></span><span></span><span></span></div>
+    <!-- A2Z menor, embaixo -->
+    <div class="lv-brand-bottom">
+      <span class="lv-by">by</span>
+      <img class="lv-brand-bottom-logo" src="data:image/png;base64,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" alt="A2Z"/>
+      <span class="lv-brand-bottom-name">A2Z Projetos</span>
+    </div>
   </div>
   <div class="lv-footer">
     <span class="lv-ver" id="loadingVersion">v...</span>
@@ -375,16 +378,16 @@ body::after{
 <div class="product-hero">
   <div class="product-icon">
     <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="28" height="28">
-      <rect x="4" y="4" width="11" height="24" rx="3" fill="#2563eb"/>
-      <rect x="17" y="4" width="11" height="4" rx="2" fill="#2563eb"/>
-      <rect x="17" y="10" width="11" height="4" rx="2" fill="#2563eb"/>
-      <rect x="17" y="16" width="11" height="4" rx="2" fill="#2563eb"/>
-      <rect x="17" y="22" width="7" height="4" rx="2" fill="#60a5fa"/>
+      <rect x="4" y="4" width="11" height="24" rx="3" fill="#3b82f6"/>
+      <rect x="17" y="4" width="11" height="4" rx="2" fill="#3b82f6"/>
+      <rect x="17" y="10" width="11" height="4" rx="2" fill="#3b82f6"/>
+      <rect x="17" y="16" width="11" height="4" rx="2" fill="#3b82f6"/>
+      <rect x="17" y="22" width="7" height="4" rx="2" fill="#93c5fd"/>
     </svg>
   </div>
   <div class="product-info">
-    <div class="product-name">Nexus</div>
-    <div class="product-sub">Gestão de Projetos</div>
+    <div class="product-name">Ne<span style="color:#3b82f6">x</span>us</div>
+    <div class="product-sub">Gestão e Projetos</div>
   </div>
   <div class="version-pill" id="versionBadge">v...</div>
 </div>
@@ -431,7 +434,7 @@ body::after{
         <div class="upd-pct" id="updPct">0%</div>
       </div>
       <button class="btn-dl-update" id="btnDlUpdate" onclick="startDownload()">
-        Baixar atualização agora →
+        Atualizar agora →
       </button>
       <button class="btn-restart-update" id="btnRestart" onclick="restartNow()">
         Reiniciar e instalar agora →
@@ -460,8 +463,113 @@ body::after{
       <label>Código de acesso</label>
       <input type="text" id="inputKey" class="code-input" placeholder="XXXX-XXXX" maxlength="9" oninput="formatKey(this)" autocomplete="off"/>
     </div>
-    <button class="btn-primary" id="loginBtn" onclick="doLogin()" style="margin-top:auto">
+    <button class="btn-primary" id="loginBtn" onclick="doLogin()">
       Entrar
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+    </button>
+    <button class="btn-secondary" onclick="showSignup()" style="margin-top:10px">
+      Não tem código? Testar grátis por 7 dias
+    </button>
+  </div>
+
+  <!-- SIGNUP TRIAL -->
+  <div id="signupView" style="display:none;overflow-y:auto;max-height:calc(100vh - 220px);padding-right:6px">
+    <div class="form-title">Testar Nexus 7 dias grátis</div>
+    <div class="form-sub">Sem cartão de crédito. Você recebe um código de acesso por e-mail.</div>
+    <div class="error-box" id="signupErr"></div>
+
+    <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin:8px 0 6px">Dados pessoais</div>
+    <div class="field">
+      <label>Nome completo do responsável *</label>
+      <input type="text" id="signupNome" placeholder="Ex: Lucas Abdala" autocomplete="off"/>
+    </div>
+    <div class="field">
+      <label>E-mail corporativo *</label>
+      <input type="email" id="signupEmail" placeholder="seu@empresa.com.br" autocomplete="off"/>
+    </div>
+    <div class="field">
+      <label>Telefone *</label>
+      <input type="tel" id="signupTelefone" placeholder="(44) 99999-9999" maxlength="16" autocomplete="off"/>
+    </div>
+    <div class="field">
+      <label>CPF ou CNPJ pessoal *</label>
+      <input type="text" id="signupCpfCnpj" placeholder="000.000.000-00" maxlength="18" autocomplete="off"/>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin:14px 0 6px">Empresa</div>
+    <div class="field">
+      <label>Nome da empresa *</label>
+      <input type="text" id="signupEmpresa" placeholder="Ex: A2Z Projetos" autocomplete="off"/>
+    </div>
+    <div class="field">
+      <label>CNPJ da empresa <span style="color:#64748b;font-weight:400">(opcional)</span></label>
+      <input type="text" id="signupCnpj" placeholder="00.000.000/0000-00" autocomplete="off" maxlength="18"/>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin:14px 0 6px">Endereço</div>
+    <div class="field">
+      <label>CEP *</label>
+      <input type="text" id="signupCep" placeholder="00000-000" maxlength="9" autocomplete="off"/>
+      <div id="signupCepStatus" style="font-size:11px;color:#64748b;margin-top:4px"></div>
+    </div>
+    <div class="field">
+      <label>Rua / Avenida *</label>
+      <input type="text" id="signupRua" placeholder="Ex: Rua das Flores" autocomplete="off"/>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="field">
+        <label>Número *</label>
+        <input type="text" id="signupNumero" placeholder="123" autocomplete="off"/>
+      </div>
+      <div class="field">
+        <label>Complemento</label>
+        <input type="text" id="signupComplemento" placeholder="Apto, sala..." autocomplete="off"/>
+      </div>
+    </div>
+    <div class="field">
+      <label>Bairro *</label>
+      <input type="text" id="signupBairro" placeholder="Centro" autocomplete="off"/>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 80px;gap:10px">
+      <div class="field">
+        <label>Cidade *</label>
+        <input type="text" id="signupCidade" placeholder="Umuarama" autocomplete="off"/>
+      </div>
+      <div class="field">
+        <label>UF *</label>
+        <select id="signupUf" style="width:100%;padding:10px 12px;font-family:inherit;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:6px;background:rgba(255,255,255,.04);color:#f0f4ff;outline:none;cursor:pointer">
+          <option value="">—</option>
+          <option>AC</option><option>AL</option><option>AM</option><option>AP</option><option>BA</option><option>CE</option><option>DF</option><option>ES</option><option>GO</option><option>MA</option><option>MG</option><option>MS</option><option>MT</option><option>PA</option><option>PB</option><option>PE</option><option>PI</option><option>PR</option><option>RJ</option><option>RN</option><option>RO</option><option>RR</option><option>RS</option><option>SC</option><option>SE</option><option>SP</option><option>TO</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- honeypot anti-bot — invisível pra humano, bots preenchem -->
+    <input type="text" id="signupWebsite" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;opacity:0" aria-hidden="true"/>
+
+    <button class="btn-primary" id="signupBtn" onclick="doSignup()" style="margin-top:14px">
+      Criar conta grátis
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M5 12h14M12 5l7 7-7 7"/>
+      </svg>
+    </button>
+    <button class="btn-secondary" onclick="showLogin()" style="margin-top:10px;margin-bottom:14px">Já tenho código de acesso</button>
+  </div>
+
+  <!-- SIGNUP SUCCESS -->
+  <div id="signupSuccessView" style="display:none">
+    <div class="form-title">Tudo pronto!</div>
+    <div class="form-sub">Seu período de teste de 7 dias começou agora. Salve este código de acesso pra entrar:</div>
+    <div style="margin:20px 0;padding:18px;background:rgba(10,10,10,.08);border:1px solid rgba(10,10,10,.25);border-radius:10px;text-align:center">
+      <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">SEU CÓDIGO</div>
+      <div id="signupCodeOut" style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:600;color:#f0f4ff;letter-spacing:2px"></div>
+      <button onclick="copySignupCode()" style="margin-top:10px;background:rgba(255,255,255,.06);color:#cbd5e1;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer">Copiar código</button>
+    </div>
+    <div style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:12px">Também enviamos por e-mail. Use esse código junto com seu nome pra entrar no Nexus.</div>
+    <button class="btn-primary" onclick="goToLoginAfterSignup()">
+      Entrar agora
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
       </svg>
@@ -488,7 +596,7 @@ const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 
 const ROLES_INFO = {
   master:       { label:'Master',       color:'#7c3aed' },
-  editor:       { label:'Editor',       color:'#2563eb' },
+  editor:       { label:'Editor',       color:'#0a0a0a' },
   visualizador: { label:'Visualizador', color:'#d97706' },
 };
 
@@ -518,14 +626,32 @@ function hideError() {
 }
 
 async function queryUser(code) {
+  // Fase B do RLS hardening (2026-05-02): em vez de SELECT direto em usuarios
+  // (que vai virar bloqueado quando a PARTE 5 do SQL for ativada), chamamos
+  // a RPC SECURITY DEFINER auth_login. Ela já filtra por access_code, ativo
+  // e deleted_at do lado do servidor e devolve só os campos necessários
+  // (omite o próprio access_code, pra não vazar via response).
   try {
     const resp = await fetch(
-      `${SUPA_URL}/rest/v1/usuarios?access_code=eq.${encodeURIComponent(code)}&limit=1&select=*`,
-      { headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` } }
+      `${SUPA_URL}/rest/v1/rpc/auth_login`,
+      {
+        method: 'POST',
+        headers: {
+          'apikey': SUPA_KEY,
+          'Authorization': `Bearer ${SUPA_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ p_code: code }),
+      }
     );
     if (!resp.ok) return null;
-    const users = await resp.json();
-    return users && users.length ? users[0] : null;
+    const rows = await resp.json();
+    if (!Array.isArray(rows) || !rows.length) return null;
+    const user = rows[0];
+    // Re-injeta access_code: a RPC omite por design, mas o re-login offline
+    // (saved.access_code em tryAutoLogin) precisa dele pra revalidar online.
+    user.access_code = code;
+    return user;
   } catch(e) { return null; }
 }
 
@@ -541,6 +667,13 @@ async function doLogin() {
   const btn = document.getElementById('loginBtn');
   btn.disabled = true;
   btn.textContent = 'Verificando...';
+
+  if (!navigator.onLine) {
+    btn.disabled = false;
+    btn.innerHTML = 'Entrar <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+    showError('Sem conexão. Conecte-se à internet para o primeiro login neste computador.');
+    return;
+  }
 
   const user = await queryUser(code);
 
@@ -559,8 +692,176 @@ async function doLogin() {
     }
   }
 
+  user.last_online_login = Date.now();
   store.set('license', user);
   showActivated(user);
+}
+
+// ── Signup self-service de trial ──
+function showSignup() {
+  document.getElementById('loginView').style.display = 'none';
+  document.getElementById('signupView').style.display = '';
+  document.getElementById('signupSuccessView').style.display = 'none';
+  document.getElementById('signupErr')?.classList.remove('show');
+}
+function showLogin() {
+  document.getElementById('loginView').style.display = '';
+  document.getElementById('signupView').style.display = 'none';
+  document.getElementById('signupSuccessView').style.display = 'none';
+}
+function showSignupError(msg) {
+  const el = document.getElementById('signupErr');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+// Máscaras + autofill CEP — todos do form de signup
+function _signupMaskCnpj(v){
+  v = (v||'').replace(/\D/g,'').slice(0,14);
+  v = v.replace(/^(\d{2})(\d)/,'$1.$2');
+  v = v.replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3');
+  v = v.replace(/\.(\d{3})(\d)/,'.$1/$2');
+  v = v.replace(/(\d{4})(\d)/,'$1-$2');
+  return v;
+}
+function _signupMaskCpfCnpj(v){
+  const d = (v||'').replace(/\D/g,'').slice(0,14);
+  if (d.length <= 11) return d.replace(/^(\d{0,3})(\d{0,3})(\d{0,3})(\d{0,2}).*/, (_,a,b,c,e)=>{
+    let r=a; if(b)r+='.'+b; if(c)r+='.'+c; if(e)r+='-'+e; return r;
+  });
+  return _signupMaskCnpj(d);
+}
+function _signupMaskTel(v){
+  const d = (v||'').replace(/\D/g,'').slice(0,11);
+  if (d.length <= 10) return d.replace(/^(\d{0,2})(\d{0,4})(\d{0,4}).*/, (_,a,b,c)=>{
+    let r=''; if(a)r='('+a+(a.length===2?') ':''); if(b)r+=b; if(c)r+='-'+c; return r;
+  });
+  return d.replace(/^(\d{2})(\d{5})(\d{0,4}).*/, '($1) $2-$3');
+}
+function _signupMaskCep(v){
+  return (v||'').replace(/\D/g,'').slice(0,8).replace(/^(\d{5})(\d{0,3}).*/, (_,a,b)=> b? a+'-'+b : a);
+}
+async function _signupCepLookup(){
+  const el = document.getElementById('signupCep');
+  const stat = document.getElementById('signupCepStatus');
+  const cep = (el?.value||'').replace(/\D/g,'');
+  if (cep.length !== 8) { if (stat) stat.textContent=''; return; }
+  if (stat) stat.textContent = 'Buscando…';
+  try {
+    const r = await fetch('https://viacep.com.br/ws/' + cep + '/json/');
+    const d = await r.json();
+    if (d && !d.erro) {
+      const set = (id, v) => { const e = document.getElementById(id); if (e && !e.value) e.value = v||''; };
+      set('signupRua', d.logradouro);
+      set('signupBairro', d.bairro);
+      set('signupCidade', d.localidade);
+      set('signupUf', d.uf);
+      if (stat) stat.textContent = '✓ Endereço encontrado';
+    } else if (stat) stat.textContent = '✗ CEP não encontrado';
+  } catch { if (stat) stat.textContent = '✗ Falha ao consultar CEP'; }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const cnpjEl = document.getElementById('signupCnpj');
+  if (cnpjEl) cnpjEl.addEventListener('input', e => { e.target.value = _signupMaskCnpj(e.target.value); });
+  const cpfEl = document.getElementById('signupCpfCnpj');
+  if (cpfEl) cpfEl.addEventListener('input', e => { e.target.value = _signupMaskCpfCnpj(e.target.value); });
+  const telEl = document.getElementById('signupTelefone');
+  if (telEl) telEl.addEventListener('input', e => { e.target.value = _signupMaskTel(e.target.value); });
+  const cepEl = document.getElementById('signupCep');
+  if (cepEl) {
+    cepEl.addEventListener('input', e => { e.target.value = _signupMaskCep(e.target.value); });
+    cepEl.addEventListener('blur', _signupCepLookup);
+  }
+});
+
+let _signupCode = null;
+function copySignupCode() {
+  if (!_signupCode) return;
+  navigator.clipboard?.writeText(_signupCode).catch(() => {});
+}
+function goToLoginAfterSignup() {
+  document.getElementById('signupSuccessView').style.display = 'none';
+  document.getElementById('loginView').style.display = '';
+  // Pré-preenche os campos pra economizar o passo
+  if (_signupCode) {
+    document.getElementById('inputKey').value = _signupCode;
+  }
+  const nome = document.getElementById('signupNome').value.trim();
+  if (nome) document.getElementById('inputName').value = nome;
+}
+
+async function doSignup() {
+  document.getElementById('signupErr')?.classList.remove('show');
+  const v = (id) => document.getElementById(id)?.value.trim() || '';
+  const nome = v('signupNome');
+  const empresa = v('signupEmpresa');
+  const email = v('signupEmail');
+  const telefone = v('signupTelefone').replace(/\D/g,'');
+  const cpfCnpj = v('signupCpfCnpj').replace(/\D/g,'');
+  const cnpj = v('signupCnpj').replace(/\D/g,'');
+  const cep = v('signupCep').replace(/\D/g,'');
+  const rua = v('signupRua');
+  const numero = v('signupNumero');
+  const complemento = v('signupComplemento');
+  const bairro = v('signupBairro');
+  const cidade = v('signupCidade');
+  const uf = v('signupUf');
+  const honeypot = document.getElementById('signupWebsite').value;
+
+  // Validações — campos obrigatórios
+  if (!nome || nome.length < 2) { showSignupError('Informe seu nome completo.'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showSignupError('E-mail inválido.'); return; }
+  if (telefone.length < 10) { showSignupError('Informe um telefone válido (DDD + número).'); return; }
+  if (!cpfCnpj || (cpfCnpj.length !== 11 && cpfCnpj.length !== 14)) { showSignupError('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos).'); return; }
+  if (!empresa || empresa.length < 2) { showSignupError('Informe o nome da empresa.'); return; }
+  if (cnpj && cnpj.length !== 14) { showSignupError('CNPJ da empresa deve ter 14 dígitos (ou deixe em branco).'); return; }
+  if (cep.length !== 8) { showSignupError('CEP inválido (8 dígitos).'); return; }
+  if (!rua) { showSignupError('Informe a rua/avenida.'); return; }
+  if (!numero) { showSignupError('Informe o número.'); return; }
+  if (!bairro) { showSignupError('Informe o bairro.'); return; }
+  if (!cidade) { showSignupError('Informe a cidade.'); return; }
+  if (!uf) { showSignupError('Selecione a UF.'); return; }
+
+  if (!navigator.onLine) {
+    showSignupError('Sem conexão. Conecte-se à internet para criar a conta.');
+    return;
+  }
+
+  const btn = document.getElementById('signupBtn');
+  btn.disabled = true;
+  btn.textContent = 'Criando conta...';
+
+  try {
+    const resp = await fetch(SUPA_URL + '/functions/v1/signup-trial', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY },
+      body: JSON.stringify({
+        nome_master: nome, nome_empresa: empresa, email,
+        cnpj: cnpj || undefined,
+        telefone, cpf_cnpj: cpfCnpj,
+        cep, endereco_rua: rua, endereco_numero: numero,
+        endereco_complemento: complemento || undefined,
+        endereco_bairro: bairro, endereco_cidade: cidade, endereco_uf: uf,
+        website: honeypot,
+      }),
+    });
+    const r = await resp.json();
+    if (!r.ok) {
+      showSignupError(r.msg || 'Erro ao criar conta.');
+      btn.disabled = false;
+      btn.innerHTML = 'Criar conta grátis <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
+      return;
+    }
+    _signupCode = r.access_code;
+    document.getElementById('signupCodeOut').textContent = r.access_code;
+    document.getElementById('signupView').style.display = 'none';
+    document.getElementById('signupSuccessView').style.display = '';
+  } catch (e) {
+    showSignupError('Erro de rede: ' + (e?.message || 'verifique sua conexão.'));
+    btn.disabled = false;
+    btn.innerHTML = 'Criar conta grátis <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
+  }
 }
 
 function showActivated(user) {
@@ -578,8 +879,14 @@ function showActivated(user) {
     }
   } catch(e) { resetUpdTimer(); }
 
-  const firstName = (user.nome || 'Usuário').split(' ')[0].toUpperCase();
-  document.getElementById('greetingText').textContent = `${getGreeting()}, ${firstName}!`;
+  // Saudação usando tratamento + nome preferido (Perfil) — cai pro primeiro nome se não tiver
+  let localPrefs = {};
+  try { localPrefs = JSON.parse(localStorage.getItem('nexus_greeting_' + user.id) || '{}'); } catch {}
+  const trat = user.tratamento || localPrefs.tratamento || '';
+  const nomePref = user.nome_preferido || localPrefs.nome_preferido || (user.nome || 'Usuário').split(' ')[0];
+  const greet = getGreeting();
+  const tratStr = trat ? trat + ' ' : '';
+  document.getElementById('greetingText').textContent = `${greet}, ${tratStr}${nomePref}!`;
   document.getElementById('infoName').textContent = (user.nome || '—').toUpperCase();
   document.getElementById('infoCompany').textContent = (user.empresa || '—').toUpperCase();
 
@@ -610,37 +917,52 @@ function showActivated(user) {
 let updRestartTimer = null;
 
 function applyUpdateState(status, version) {
+  const dot  = document.getElementById('updDot');
+  const txt  = document.getElementById('updTxt');
+  const prog = document.getElementById('updProgress');
+  const btnDl = document.getElementById('btnDlUpdate');
+  const btnRest = document.getElementById('btnRestart');
   if (status === 'up-to-date') {
-    document.getElementById('updDot').className = 'upd-dot ok';
-    document.getElementById('updTxt').textContent = 'Você está atualizado';
-  } else if (status === 'available' || status === 'downloading') {
-    // Download inicia automaticamente — mostra barra de progresso
-    document.getElementById('updDot').className = 'upd-dot dl';
-    document.getElementById('updTxt').textContent = version ? `Baixando v${version}...` : 'Baixando atualização...';
-    document.getElementById('updProgress').style.display = 'block';
-    document.getElementById('btnDlUpdate').style.display = 'none';
-    document.getElementById('btnRestart').style.display = 'none';
+    dot.className = 'upd-dot ok';
+    txt.textContent = 'Você está atualizado';
+    prog.style.display = 'none';
+    btnDl.style.display = 'none';
+    btnRest.style.display = 'none';
+  } else if (status === 'available') {
+    // Update DISPONÍVEL — user decide se quer baixar ou ignorar
+    dot.className = 'upd-dot avail';
+    txt.textContent = version ? `Nova versão v${version} disponível` : 'Nova versão disponível';
+    prog.style.display = 'none';
+    btnDl.textContent = 'Atualizar agora →';
+    btnDl.style.display = 'block';
+    btnRest.style.display = 'none';
+  } else if (status === 'downloading') {
+    dot.className = 'upd-dot dl';
+    txt.textContent = version ? `Baixando v${version}...` : 'Baixando atualização...';
+    prog.style.display = 'block';
+    btnDl.style.display = 'none';
+    btnRest.style.display = 'none';
   } else if (status === 'downloaded') {
-    document.getElementById('updDot').className = 'upd-dot ok';
-    document.getElementById('updProgress').style.display = 'none';
-    document.getElementById('btnDlUpdate').style.display = 'none';
-    document.getElementById('btnRestart').style.display = 'none';
-    // Contagem regressiva e reinício automático
-    let secs = 1;
-    document.getElementById('updTxt').textContent = `Reiniciando em ${secs}s...`;
-    clearInterval(updRestartTimer);
-    updRestartTimer = setInterval(() => {
-      secs--;
-      if (secs <= 0) {
-        clearInterval(updRestartTimer);
-        document.getElementById('updTxt').textContent = 'Reiniciando...';
-        ipcRenderer.send('install-update');
-      } else {
-        document.getElementById('updTxt').textContent = `Reiniciando em ${secs}s...`;
-      }
-    }, 1000);
+    // Download completo — mostra botão "Instalar agora" (não reinicia sozinho)
+    dot.className = 'upd-dot ok';
+    txt.textContent = version ? `v${version} pronta pra instalar` : 'Atualização pronta';
+    prog.style.display = 'none';
+    btnDl.style.display = 'none';
+    btnRest.style.display = 'block';
   }
 }
+
+// Botão "Atualizar agora" — dispara download + muda pra estado downloading
+function startDownload(){
+  ipcRenderer.send('download-update');
+  applyUpdateState('downloading', updateState.availableVersion);
+}
+// Botão "Reiniciar e instalar agora" — quando já baixou
+function restartNow(){
+  ipcRenderer.send('install-update');
+}
+// Estado local do update pro splash (usado pra mostrar versão nos botões)
+const updateState = { availableVersion: null };
 
 // Fallback: se nenhum evento chegar em 10s, assume atualizado
 let updTimer = null;
@@ -656,7 +978,7 @@ function resetUpdTimer() {
 
 // ── IPC: UPDATE EVENTS ──
 ipcRenderer.on('update-not-available', () => applyUpdateState('up-to-date'));
-ipcRenderer.on('update-available', (_, v) => { clearTimeout(updTimer); applyUpdateState('available', v); });
+ipcRenderer.on('update-available', (_, v) => { clearTimeout(updTimer); updateState.availableVersion = v; applyUpdateState('available', v); });
 ipcRenderer.on('update-progress', (_, pct) => {
   document.getElementById('updProgress').style.display = 'block';
   document.getElementById('updFill').style.width = pct + '%';
@@ -671,7 +993,12 @@ async function init() {
   document.getElementById('loadingVersion').textContent = `v${ver}`;
   document.getElementById('footerVer').textContent = `v${ver}`;
 
-  const saved = store.get('license');
+  // O boot.html já é o splash. Esconde a animação intermediária e as views
+  // até decidir qual mostrar (evita flash de login pra quem já está logado).
+  document.getElementById('loadingView').style.display = 'none';
+  document.getElementById('loginView').classList.add('hide');
+
+  let saved = store.get('license');
   let afterLoad = null;
 
   if (saved && saved.id) {
@@ -680,22 +1007,44 @@ async function init() {
       const expires = new Date(saved.license_expires + 'T00:00:00');
       if (today > expires) {
         store.delete('license');
-      } else {
-        afterLoad = () => showActivated(saved);
+        saved = null;
       }
-    } else {
-      afterLoad = () => showActivated(saved);
     }
   }
 
-  await new Promise(r => setTimeout(r, 1600));
+  // Re-sync com Supabase. Sucesso → atualiza last_online_login. Falha (offline
+  // ou Supabase fora do ar) → checa gate de 7 dias; expirado bloqueia entrada.
+  const OFFLINE_MAX_DAYS = 7;
+  let bootOffline = false;
+  if (saved && saved.id && saved.access_code) {
+    let fresh = null;
+    try { fresh = await queryUser(saved.access_code); } catch (e) { fresh = null; }
+    if (fresh && fresh.id) {
+      const merged = { ...saved, ...fresh, last_online_login: Date.now() };
+      store.set('license', merged);
+      saved = merged;
+    } else {
+      bootOffline = true;
+      const lastOnline = saved.last_online_login || 0;
+      const ageDays = (Date.now() - lastOnline) / 86400000;
+      if (!lastOnline || ageDays > OFFLINE_MAX_DAYS) {
+        store.delete('license');
+        saved = null;
+        setTimeout(() => showError(`Sem conexão há mais de ${OFFLINE_MAX_DAYS} dias. Conecte-se à internet para revalidar.`), 600);
+      }
+    }
+  } else if (!navigator.onLine) {
+    bootOffline = true;
+  }
 
-  const lv = document.getElementById('loadingView');
-  lv.classList.add('out');
-  await new Promise(r => setTimeout(r, 350));
-  lv.style.display = 'none';
+  if (saved && saved.id) {
+    saved._bootOffline = bootOffline;
+    afterLoad = () => showActivated(saved);
+  }
 
+  // Vai direto pra tela de inicialização (sem a animação intermediária).
   if (afterLoad) afterLoad();
+  else document.getElementById('loginView').classList.remove('hide');
 }
 
 document.getElementById('startBtn').addEventListener('click', () => {

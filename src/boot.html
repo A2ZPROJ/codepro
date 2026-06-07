@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Nexus</title>
+<style>
+html, body {
+  margin: 0; padding: 0;
+  width: 100%; height: 100%;
+  background: transparent !important;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+  pointer-events: none;
+  user-select: none;
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+}
+.boot-wrap {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 26px;
+  opacity: 0;
+  animation: bootSeq 2.5s cubic-bezier(.4,0,.2,1) forwards;
+}
+@keyframes bootSeq {
+  0%   { opacity: 0; }
+  12%  { opacity: 1; }
+  82%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── NEXUS (em cima, destaque) ── */
+.nexus-group {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 14px;
+  animation: logoIn 1.2s cubic-bezier(.2,0,.2,1) both;
+}
+@keyframes logoIn {
+  0%   { transform: scale(.7); opacity: 0; filter: blur(6px); }
+  40%  { transform: scale(1.04); opacity: 1; filter: blur(0); }
+  100% { transform: scale(1); opacity: 1; filter: blur(0); }
+}
+.nexus-mark {
+  filter: drop-shadow(0 6px 26px rgba(37,99,235,.55));
+}
+.nexus-word {
+  font-size: 58px; font-weight: 800; color: #fff; line-height: 1;
+  letter-spacing: -1px;
+  text-shadow: 0 4px 22px rgba(0,0,0,.6);
+}
+.nexus-word span { color: #3b82f6; }
+.nexus-tag {
+  font-size: 13px; font-weight: 600; color: #c7c7cc;
+  letter-spacing: 6px; text-transform: uppercase;
+  text-shadow: 0 2px 12px rgba(0,0,0,.8);
+  animation: tagIn 1s ease .9s both;
+}
+@keyframes tagIn {
+  from { opacity: 0; transform: translateY(8px); letter-spacing: 3px; }
+  to   { opacity: 1; transform: translateY(0); letter-spacing: 6px; }
+}
+
+/* ── A2Z (embaixo, menor) ── */
+.a2z-bottom {
+  display: flex; align-items: center; gap: 9px;
+  animation: tagIn 1s ease 1.15s both;
+}
+.a2z-by {
+  font-size: 11px; font-weight: 600; color: #94a3b8;
+  letter-spacing: 2px; text-transform: uppercase;
+  text-shadow: 0 2px 10px rgba(0,0,0,.8);
+}
+.a2z-text {
+  font-size: 22px; font-weight: 800; color: #fff; line-height: 1;
+  letter-spacing: .5px;
+  text-shadow: 0 2px 14px rgba(0,0,0,.8);
+}
+.a2z-text span { color: #9E9E9E; }
+</style>
+</head>
+<body>
+<div class="boot-wrap">
+  <div class="nexus-group">
+    <svg class="nexus-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" width="92" height="92">
+      <rect x="4" y="4" width="11" height="24" rx="3" fill="#3b82f6"/>
+      <rect x="17" y="4" width="11" height="4" rx="2" fill="#3b82f6"/>
+      <rect x="17" y="10" width="11" height="4" rx="2" fill="#3b82f6"/>
+      <rect x="17" y="16" width="11" height="4" rx="2" fill="#3b82f6"/>
+      <rect x="17" y="22" width="7" height="4" rx="2" fill="#93c5fd"/>
+    </svg>
+    <div class="nexus-word">Ne<span>x</span>us</div>
+    <div class="nexus-tag">Gestão e Projetos</div>
+  </div>
+  <div class="a2z-bottom">
+    <span class="a2z-by">by</span>
+    <span class="a2z-text">A<span>2</span>Z Projetos</span>
+  </div>
+</div>
+<script>
+const { ipcRenderer } = require('electron');
+setTimeout(() => {
+  try { ipcRenderer.send('boot:done'); } catch {}
+}, 2500);
+</script>
+</body>
+</html>
