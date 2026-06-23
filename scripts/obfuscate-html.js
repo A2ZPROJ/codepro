@@ -26,19 +26,19 @@ const JavaScriptObfuscator = require('javascript-obfuscator');
 const HTML_PATH = path.join(__dirname, '..', 'src', 'app', 'index.html');
 const BACKUP_PATH = HTML_PATH + '.src';
 
-// Config do obfuscator — balanceada entre proteção e performance
+// Config do obfuscator — protege strings/identifiers SEM mudar control flow
+// (controlFlowFlattening + numbersToExpressions causaram bugs sutis em forms).
 const OBF_OPTIONS = {
   compact: true,
-  controlFlowFlattening: true,
-  controlFlowFlatteningThreshold: 0.5,
+  controlFlowFlattening: false,  // DESLIGADO — causou bugs em modais (v2.27.1)
   deadCodeInjection: false,
-  debugProtection: false,       // já temos anti-debug no renderer
-  disableConsoleOutput: false,   // precisa de console.log/error em produção
+  debugProtection: false,
+  disableConsoleOutput: false,
   identifierNamesGenerator: 'hexadecimal',
   log: false,
-  numbersToExpressions: true,
+  numbersToExpressions: false,   // DESLIGADO junto pra evitar interação
   renameGlobals: false,          // NÃO renomeia window.X (quebraria onclick handlers)
-  selfDefending: false,          // pode causar crash em Electron
+  selfDefending: false,
   simplify: true,
   splitStrings: true,
   splitStringsChunkLength: 8,

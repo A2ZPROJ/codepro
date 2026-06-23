@@ -1,0 +1,30 @@
+{
+  "saida": "D:/PROGRAMAÇÃO/NEXUS/scripts/memorial/sample_amapora/_smoke_Memorial.docx",
+  "dados_json": "D:/PROGRAMAÇÃO/NEXUS/scripts/memorial/sample_amapora/dados_amapora.json",
+  "dados_extra_json": "D:/PROGRAMAÇÃO/NEXUS/scripts/memorial/sample_amapora/dados_amapora_extra.json",
+  "rede_geojson": "D:/PROGRAMAÇÃO/NEXUS/scripts/memorial/sample_amapora/geo_amapora/rede_trechos.geojson",
+  "mapas_dir": "D:/PROGRAMAÇÃO/NEXUS/scripts/memorial/sample_amapora/mapas",
+  "projeto": {
+    "municipio": "Amaporã",
+    "uf": "PR",
+    "subbacia": "Bacia 02 (sub-bacia BACIA 02 B)",
+    "codigo_doc": "MD-RCE-AMAPORA-BACIA02B-R1",
+    "codigo_mc": "MC-RCE-AMAPORA-BACIA02B-R1",
+    "rev": "R1",
+    "data": "Junho/2026"
+  },
+  "art": {
+    "eng_resp": "RODRIGO ANTONIO ZANATTA",
+    "crea": "SC-0680240/D",
+    "art": "1720260898051"
+  },
+  "fluxograma": {
+    "etapas": [
+      {"tipo": "Rede Projetada", "descricao": "RCE Bacia 02 (sub-bacia BACIA 02 B)"},
+      {"tipo": "Coletor", "descricao": "Coletor de interligação"},
+      {"tipo": "EEE", "descricao": "EEE Amaporã"},
+      {"tipo": "ETE", "descricao": "ETE Amaporã"},
+      {"tipo": "Corpo Receptor", "descricao": "Rio receptor"}
+    ]
+  }
+}

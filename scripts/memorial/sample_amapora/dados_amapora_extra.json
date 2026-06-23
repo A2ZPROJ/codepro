@@ -1,0 +1,367 @@
+{
+  "municipio": "Amapora-PR",
+  "bacia": "Bacia 02",
+  "data_extracao": "2026-06-14",
+  "1_tubos_de_queda_e_degrau": {
+    "fonte": "OSEs-AMAPORA - BACIA 02 - M.N.D - R1.xlsx",
+    "onde_achado": "cada aba OSE-NNN, celula U12 (rotulo 'T.Q. X,XXX m' ou 'DEGRAU X,XXX m'); cabecalho em X1='Altura do Degrau - se existir', AX5/AX7 listas-modelo 'DEGRAU/T.Q.'",
+    "tubos_de_queda_TQ": {
+      "quantidade": 53,
+      "soma_alturas_m": 55.367,
+      "altura_min_m": 0.513,
+      "altura_max_m": 2.715,
+      "lista": [
+        {
+          "ose": "OSE-002",
+          "altura_m": 1.168
+        },
+        {
+          "ose": "OSE-007",
+          "altura_m": 0.981
+        },
+        {
+          "ose": "OSE-011",
+          "altura_m": 1.403
+        },
+        {
+          "ose": "OSE-014",
+          "altura_m": 1.392
+        },
+        {
+          "ose": "OSE-016",
+          "altura_m": 0.674
+        },
+        {
+          "ose": "OSE-017",
+          "altura_m": 0.513
+        },
+        {
+          "ose": "OSE-021",
+          "altura_m": 0.76
+        },
+        {
+          "ose": "OSE-024",
+          "altura_m": 2.715
+        },
+        {
+          "ose": "OSE-029",
+          "altura_m": 0.829
+        },
+        {
+          "ose": "OSE-033",
+          "altura_m": 1.128
+        },
+        {
+          "ose": "OSE-036",
+          "altura_m": 1.207
+        },
+        {
+          "ose": "OSE-040",
+          "altura_m": 1.135
+        },
+        {
+          "ose": "OSE-044",
+          "altura_m": 0.886
+        },
+        {
+          "ose": "OSE-047",
+          "altura_m": 1.264
+        },
+        {
+          "ose": "OSE-048",
+          "altura_m": 0.869
+        },
+        {
+          "ose": "OSE-051",
+          "altura_m": 0.557
+        },
+        {
+          "ose": "OSE-055",
+          "altura_m": 1.02
+        },
+        {
+          "ose": "OSE-058",
+          "altura_m": 1.305
+        },
+        {
+          "ose": "OSE-065",
+          "altura_m": 1.353
+        },
+        {
+          "ose": "OSE-069",
+          "altura_m": 1.343
+        },
+        {
+          "ose": "OSE-071",
+          "altura_m": 1.2
+        },
+        {
+          "ose": "OSE-074",
+          "altura_m": 1.145
+        },
+        {
+          "ose": "OSE-076",
+          "altura_m": 0.589
+        },
+        {
+          "ose": "OSE-077",
+          "altura_m": 0.893
+        },
+        {
+          "ose": "OSE-079",
+          "altura_m": 0.941
+        },
+        {
+          "ose": "OSE-083",
+          "altura_m": 0.686
+        },
+        {
+          "ose": "OSE-084",
+          "altura_m": 0.58
+        },
+        {
+          "ose": "OSE-105",
+          "altura_m": 0.628
+        },
+        {
+          "ose": "OSE-119",
+          "altura_m": 1.196
+        },
+        {
+          "ose": "OSE-122",
+          "altura_m": 0.986
+        },
+        {
+          "ose": "OSE-138",
+          "altura_m": 1.256
+        },
+        {
+          "ose": "OSE-141",
+          "altura_m": 0.986
+        },
+        {
+          "ose": "OSE-146",
+          "altura_m": 0.809
+        },
+        {
+          "ose": "OSE-149",
+          "altura_m": 1.168
+        },
+        {
+          "ose": "OSE-152",
+          "altura_m": 0.601
+        },
+        {
+          "ose": "OSE-155",
+          "altura_m": 1.221
+        },
+        {
+          "ose": "OSE-161",
+          "altura_m": 1.221
+        },
+        {
+          "ose": "OSE-163",
+          "altura_m": 0.993
+        },
+        {
+          "ose": "OSE-169",
+          "altura_m": 0.863
+        },
+        {
+          "ose": "OSE-178",
+          "altura_m": 1.062
+        },
+        {
+          "ose": "OSE-183",
+          "altura_m": 0.809
+        },
+        {
+          "ose": "OSE-184",
+          "altura_m": 0.927
+        },
+        {
+          "ose": "OSE-187",
+          "altura_m": 0.557
+        },
+        {
+          "ose": "OSE-188",
+          "altura_m": 0.688
+        },
+        {
+          "ose": "OSE-191",
+          "altura_m": 0.739
+        },
+        {
+          "ose": "OSE-192",
+          "altura_m": 0.739
+        },
+        {
+          "ose": "OSE-196",
+          "altura_m": 0.931
+        },
+        {
+          "ose": "OSE-199",
+          "altura_m": 0.925
+        },
+        {
+          "ose": "OSE-201",
+          "altura_m": 0.754
+        },
+        {
+          "ose": "OSE-203",
+          "altura_m": 1.033
+        },
+        {
+          "ose": "OSE-210",
+          "altura_m": 1.349
+        },
+        {
+          "ose": "OSE-214",
+          "altura_m": 2.236
+        },
+        {
+          "ose": "OSE-218",
+          "altura_m": 2.154
+        }
+      ]
+    },
+    "degraus": {
+      "quantidade": 8,
+      "soma_alturas_m": 0.274,
+      "altura_min_m": 0.005,
+      "altura_max_m": 0.173,
+      "lista": [
+        {
+          "ose": "OSE-142",
+          "altura_m": 0.005
+        },
+        {
+          "ose": "OSE-162",
+          "altura_m": 0.005
+        },
+        {
+          "ose": "OSE-164",
+          "altura_m": 0.005
+        },
+        {
+          "ose": "OSE-167",
+          "altura_m": 0.063
+        },
+        {
+          "ose": "OSE-168",
+          "altura_m": 0.005
+        },
+        {
+          "ose": "OSE-171",
+          "altura_m": 0.005
+        },
+        {
+          "ose": "OSE-172",
+          "altura_m": 0.173
+        },
+        {
+          "ose": "OSE-202",
+          "altura_m": 0.013
+        }
+      ]
+    },
+    "observacao": "NAO existe a string 'TQ'/'TUBO DE QUEDA'/'QUEDA' como coluna; o tubo de queda aparece abreviado 'T.Q.' no rotulo da celula U12 de cada aba OSE. A extracao anterior so olhou a aba MODELO (vazia='DEGRAU  m') e concluiu erradamente que nao havia valor."
+  },
+  "2_dn_rede": {
+    "fonte": "OSE: aba!A2/B9 (DN) e RESUMO col B (Extensao)",
+    "dn_unico": "DN 150mm - PVC (todas as 221 OSEs)",
+    "dn_extensao": [
+      {
+        "dn": "DN 150",
+        "material": "PVC",
+        "extensao_m": 9719.23,
+        "n_oses": 221
+      }
+    ],
+    "n_linhas_tabela_quantitativo_rede": 1,
+    "observacao": "Apenas DN 150 em todo o projeto. Tabela de quantitativo de rede tera 1 linha (DN 150). Sem DN extra."
+  },
+  "3_precisoes_gnss": {
+    "fonte": "4 arquivos TXT GNSS em G:\\Meu Drive\\LEVANTAMENTO ACCIONA\u000f. AMAPORA",
+    "metodo_calculo": "replicado de processador_topografia.js (Nexus): col5=PDOP,col6=HDOP,col7=VDOP,col8=HRMS,col9=VRMS,col14=status; filtro outliers raio 5000m + |z-med|<=4*std (0 removidos)",
+    "n_pontos": 10035,
+    "n_arquivos": 4,
+    "metodo_RTK": "PPP-RTK (GEO PPP) - 10034 pts solucao 'Fixo', 1 pt 'Autonomo'",
+    "precisao_planimetrica_m_HRMS": {
+      "minimo": 0.004,
+      "maximo": 3.453,
+      "medio": 0.234,
+      "tipico_mediana": 0.008,
+      "p90": 0.565
+    },
+    "precisao_altimetrica_m_VRMS": {
+      "minimo": 0.008,
+      "maximo": 5.523,
+      "medio": 0.402,
+      "tipico_mediana": 0.014,
+      "p90": 0.976
+    },
+    "PDOP": {
+      "minimo": 0.01,
+      "maximo": 3.23,
+      "medio": 0.69,
+      "tipico_mediana": 1.06,
+      "p90": 1.3
+    },
+    "VDOP": {
+      "minimo": 0.77,
+      "maximo": 5.71,
+      "medio": 1.06,
+      "tipico_mediana": 1.02,
+      "p90": 1.25
+    },
+    "HDOP": {
+      "minimo": 0.01,
+      "maximo": 1.75,
+      "medio": 0.33,
+      "tipico_mediana": 0.5,
+      "p90": 0.62
+    },
+    "HRMS": {
+      "minimo": 0.004,
+      "maximo": 3.453,
+      "medio": 0.234,
+      "tipico_mediana": 0.008,
+      "p90": 0.565
+    },
+    "VRMS": {
+      "minimo": 0.008,
+      "maximo": 5.523,
+      "medio": 0.402,
+      "tipico_mediana": 0.014,
+      "p90": 0.976
+    },
+    "detalhe_por_arquivo": [
+      {
+        "arquivo": "22-01-2026-Equipe 02-3980.txt",
+        "pontos": 3950
+      },
+      {
+        "arquivo": "22-01-2026-Equipe 04-2580.txt",
+        "pontos": 2549
+      },
+      {
+        "arquivo": "23-01-2026-Equipe 02-1830.txt",
+        "pontos": 1816
+      },
+      {
+        "arquivo": "23-01-2026-Equipe 04-1735.txt",
+        "pontos": 1720
+      }
+    ],
+    "datas_levantamento": [
+      "22/01/2026",
+      "23/01/2026"
+    ],
+    "equipes": [
+      "Equipe 02",
+      "Equipe 04"
+    ],
+    "observacao": "O relatorio topografico do Nexus usa o valor TIPICO=mediana p/ HRMS/VRMS/PDOP/VDOP e a faixa min-max. Para o memorial: precisao planimetrica tipica ~0,008 m (HRMS), altimetrica tipica ~0,014 m (VRMS); faixas e maximos refletem pontos sob copa/obstrucao."
+  }
+}

@@ -10,7 +10,7 @@
 // (via IPC) ou importado direto no renderer (contextIsolation:false).
 'use strict';
 
-const { isExistingPv, classifyOse } = require('./oseStatus');
+const { isExistingPv, classifyOse, buildCrossContext } = require('./oseStatus');
 
 // Tolerâncias (espelham oseStatus onde fizer sentido e adicionam específicas).
 const TOL = {
@@ -495,9 +495,10 @@ function checkGeometry(data, graph, V) {
 }
 
 // ── D. CONFERÊNCIA (inclui erros do classifyOse pra ter visão única) ──────
-function checkConferencia(data, V) {
+function checkConferencia(data, V, opts) {
+  const ctx = buildCrossContext(data, opts);
   for (const r of data) {
-    const c = classifyOse(r);
+    const c = classifyOse(r, ctx);
     // errors são ERRO real, warnings são ALERTA (T.Q. etc.)
     for (const msg of (c.errors || [])) {
       pushV(V, {
@@ -519,10 +520,10 @@ function checkConferencia(data, V) {
 }
 
 // ── ENTRY ──────────────────────────────────────────────────────────────────
-function deepCheck(data) {
+function deepCheck(data, opts) {
   const graph = buildGraph(data);
   const V = [];
-  checkConferencia(data, V);
+  checkConferencia(data, V, opts);
   checkTopology(data, graph, V);
   checkHydraulics(data, graph, V);
   checkGeometry(data, graph, V);

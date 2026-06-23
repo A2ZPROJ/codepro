@@ -343,7 +343,7 @@
     const TAB_MAP = {
       generator: 'Cadastrar Novo Projeto', history: 'Histórico', dashboard: 'Dashboard',
       projects: 'Projetos', grd: 'GRD', verificar: 'Verificar Projeto',
-      conferencia: 'Conferência', orcamento: 'Orçamento', renomear: 'Renomear',
+      conferencia: 'Conferência', 'gerar-pdf-ose': 'Gerar PDF Planilha OSE', orcamento: 'Orçamento', renomear: 'Renomear',
       'planilhas-gis': 'Correção de Planilha GIS', perfil: 'Perfil', estoque: 'Estoque',
       pedidos: 'Pedidos de Compra', diretoria: 'Dashboard Contrato',
       relatorios: 'Relatórios Técnicos', sobre: 'Sobre',
@@ -370,7 +370,7 @@
     };
     const TAB_REQUIRES = {
       generator: 1, projects: 1, history: 1, dashboard: 1, perfil: 1, sobre: 1,
-      grd: 2, orcamento: 2, 'planilhas-gis': 2, renomear: 2, 'coleta-end': 2,
+      grd: 2, orcamento: 2, 'gerar-pdf-ose': 2, 'planilhas-gis': 2, renomear: 2, 'coleta-end': 2,
       estoque: 2, pedidos: 2, relatorios: 2,
       'frotas-veiculos': 2, 'frotas-abastec': 2,
       'obras-vistorias': 2,
@@ -7633,6 +7633,11 @@ body.presenting #presentingBadge { display: flex; }
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg>
           <span class="sb-label">Conferência</span>
         </button>
+        <!-- 7b. Gerar PDF Planilha OSE (movido da aba Orçamento › Abas Excel → PDF) -->
+        <button class="sb-item" data-tab="gerar-pdf-ose" data-label="Gerar PDF Planilha OSE" onclick="switchTab('gerar-pdf-ose',this)">
+          <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 13h6M9 17h4"/></svg>
+          <span class="sb-label">Gerar PDF Planilha OSE</span>
+        </button>
         <!-- 7. Orçamento -->
         <button class="sb-item" data-tab="orcamento" data-label="Orçamento" data-requires-online="1" onclick="switchTab('orcamento',this);setTimeout(()=>window.orcInit&&window.orcInit(),60);">
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
@@ -7704,6 +7709,11 @@ body.presenting #presentingBadge { display: flex; }
         <button class="sb-item" data-tab="rh-folha" data-label="Folha & Pagamentos" data-requires-online="1" onclick="switchTab('rh-folha',this);">
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="12" cy="14.5" r="2"/></svg>
           <span class="sb-label">Folha & Pagamentos</span>
+        </button>
+        <!-- RH — Base de Currículos -->
+        <button class="sb-item" data-tab="rh-curriculos" data-label="Base de Currículos" onclick="switchTab('rh-curriculos',this);">
+          <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h13l3 3v13a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1z"/><line x1="7" y1="9" x2="14" y2="9"/><line x1="7" y1="13" x2="16" y2="13"/><line x1="7" y1="17" x2="12" y2="17"/></svg>
+          <span class="sb-label">Base de Currículos</span>
         </button>
         <!-- Reuniões -->
         <button class="sb-item" data-tab="reunioes" data-label="Reuniões" data-requires-online="1" onclick="switchTab('reunioes',this);">
@@ -11352,6 +11362,60 @@ body.presenting #presentingBadge { display: flex; }
   };
   </script>
 
+  <!-- GERAR PDF PLANILHA OSE TAB (movido de Orçamento › Abas Excel → PDF) ─── -->
+  <div class="tab-content" id="tab-gerar-pdf-ose">
+    <div style="padding:28px 24px 60px;max-width:1100px;margin:0 auto">
+
+      <!-- HERO -->
+      <div class="page-hero">
+        <div class="page-hero-content">
+          <h1 class="page-title">Gerar PDF Planilha OSE</h1>
+          <p class="page-subtitle">Cada aba da planilha vira um PDF separado (nome do PDF = nome da aba)</p>
+        </div>
+      </div>
+
+      <div id="san-gerar-pdf-ose">
+        <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:18px 20px;display:flex;flex-direction:column;gap:16px">
+
+          <!-- 1) Planilha -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">1. Planilha <span style="color:var(--red,#A11312)">*</span></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button id="abas-pick-xlsx" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0">Selecionar planilha (.xlsx)</button>
+              <input id="abas-xlsx-path" readonly placeholder="Nenhuma planilha selecionada" style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
+            </div>
+          </div>
+
+          <!-- 2) Pasta de destino -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">2. Pasta de destino <span style="color:var(--red,#A11312)">*</span></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button id="abas-pick-dir" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0">Selecionar pasta</button>
+              <input id="abas-dir-path" readonly placeholder="Nenhuma pasta selecionada" style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
+            </div>
+          </div>
+
+          <!-- 3) Prefixo (opcional) -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">3. Prefixo das abas <span style="font-weight:400;color:var(--text3)">(opcional — vazio = todas as abas)</span></div>
+            <input id="abas-prefixo" type="text" placeholder="ex.: OSE — só exporta abas que começam assim" style="width:100%;max-width:360px;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;box-sizing:border-box"/>
+          </div>
+
+          <!-- 4) Exportar -->
+          <div style="display:flex;align-items:center;gap:12px;border-top:1px solid var(--border);padding-top:14px">
+            <button id="abas-gerar" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:10px 20px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Exportar PDFs</button>
+            <div id="abas-status" style="font-size:12px;color:var(--text3)"></div>
+          </div>
+
+          <!-- Resultado -->
+          <div id="abas-result" style="display:none;border:1px solid var(--border);border-radius:8px;background:var(--surface2);padding:14px 16px"></div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ORÇAMENTO TAB ─────────────────────────────────────────────── -->
   <div class="tab-content" id="tab-orcamento">
     <div style="padding:20px;max-width:1280px;margin:0 auto">
@@ -11360,8 +11424,9 @@ body.presenting #presentingBadge { display: flex; }
       <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border)">
         <button class="orc-subtab active" data-sub="tabelas" style="background:none;border:none;border-bottom:2.5px solid var(--gray-900);color:var(--text);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:-1px">Tabelas de Preço</button>
         <button class="orc-subtab" data-sub="bdi" style="background:none;border:none;border-bottom:2.5px solid transparent;color:var(--text3);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;margin-bottom:-1px">BDI</button>
-        <button class="orc-subtab" data-sub="orcamentos" style="background:none;border:none;border-bottom:2.5px solid transparent;color:var(--text3);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;margin-bottom:-1px">Orçamentos</button>
-        <button class="orc-subtab" data-sub="checklist" style="background:none;border:none;border-bottom:2.5px solid transparent;color:var(--text3);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;margin-bottom:-1px">Checklist de Entrega</button>
+        <button class="orc-subtab" data-sub="gerar-rce" style="background:none;border:none;border-bottom:2.5px solid transparent;color:var(--text3);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;margin-bottom:-1px">Orçamento por OSE</button>
+        <button class="orc-subtab" data-sub="orcamentos" style="background:none;border:none;border-bottom:2.5px solid transparent;color:var(--text3);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;margin-bottom:-1px">Orçamento Manual</button>
+        <button class="orc-subtab" data-sub="checklist" style="display:none;background:none;border:none;border-bottom:2.5px solid transparent;color:var(--text3);padding:10px 16px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;margin-bottom:-1px">Checklist de Entrega</button>
       </div>
 
       <!-- ─── SUB: TABELAS DE PREÇO ─────────────────────────────── -->
@@ -11403,7 +11468,7 @@ body.presenting #presentingBadge { display: flex; }
       <!-- ─── SUB: ORÇAMENTOS ───────────────────────────────────── -->
       <div class="orc-sub" id="orc-sub-orcamentos" style="display:none">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:600;color:var(--text)">Orçamentos</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text)">Orçamento Manual</div>
           <button id="orc-novo-btn" style="margin-left:auto;background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">+ Novo orçamento</button>
         </div>
         <div id="orc-orc-list" style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden">
@@ -11426,6 +11491,90 @@ body.presenting #presentingBadge { display: flex; }
           <button id="orc-checklist-export" style="background:var(--surface);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:7px 14px;font-family:inherit;font-size:11px;cursor:pointer">Exportar como PDF</button>
         </div>
       </div>
+
+      <!-- ─── SUB: GERAR RCE (de arquivo de OSEs) ─────────────── -->
+      <div class="orc-sub" id="orc-sub-gerar-rce" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">Gerar orçamento de Rede Coletora de Esgoto (RCE)</div>
+          <div style="font-size:11px;color:var(--text3)">A partir do arquivo de OSEs (.xlsx) — divisão MND × VCA por profundidade, padrão 2S/SANEPAR</div>
+        </div>
+
+        <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:18px 20px;display:flex;flex-direction:column;gap:16px">
+
+          <!-- 1) Arquivo de OSEs -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">1. Arquivo de OSEs <span style="color:var(--red,#A11312)">*</span></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button id="rce-pick-oses" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0">Selecionar arquivo (.xlsx)</button>
+              <input id="rce-oses-path" readonly placeholder="Nenhum arquivo selecionado" style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
+            </div>
+          </div>
+
+          <!-- 2) Parâmetros -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">2. Parâmetros <span style="font-weight:400;color:var(--text3)">(pré-configurados — edite se necessário)</span></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Nº de ligações prediais <span style="color:var(--red,#A11312)">*</span>
+                <input id="rce-ligacoes" type="number" min="0" step="1" placeholder="informe" class="rce-inp"/></label>
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Nº de frentes simultâneas
+                <input id="rce-frentes" type="number" min="1" step="1" value="2" class="rce-inp"/></label>
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Canteiro — largura (m)
+                <input id="rce-canteiro-larg" type="number" step="0.5" value="20" class="rce-inp"/></label>
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Canteiro — comprimento (m)
+                <input id="rce-canteiro-compr" type="number" step="0.5" value="30" class="rce-inp"/></label>
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Placa de obra — área (m²)
+                <input id="rce-placa-area" type="number" step="0.1" value="3.0" class="rce-inp"/></label>
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Placas de advertência / frente
+                <input id="rce-placas-frente" type="number" min="0" step="1" value="3" class="rce-inp"/></label>
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Fita / frente (m)
+                <input id="rce-fita-frente" type="number" step="1" value="50" class="rce-inp"/></label>
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Tapume móvel / frente (m)
+                <input id="rce-tapume-frente" type="number" step="1" value="12" class="rce-inp"/></label>
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Obra
+                <input id="rce-obra" type="text" placeholder="ex.: Rede Coletora de Esgoto" class="rce-inp"/></label>
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Município
+                <input id="rce-municipio" type="text" placeholder="ex.: Diamante do Norte" class="rce-inp"/></label>
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Contratante
+                <input id="rce-contratante" type="text" value="ACCIONA" class="rce-inp"/></label>
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Projetista
+                <input id="rce-projetista" type="text" value="2S Engenharia" class="rce-inp"/></label>
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Preço do tubo (R$/m)
+                <input id="rce-tubo-preco" type="number" step="0.01" value="85.78" class="rce-inp"/></label>
+
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Origem do tubo
+                <input id="rce-tubo-origem" type="text" value="SINAPI 12/2024 cod 41936" class="rce-inp"/></label>
+
+            </div>
+          </div>
+
+          <!-- 3) Gerar -->
+          <div style="display:flex;align-items:center;gap:12px;border-top:1px solid var(--border);padding-top:14px">
+            <button id="rce-gerar" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:10px 20px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Gerar orçamento</button>
+            <div id="rce-status" style="font-size:12px;color:var(--text3)"></div>
+          </div>
+
+          <!-- Resultado -->
+          <div id="rce-result" style="display:none;border:1px solid var(--border);border-radius:8px;background:var(--surface2);padding:14px 16px"></div>
+
+        </div>
+      </div>
+
+      <!-- ─── SUB: ABAS EXCEL → PDF ─────────────────────────────── -->
+      <!-- (movido) "Abas Excel → PDF" agora é o item "Gerar PDF Planilha OSE" do
+           módulo Saneamento, abaixo de Conferência. Painel em #tab-gerar-pdf-ose. -->
 
     </div>
 
@@ -11483,12 +11632,12 @@ body.presenting #presentingBadge { display: flex; }
 
     <!-- Modal: Novo orçamento (cabeçalho + BDIs) -->
     <div id="orc-new-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;align-items:safe center;justify-content:center;padding:20px;overflow-y:auto">
-      <div style="background:var(--surface);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:100%;max-width:720px;margin:auto 0">
-        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="background:var(--surface);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:100%;max-width:720px;max-height:calc(100vh - 40px);display:flex;flex-direction:column">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
           <div style="font-size:14px;font-weight:700;color:var(--text)">Novo orçamento</div>
           <button onclick="document.getElementById('orc-new-modal').style.display='none'" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px 8px">✕</button>
         </div>
-        <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
+        <div style="padding:20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;flex:1;min-height:0">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div style="grid-column:span 2">
               <label style="display:block;font-size:11px;font-weight:600;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Título *</label>
@@ -11553,7 +11702,7 @@ body.presenting #presentingBadge { display: flex; }
           </div>
           <div id="orc-new-status" style="font-size:11px;color:var(--text3);min-height:14px"></div>
         </div>
-        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0">
           <button onclick="document.getElementById('orc-new-modal').style.display='none'" style="background:var(--surface);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;cursor:pointer">Cancelar</button>
           <button onclick="window.orcLoadTemplate()" style="background:var(--surface);color:#6b21a8;border:1.5px solid #6b21a8;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Usar template</button>
           <button id="orc-new-save" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 18px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Criar e abrir</button>
@@ -12149,7 +12298,11 @@ body.presenting #presentingBadge { display: flex; }
       document.getElementById('orc-new-eng').value        = '';
       document.getElementById('orc-new-crea').value       = '';
       document.getElementById('orc-new-status').textContent = '';
-      document.getElementById('orc-new-modal').style.display = 'flex';
+      const _ocm = document.getElementById('orc-new-modal');
+      // escapa de qualquer ancestral com transform/overflow (senao a modal fica
+      // cortada e atras do conteudo) -> vira filha direta do body
+      if (_ocm.parentElement !== document.body) document.body.appendChild(_ocm);
+      _ocm.style.display = 'flex';
     }
 
     document.getElementById('orc-novo-btn').addEventListener('click', openNewOrcModal);
@@ -13989,6 +14142,504 @@ body.presenting #presentingBadge { display: flex; }
   })();
   </script>
 
+  <!-- ── ORÇAMENTO › GERAR RCE (de OSEs) — bloco isolado ───────────────── -->
+  <style>
+    #orc-sub-gerar-rce .rce-inp {
+      padding:7px 10px; font-family:inherit; font-size:12px;
+      border:1.5px solid var(--border); border-radius:6px;
+      color:var(--text); background:var(--surface); outline:none; min-width:0;
+    }
+    #orc-sub-gerar-rce .rce-inp:focus { border-color:var(--gray-900); }
+  </style>
+  <script>
+  (function(){
+    // Fluxo isolado: gera o orçamento RCE chamando o gerador Python via
+    // window.electronAPI.orcRce (IPC orc-rce:*). Não depende do Supabase nem
+    // do orcInit da aba Orçamento — só do DOM da sub-aba "gerar-rce".
+    const $ = (id) => document.getElementById(id);
+    let _osesPath = null;
+    let _rceBusy  = false;
+
+    function numBR(v) {
+      // aceita "85,78" ou "85.78" -> Number
+      if (v == null) return null;
+      const s = String(v).trim().replace(/\./g, '').replace(',', '.');
+      // (acima trata "1.234,56"; para "85.78" sem milhar isso quebraria —
+      //  então: se não houver vírgula, usa parseFloat direto)
+      if (!String(v).includes(',')) { const n = parseFloat(String(v).trim()); return isNaN(n) ? null : n; }
+      const n = parseFloat(s); return isNaN(n) ? null : n;
+    }
+    function fmtRS(n) {
+      try { return (Number(n)||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); }
+      catch { return 'R$ ' + (Number(n)||0).toFixed(2); }
+    }
+    function fmtNum(n, d) {
+      try { return (Number(n)||0).toLocaleString('pt-BR', { minimumFractionDigits:d||0, maximumFractionDigits:d||0 }); }
+      catch { return String(n); }
+    }
+    function setStatus(txt, color) {
+      const el = $('rce-status'); if (!el) return;
+      el.textContent = txt || ''; el.style.color = color || 'var(--text3)';
+    }
+
+    async function pickOses() {
+      if (!window.electronAPI || !window.electronAPI.orcRce) {
+        setStatus('IPC indisponível (rode pelo app Electron).', 'var(--red,#A11312)'); return;
+      }
+      const p = await window.electronAPI.orcRce.selectOses();
+      if (p) { _osesPath = p; $('rce-oses-path').value = p; setStatus(''); }
+    }
+
+    async function gerar() {
+      if (_rceBusy) return;
+      if (!window.electronAPI || !window.electronAPI.orcRce) {
+        setStatus('IPC indisponível (rode pelo app Electron).', 'var(--red,#A11312)'); return;
+      }
+      if (!_osesPath) { setStatus('Selecione o arquivo de OSEs primeiro.', 'var(--red,#A11312)'); return; }
+      const ligRaw = $('rce-ligacoes').value;
+      if (ligRaw === '' || ligRaw == null) { setStatus('Informe o nº de ligações prediais.', 'var(--red,#A11312)'); $('rce-ligacoes').focus(); return; }
+      const ligacoes = parseInt(ligRaw, 10);
+      if (isNaN(ligacoes) || ligacoes < 0) { setStatus('Nº de ligações inválido.', 'var(--red,#A11312)'); return; }
+
+      const municipio = ($('rce-municipio').value || '').trim();
+      const sanitize = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '').trim();
+      const defName = 'Orcamento_RCE' + (municipio ? '_' + sanitize(municipio).replace(/\s+/g, '_') : '') + '.xlsx';
+
+      const saida = await window.electronAPI.orcRce.pickSave(defName);
+      if (!saida) { setStatus(''); return; }
+
+      const cfg = {
+        oses: _osesPath,
+        saida: saida,
+        ligacoes: ligacoes,
+        frentes: parseInt($('rce-frentes').value, 10) || 2,
+        canteiro_larg: numBR($('rce-canteiro-larg').value) ?? 20,
+        canteiro_compr: numBR($('rce-canteiro-compr').value) ?? 30,
+        placa_area: numBR($('rce-placa-area').value) ?? 3.0,
+        placas_frente: parseInt($('rce-placas-frente').value, 10) || 3,
+        fita_frente: numBR($('rce-fita-frente').value) ?? 50,
+        tapume_movel_frente: numBR($('rce-tapume-frente').value) ?? 12,
+        obra: ($('rce-obra').value || '').trim() || 'Rede Coletora de Esgoto',
+        municipio: municipio,
+        contratante: ($('rce-contratante').value || '').trim() || 'ACCIONA',
+        projetista: ($('rce-projetista').value || '').trim() || '2S Engenharia',
+        tubo_preco: numBR($('rce-tubo-preco').value) ?? 85.78,
+        tubo_origem: ($('rce-tubo-origem').value || '').trim() || 'SINAPI 12/2024 cod 41936',
+      };
+
+      _rceBusy = true;
+      const btn = $('rce-gerar'); if (btn) { btn.disabled = true; btn.style.opacity = .6; btn.style.cursor = 'default'; }
+      const resBox = $('rce-result'); if (resBox) resBox.style.display = 'none';
+      setStatus('Gerando orçamento… (pode levar alguns segundos)', 'var(--text2)');
+
+      let r;
+      try { r = await window.electronAPI.orcRce.gerar(cfg); }
+      catch (e) { r = { ok:false, erro: (e && e.message) || String(e) }; }
+
+      _rceBusy = false;
+      if (btn) { btn.disabled = false; btn.style.opacity = 1; btn.style.cursor = 'pointer'; }
+
+      if (r && r.ok) {
+        setStatus('Orçamento gerado com sucesso.', 'var(--green,#15803d)');
+        renderResult(r);
+      } else {
+        const msg = (r && (r.erro || r.error)) || 'Falha desconhecida ao gerar.';
+        setStatus('Erro ao gerar o orçamento.', 'var(--red,#A11312)');
+        renderError(msg);
+      }
+    }
+
+    function renderResult(r) {
+      const box = $('rce-result'); if (!box) return;
+      const cell = (lbl, val) =>
+        '<div style="display:flex;flex-direction:column;gap:2px">'
+        + '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">' + lbl + '</div>'
+        + '<div style="font-size:13px;font-weight:700;color:var(--text)">' + val + '</div></div>';
+      box.innerHTML =
+        '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">Resumo do orçamento</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px">'
+        + cell('Total (c/ BDI)', fmtRS(r.total))
+        + cell('Custo direto', fmtRS(r.custo_direto))
+        + cell('Extensão total', fmtNum(r.ext_total,2) + ' m')
+        + cell('MND (cravação)', fmtNum(r.ext_mnd,2) + ' m')
+        + cell('VCA (vala)', fmtNum(r.ext_vca,2) + ' m')
+        + cell('Nº de OSEs', fmtNum(r.n_ose,0))
+        + cell('Nº de PVs', fmtNum(r.n_pv,0))
+        + cell('Nº de TLs', fmtNum(r.n_tl,0))
+        + cell('Ligações prediais', fmtNum(r.n_ligacoes,0))
+        + '</div>'
+        + '<div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+        + '<button id="rce-abrir" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Abrir planilha</button>'
+        + '<span style="font-size:11px;color:var(--text3);word-break:break-all">' + (r.saida || '') + '</span>'
+        + '</div>';
+      box.style.display = '';
+      const ab = $('rce-abrir');
+      if (ab) ab.addEventListener('click', async () => {
+        const rr = await window.electronAPI.orcRce.abrir(r.saida);
+        if (rr && !rr.ok) setStatus('Não foi possível abrir: ' + (rr.error || ''), 'var(--red,#A11312)');
+      });
+    }
+
+    function renderError(msg) {
+      const box = $('rce-result'); if (!box) return;
+      box.innerHTML =
+        '<div style="font-size:13px;font-weight:700;color:var(--red,#A11312);margin-bottom:6px">Erro ao gerar</div>'
+        + '<pre style="white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--text2);margin:0;font-family:ui-monospace,Consolas,monospace">'
+        + String(msg).replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre>';
+      box.style.display = '';
+    }
+
+    function wire() {
+      const pick = $('rce-pick-oses'), gen = $('rce-gerar');
+      if (!pick || !gen) return false;
+      if (pick.dataset.wired) return true;
+      pick.dataset.wired = '1';
+      pick.addEventListener('click', pickOses);
+      gen.addEventListener('click', gerar);
+      return true;
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+    else wire();
+    // Reforço: tenta religar quando a sub-aba for aberta (caso o DOM mude).
+    document.addEventListener('click', (e) => {
+      const t = e.target.closest && e.target.closest('.orc-subtab[data-sub="gerar-rce"]');
+      if (t) setTimeout(wire, 30);
+    });
+  })();
+  </script>
+
+  <!-- ── RELATÓRIOS › GERAR MEMORIAL DESCRITIVO — bloco isolado ─────────── -->
+  <style>
+    #rel-pane-memorial .mem-inp {
+      padding:7px 10px; font-family:inherit; font-size:12px;
+      border:1.5px solid var(--border); border-radius:6px;
+      color:var(--text); background:var(--surface); outline:none; min-width:0;
+    }
+    #rel-pane-memorial .mem-inp:focus { border-color:var(--gray-900); }
+    #rel-pane-memorial .mem-flux-row select,
+    #rel-pane-memorial .mem-flux-row input {
+      padding:7px 10px; font-family:inherit; font-size:12px;
+      border:1.5px solid var(--border); border-radius:6px;
+      color:var(--text); background:var(--surface); outline:none;
+    }
+  </style>
+  <script>
+  (function(){
+    // Fluxo isolado: gera o Memorial Descritivo (.docx) chamando o gerador
+    // Python via window.electronAPI.memorial (IPC memorial:*). Mesma estratégia
+    // do "Gerar RCE": grava um config.json tmp e spawna o python empacotado.
+    const $ = (id) => document.getElementById(id);
+    const memPaths = { ose:null, txt:null, soleiras:null, interferencias:null, mapas:null };
+    let _memBusy = false;
+
+    const FLUX_TIPOS = ['Rede Projetada','Rede Existente','Coletor','Emissário',
+                        'Linha de Recalque','EEE','ETE','Corpo Receptor'];
+
+    function memStatus(txt, color) {
+      const el = $('mem-status'); if (!el) return;
+      el.textContent = txt || ''; el.style.color = color || 'var(--text3)';
+    }
+
+    // ── Construtor de etapas do fluxograma ──────────────────────
+    function addFluxRow(tipo, desc) {
+      const list = $('mem-flux-list'); if (!list) return;
+      const row = document.createElement('div');
+      row.className = 'mem-flux-row';
+      row.style.cssText = 'display:flex;gap:8px;align-items:center';
+      const opts = FLUX_TIPOS.map(t =>
+        '<option value="'+t+'"'+(t===tipo?' selected':'')+'>'+t+'</option>').join('');
+      row.innerHTML =
+        '<select class="mem-flux-tipo" style="flex:0 0 190px">'+opts+'</select>'
+        + '<input class="mem-flux-desc" type="text" placeholder="descrição da etapa" '
+        + 'value="'+(desc?String(desc).replace(/"/g,'&quot;'):'')+'" style="flex:1;min-width:0"/>'
+        + '<button class="mem-flux-del" title="Remover" '
+        + 'style="flex-shrink:0;background:var(--surface);color:var(--red,#A11312);border:1.5px solid var(--border);'
+        + 'border-radius:6px;padding:6px 10px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">×</button>';
+      row.querySelector('.mem-flux-del').addEventListener('click', () => row.remove());
+      list.appendChild(row);
+    }
+
+    function collectEtapas() {
+      const rows = document.querySelectorAll('#mem-flux-list .mem-flux-row');
+      const out = [];
+      rows.forEach(r => {
+        const tipo = r.querySelector('.mem-flux-tipo').value;
+        const desc = (r.querySelector('.mem-flux-desc').value || '').trim();
+        if (tipo) out.push({ tipo: tipo, descricao: desc });
+      });
+      return out;
+    }
+
+    async function pickFile(kind, targetId) {
+      if (!window.electronAPI || !window.electronAPI.memorial) {
+        memStatus('IPC indisponível (rode pelo app Electron).', 'var(--red,#A11312)'); return;
+      }
+      const p = await window.electronAPI.memorial.pickFile(kind);
+      if (p) {
+        memPaths[kind] = p;
+        const el = $(targetId); if (el) el.value = p;
+        memStatus('');
+      }
+    }
+    async function pickDir(targetId) {
+      if (!window.electronAPI || !window.electronAPI.memorial) {
+        memStatus('IPC indisponível (rode pelo app Electron).', 'var(--red,#A11312)'); return;
+      }
+      const p = await window.electronAPI.memorial.pickDir();
+      if (p) {
+        const el = $(targetId); if (el) el.value = p;
+        if (targetId === 'mem-txt-path')   memPaths.txt = p;
+        if (targetId === 'mem-mapas-path') memPaths.mapas = p;
+        if (targetId === 'mem-sol-path')   memPaths.soleiras = p;
+        if (targetId === 'mem-int-path')   memPaths.interferencias = p;
+        memStatus('');
+      }
+    }
+
+    async function gerar() {
+      if (_memBusy) return;
+      if (!window.electronAPI || !window.electronAPI.memorial) {
+        memStatus('IPC indisponível (rode pelo app Electron).', 'var(--red,#A11312)'); return;
+      }
+      const municipio = ($('mem-municipio').value || '').trim();
+      if (!municipio) { memStatus('Informe o município.', 'var(--red,#A11312)'); $('mem-municipio').focus(); return; }
+
+      const sanitize = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g,'_');
+      const defName = 'Memorial_Descritivo' + (municipio ? '_' + sanitize(municipio) : '') + '.docx';
+      const saida = await window.electronAPI.memorial.pickSave(defName);
+      if (!saida) { memStatus(''); return; }
+
+      const cfg = {
+        saida: saida,
+        ose:            memPaths.ose || null,
+        txt_dir:        memPaths.txt || null,
+        soleiras:       memPaths.soleiras || null,
+        interferencias: memPaths.interferencias || null,
+        mapas_dir:      memPaths.mapas || null,
+        projeto: {
+          municipio: municipio,
+          uf: ($('mem-uf').value || '').trim() || 'PR',
+          subbacia: ($('mem-subbacia').value || '').trim(),
+          codigo_doc: ($('mem-codigo').value || '').trim(),
+          rev: ($('mem-rev').value || '').trim() || 'R1',
+          data: ($('mem-data').value || '').trim(),
+        },
+        art: {
+          eng_resp: ($('mem-eng').value || '').trim() || 'RODRIGO ANTONIO ZANATTA',
+          crea: ($('mem-crea').value || '').trim() || 'SC-0680240/D',
+          art: ($('mem-art').value || '').trim() || '1720260898051',
+        },
+        fluxograma: { etapas: collectEtapas() },
+      };
+
+      _memBusy = true;
+      const btn = $('mem-gerar'); if (btn) { btn.disabled = true; btn.style.opacity = .6; btn.style.cursor = 'default'; }
+      const resBox = $('mem-result'); if (resBox) resBox.style.display = 'none';
+      memStatus('Gerando memorial… (pode levar até um minuto)', 'var(--text2)');
+
+      let r;
+      try { r = await window.electronAPI.memorial.gerar(cfg); }
+      catch (e) { r = { ok:false, erro: (e && e.message) || String(e) }; }
+
+      _memBusy = false;
+      if (btn) { btn.disabled = false; btn.style.opacity = 1; btn.style.cursor = 'pointer'; }
+
+      if (r && r.ok) {
+        memStatus('Memorial gerado com sucesso.', 'var(--green,#15803d)');
+        renderResult(r);
+      } else {
+        memStatus('Erro ao gerar o memorial.', 'var(--red,#A11312)');
+        renderError((r && (r.erro || r.error)) || 'Falha desconhecida ao gerar.');
+      }
+    }
+
+    function renderResult(r) {
+      const box = $('mem-result'); if (!box) return;
+      box.innerHTML =
+        '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">Memorial gerado</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:14px">'
+        + '<div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Figuras</div>'
+        + '<div style="font-size:13px;font-weight:700;color:var(--text)">' + (r.figuras ?? '-') + '</div></div>'
+        + '<div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Tabelas</div>'
+        + '<div style="font-size:13px;font-weight:700;color:var(--text)">' + (r.tabelas ?? '-') + '</div></div>'
+        + '</div>'
+        + '<div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+        + '<button id="mem-abrir" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Abrir documento</button>'
+        + '<span style="font-size:11px;color:var(--text3);word-break:break-all">' + (r.saida || '') + '</span>'
+        + '</div>';
+      box.style.display = '';
+      const ab = $('mem-abrir');
+      if (ab) ab.addEventListener('click', async () => {
+        const rr = await window.electronAPI.memorial.abrir(r.saida);
+        if (rr && !rr.ok) memStatus('Não foi possível abrir: ' + (rr.error || ''), 'var(--red,#A11312)');
+      });
+    }
+
+    function renderError(msg) {
+      const box = $('mem-result'); if (!box) return;
+      box.innerHTML =
+        '<div style="font-size:13px;font-weight:700;color:var(--red,#A11312);margin-bottom:6px">Erro ao gerar</div>'
+        + '<pre style="white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--text2);margin:0;font-family:ui-monospace,Consolas,monospace">'
+        + String(msg).replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre>';
+      box.style.display = '';
+    }
+
+    function wire() {
+      const gen = $('mem-gerar');
+      if (!gen) return false;
+      if (gen.dataset.wired) return true;
+      gen.dataset.wired = '1';
+      gen.addEventListener('click', gerar);
+      document.querySelectorAll('#rel-pane-memorial .mem-pick').forEach(b => {
+        b.addEventListener('click', () => pickFile(b.dataset.kind, b.dataset.target));
+      });
+      document.querySelectorAll('#rel-pane-memorial .mem-pickdir').forEach(b => {
+        b.addEventListener('click', () => pickDir(b.dataset.target));
+      });
+      const add = $('mem-flux-add');
+      if (add) add.addEventListener('click', () => addFluxRow('Rede Projetada',''));
+      // seed inicial com 2 etapas se a lista estiver vazia
+      const list = $('mem-flux-list');
+      if (list && !list.children.length) {
+        addFluxRow('Rede Projetada','');
+        addFluxRow('Corpo Receptor','');
+      }
+      return true;
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+    else wire();
+    document.addEventListener('click', (e) => {
+      const t = e.target.closest && e.target.closest('#rel-sub-memorial');
+      if (t) setTimeout(wire, 30);
+    });
+  })();
+  </script>
+
+  <!-- ── SANEAMENTO › GERAR PDF PLANILHA OSE — bloco isolado ───────────── -->
+  <script>
+  (function(){
+    // Fluxo isolado: exporta cada aba de uma planilha como um PDF separado
+    // chamando o motor Python via window.electronAPI.abasPdf (IPC abas-pdf:*).
+    // Não depende do Supabase nem do orcInit — só do DOM da aba "gerar-pdf-ose".
+    const $ = (id) => document.getElementById(id);
+    let _abasXlsx = null;
+    let _abasDir  = null;
+    let _abasBusy = false;
+
+    function setStatus(txt, color) {
+      const el = $('abas-status'); if (!el) return;
+      el.textContent = txt || ''; el.style.color = color || 'var(--text3)';
+    }
+    function fmtNum(n, d) {
+      try { return (Number(n)||0).toLocaleString('pt-BR', { minimumFractionDigits:d||0, maximumFractionDigits:d||0 }); }
+      catch { return String(n); }
+    }
+    function esc(s) { return String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    function apiOk() { return !!(window.electronAPI && window.electronAPI.abasPdf); }
+
+    async function pickXlsx() {
+      if (!apiOk()) { setStatus('IPC indisponível (rode pelo app Electron).', 'var(--red,#A11312)'); return; }
+      const p = await window.electronAPI.abasPdf.selectXlsx();
+      if (p) { _abasXlsx = p; $('abas-xlsx-path').value = p; setStatus(''); }
+    }
+    async function pickDir() {
+      if (!apiOk()) { setStatus('IPC indisponível (rode pelo app Electron).', 'var(--red,#A11312)'); return; }
+      const p = await window.electronAPI.abasPdf.pickDir();
+      if (p) { _abasDir = p; $('abas-dir-path').value = p; setStatus(''); }
+    }
+
+    async function gerar() {
+      if (_abasBusy) return;
+      if (!apiOk()) { setStatus('IPC indisponível (rode pelo app Electron).', 'var(--red,#A11312)'); return; }
+      if (!_abasXlsx) { setStatus('Selecione a planilha primeiro.', 'var(--red,#A11312)'); return; }
+      if (!_abasDir)  { setStatus('Selecione a pasta de destino.', 'var(--red,#A11312)'); return; }
+
+      const cfg = {
+        planilha: _abasXlsx,
+        destino:  _abasDir,
+        prefixo:  ($('abas-prefixo').value || '').trim(),
+      };
+
+      _abasBusy = true;
+      const btn = $('abas-gerar'); if (btn) { btn.disabled = true; btn.style.opacity = .6; btn.style.cursor = 'default'; }
+      const resBox = $('abas-result'); if (resBox) resBox.style.display = 'none';
+      setStatus('Gerando PDFs… (abrindo o Excel, pode levar alguns segundos)', 'var(--text2)');
+
+      let r;
+      try { r = await window.electronAPI.abasPdf.gerar(cfg); }
+      catch (e) { r = { ok:false, erro: (e && e.message) || String(e) }; }
+
+      _abasBusy = false;
+      if (btn) { btn.disabled = false; btn.style.opacity = 1; btn.style.cursor = 'pointer'; }
+
+      if (r && r.ok) {
+        setStatus(fmtNum(r.n_pdfs,0) + ' PDF(s) gerado(s).', 'var(--green,#15803d)');
+        renderResult(r);
+      } else {
+        const msg = (r && (r.erro || r.error)) || 'Falha desconhecida ao exportar.';
+        setStatus('Erro ao exportar.', 'var(--red,#A11312)');
+        renderError(msg);
+      }
+    }
+
+    function renderResult(r) {
+      const box = $('abas-result'); if (!box) return;
+      const abas = Array.isArray(r.abas) ? r.abas : [];
+      const lista = abas.length
+        ? '<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">'
+          + abas.map(a => '<span style="font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:2px 8px;color:var(--text2)">' + esc(a) + '.pdf</span>').join('')
+          + '</div>'
+        : '';
+      box.innerHTML =
+        '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">'
+        + fmtNum(r.n_pdfs,0) + ' PDF(s) gerado(s)</div>'
+        + '<div style="font-size:11px;color:var(--text3);word-break:break-all">em ' + esc(r.pasta || '') + '</div>'
+        + lista
+        + '<div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+        + '<button id="abas-abrir" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Abrir pasta</button>'
+        + '</div>';
+      box.style.display = '';
+      const ab = $('abas-abrir');
+      if (ab) ab.addEventListener('click', async () => {
+        const rr = await window.electronAPI.abasPdf.abrir(r.pasta);
+        if (rr && !rr.ok) setStatus('Não foi possível abrir: ' + (rr.error || ''), 'var(--red,#A11312)');
+      });
+    }
+
+    function renderError(msg) {
+      const box = $('abas-result'); if (!box) return;
+      box.innerHTML =
+        '<div style="font-size:13px;font-weight:700;color:var(--red,#A11312);margin-bottom:6px">Erro ao exportar</div>'
+        + '<pre style="white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--text2);margin:0;font-family:ui-monospace,Consolas,monospace">'
+        + esc(msg) + '</pre>';
+      box.style.display = '';
+    }
+
+    function wire() {
+      const px = $('abas-pick-xlsx'), pd = $('abas-pick-dir'), gen = $('abas-gerar');
+      if (!px || !pd || !gen) return false;
+      if (gen.dataset.wired) return true;
+      gen.dataset.wired = '1';
+      px.addEventListener('click', pickXlsx);
+      pd.addEventListener('click', pickDir);
+      gen.addEventListener('click', gerar);
+      return true;
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+    else wire();
+    // Re-tenta o wiring ao entrar na aba "Gerar PDF Planilha OSE" (caso o DOM
+    // ainda não estivesse pronto no DOMContentLoaded).
+    document.addEventListener('click', (e) => {
+      const t = e.target.closest && e.target.closest('.sb-item[data-tab="gerar-pdf-ose"]');
+      if (t) setTimeout(wire, 30);
+    });
+  })();
+  </script>
+
   <!-- RENOMEAR TAB -->
   <div class="tab-content" id="tab-renomear">
     <div style="padding:20px;max-width:960px;margin:0 auto">
@@ -14640,6 +15291,43 @@ body.presenting #presentingBadge { display: flex; }
       </div>
 
       <div id="rhFolhaList" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       MÓDULO RH — BASE DE CURRÍCULOS (índice local + busca por palavra-chave)
+       ═════════════════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-rh-curriculos">
+    <div style="padding:18px 22px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h2 style="font-size:19px;font-weight:700;letter-spacing:-.3px;margin:0">Base de Currículos</h2>
+          <p style="font-size:12px;color:var(--text2);margin:3px 0 0">Pesquise por palavra-chave (ex.: <b>projetista</b>, <b>topógrafo</b>, <b>água</b>, cidade, ferramenta). Importe pastas inteiras, adicione e exclua currículos.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button onclick="window.rhCvImportarPasta()" style="background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:9px 16px;font-size:13px;cursor:pointer;font-weight:600" title="Importa todos os currículos de uma pasta (incluindo subpastas)">📁 Importar pasta</button>
+          <button onclick="window.rhCvAdicionar()" class="primary-btn" style="width:auto;padding:10px 20px;margin-top:0;font-size:13px">+ Adicionar arquivos</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+        <input id="rhCvBusca" type="text" placeholder="Digite uma palavra-chave e tecle Enter…  (vazio = todos)" style="flex:1;min-width:260px;padding:10px 14px;font-size:14px;border:1.5px solid var(--border2);border-radius:8px;background:var(--surface);color:var(--text);outline:none">
+        <button onclick="window.rhCvBuscar()" class="primary-btn" style="width:auto;padding:10px 22px;margin-top:0;font-size:13px">Pesquisar</button>
+        <span id="rhCvContagem" style="font-size:12px;color:var(--text2)"></span>
+      </div>
+
+      <div id="rhCvFiltros" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+        <select id="rhCvFEstado" onchange="window.rhCvBuscar()" style="padding:8px 10px;font-size:13px;border:1.5px solid var(--border2);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer"><option value="">Estado (UF)</option></select>
+        <select id="rhCvFCidade" onchange="window.rhCvBuscar()" style="padding:8px 10px;font-size:13px;border:1.5px solid var(--border2);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer;max-width:200px"><option value="">Cidade</option></select>
+        <select id="rhCvFSexo" onchange="window.rhCvBuscar()" style="padding:8px 10px;font-size:13px;border:1.5px solid var(--border2);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer"><option value="">Sexo</option></select>
+        <select id="rhCvFEcivil" onchange="window.rhCvBuscar()" style="padding:8px 10px;font-size:13px;border:1.5px solid var(--border2);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer"><option value="">Estado civil</option></select>
+        <select id="rhCvFTag" onchange="window.rhCvBuscar()" style="padding:8px 10px;font-size:13px;border:1.5px solid var(--border2);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer"><option value="">Área</option></select>
+        <button onclick="window.rhCvLimparFiltros()" style="background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-size:12px;cursor:pointer">Limpar filtros</button>
+        <button onclick="window.rhCvReindex()" title="Recalcula os filtros (cidade/estado/sexo/estado civil) dos currículos já importados, sem reimportar" style="background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-size:12px;cursor:pointer">↻ Atualizar filtros</button>
+      </div>
+
+      <div id="rhCvStatus" style="font-size:12px;color:var(--text2);margin-bottom:8px"></div>
+      <div id="rhCvLista" style="display:flex;flex-direction:column;gap:7px"></div>
     </div>
   </div>
 
@@ -15816,8 +16504,8 @@ body.presenting #presentingBadge { display: flex; }
         <button id="rel-sub-sondagem" class="rel-sub-btn" onclick="relSwitchSub('sondagem')" style="padding:10px 18px;background:none;border:none;border-bottom:2.5px solid transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;margin-bottom:-1.5px;letter-spacing:-.01em">
           Sondagem a Trado
         </button>
-        <button class="rel-sub-btn" disabled style="padding:10px 18px;background:none;border:none;border-bottom:2.5px solid transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--text3);cursor:not-allowed;opacity:.5">
-          Memorial Descritivo <span style="font-size:9px;background:var(--surface2);padding:2px 6px;border-radius:3px;margin-left:4px">em breve</span>
+        <button id="rel-sub-memorial" class="rel-sub-btn" onclick="relSwitchSub('memorial')" style="padding:10px 18px;background:none;border:none;border-bottom:2.5px solid transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;margin-bottom:-1.5px;letter-spacing:-.01em">
+          Memorial Descritivo
         </button>
         <button class="rel-sub-btn" disabled style="padding:10px 18px;background:none;border:none;border-bottom:2.5px solid transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--text3);cursor:not-allowed;opacity:.5">
           As-Built <span style="font-size:9px;background:var(--surface2);padding:2px 6px;border-radius:3px;margin-left:4px">em breve</span>
@@ -15996,6 +16684,12 @@ body.presenting #presentingBadge { display: flex; }
                   <input id="rel-topo-txt-resp-crea" placeholder="ex.: Engenheiro Civil – CREA/PR XXXXXX" style="width:100%;padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/></div>
                 <div style="grid-column:1/-1"><label style="display:block;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Empresa</label>
                   <input id="rel-topo-txt-resp-empresa" value="A2Z Projetos" style="width:100%;padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/></div>
+                <div style="grid-column:1/-1;margin-top:2px">
+                  <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer">
+                    <input type="checkbox" id="rel-topo-txt-mapa3d" checked style="width:15px;height:15px;accent-color:var(--gray-900);cursor:pointer"/>
+                    <span>Incluir mapa 3D do terreno <span style="color:var(--text3);font-size:11px">(modelo digital em vista isométrica, gerado dos mesmos pontos do TXT)</span></span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
@@ -16111,6 +16805,99 @@ body.presenting #presentingBadge { display: flex; }
         </div>
 
       </div><!-- /rel-pane-sondagem -->
+
+      <!-- Sub-aba: Memorial Descritivo (RCE) -->
+      <div id="rel-pane-memorial" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">Gerar Memorial Descritivo (RCE)</div>
+          <div style="font-size:11px;color:var(--text3)">Documento .docx timbrado 2S — capa, sumário, mapas, fluxograma e quantitativos, padrão SANEPAR/Acciona</div>
+        </div>
+
+        <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:18px 20px;display:flex;flex-direction:column;gap:18px">
+
+          <!-- 1) Arquivos do projeto -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">1. Arquivos do projeto</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Em Soleiras e Interferências, aponte uma <b>pasta</b> — o sistema busca os shapes (soleiras / água / drenagem / vértices) automaticamente, inclusive em subpastas. (Também aceita apontar o .shp/.zip direto.)</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;gap:8px;align-items:center">
+                <button class="mem-pick" data-kind="ose" data-target="mem-ose-path" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:8px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;min-width:180px;text-align:left">OSE (.xlsx)</button>
+                <input id="mem-ose-path" readonly placeholder="opcional — planilha de OSEs" style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button class="mem-pickdir" data-target="mem-txt-path" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:8px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;min-width:180px;text-align:left">Pasta de TXT (topografia)</button>
+                <input id="mem-txt-path" readonly placeholder="opcional — pasta dos arquivos .txt do levantamento" style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button class="mem-pickdir" data-target="mem-sol-path" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:8px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;min-width:180px;text-align:left">Pasta de soleiras…</button>
+                <button class="mem-pick" data-kind="soleiras" data-target="mem-sol-path" title="ou aponte o .shp/.zip direto" style="background:var(--surface);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 10px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0">arquivo…</button>
+                <input id="mem-sol-path" readonly placeholder="opcional — aponte a PASTA; o sistema acha o shape de soleiras (inclusive em subpastas)" style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button class="mem-pickdir" data-target="mem-int-path" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:8px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;min-width:180px;text-align:left">Pasta de interferências…</button>
+                <button class="mem-pick" data-kind="interferencias" data-target="mem-int-path" title="ou aponte o .shp/.zip direto" style="background:var(--surface);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 10px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0">arquivo…</button>
+                <input id="mem-int-path" readonly placeholder="opcional — aponte a PASTA; o sistema acha água/drenagem/vértices (inclusive em subpastas)" style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button class="mem-pickdir" data-target="mem-mapas-path" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:8px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;min-width:180px;text-align:left">Pasta de mapas (PNG)</button>
+                <input id="mem-mapas-path" readonly placeholder="opcional — pasta com Mapa1..Mapa6 .png já gerados" style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2) Dados do projeto -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">2. Dados do projeto</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Município <span style="color:var(--red,#A11312)">*</span>
+                <input id="mem-municipio" type="text" placeholder="ex.: Amaporã" class="mem-inp"/></label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">UF
+                <input id="mem-uf" type="text" value="PR" class="mem-inp"/></label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Sub-bacia / Subsistema
+                <input id="mem-subbacia" type="text" placeholder="ex.: Bacia 02 (sub-bacia BACIA 02 B)" class="mem-inp"/></label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Código do documento
+                <input id="mem-codigo" type="text" placeholder="ex.: MD-RCE-AMAPORA-BACIA02B-R1" class="mem-inp"/></label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Revisão
+                <input id="mem-rev" type="text" value="R1" class="mem-inp"/></label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Data
+                <input id="mem-data" type="text" placeholder="ex.: Junho/2026" class="mem-inp"/></label>
+            </div>
+          </div>
+
+          <!-- 3) ART / Responsável Técnico -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">3. ART / Responsável Técnico <span style="font-weight:400;color:var(--text3)">(pré-preenchido — edite se necessário)</span></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Responsável técnico
+                <input id="mem-eng" type="text" value="RODRIGO ANTONIO ZANATTA" class="mem-inp"/></label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">CREA
+                <input id="mem-crea" type="text" value="SC-0680240/D" class="mem-inp"/></label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">ART nº
+                <input id="mem-art" type="text" value="1720260898051" class="mem-inp"/></label>
+            </div>
+          </div>
+
+          <!-- 4) Fluxograma do sistema (construtor de etapas) -->
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div style="font-size:12px;font-weight:600;color:var(--text)">4. Fluxograma do sistema</div>
+              <div style="font-size:11px;color:var(--text3)">Adicione as etapas na ordem do fluxo (montante → corpo receptor)</div>
+              <button id="mem-flux-add" style="margin-left:auto;background:var(--gray-900);color:white;border:none;border-radius:6px;padding:6px 12px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">+ Adicionar etapa</button>
+            </div>
+            <div id="mem-flux-list" style="display:flex;flex-direction:column;gap:8px"></div>
+          </div>
+
+          <!-- 5) Gerar -->
+          <div style="display:flex;align-items:center;gap:12px;border-top:1px solid var(--border);padding-top:14px">
+            <button id="mem-gerar" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:10px 20px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Gerar Memorial</button>
+            <div id="mem-status" style="font-size:12px;color:var(--text3)"></div>
+          </div>
+
+          <!-- Resultado -->
+          <div id="mem-result" style="display:none;border:1px solid var(--border);border-radius:8px;background:var(--surface2);padding:14px 16px"></div>
+
+        </div>
+      </div><!-- /rel-pane-memorial -->
     </div>
   </div>
 
@@ -23879,6 +24666,7 @@ body.presenting #presentingBadge { display: flex; }
       let pastaSaida = document.getElementById('rel-topo-txt-saida').value.trim();
       if (!pastaSaida) pastaSaida = raiz.replace(/[\\/]+$/, '');
       const uf = (document.getElementById('rel-topo-txt-uf').value || 'PR').toUpperCase().slice(0, 2);
+      const incluirMapa3D = !!document.getElementById('rel-topo-txt-mapa3d')?.checked;
       const assinatura = {
         nome:    document.getElementById('rel-topo-txt-resp-nome').value.trim(),
         crea:    document.getElementById('rel-topo-txt-resp-crea').value.trim(),
@@ -23911,10 +24699,12 @@ body.presenting #presentingBadge { display: flex; }
             mapaAbrangenciaPng: c.mapaAbrangenciaPng,
             fotosEquipe: (c.fotosEquipe || []).filter(f => f.data).map(f => ({ caminho: f.caminho, data: f.data, equipe: f.equipe || '' })),
             artImagens: c.artImagens || [],
+            incluirMapa3D,
           })),
           pastaSaida,
           assinatura,
           uf,
+          incluirMapa3D,
         });
         try { unsub && unsub(); } catch {}
         if (!res?.ok) {
@@ -23993,6 +24783,7 @@ body.presenting #presentingBadge { display: flex; }
           mapaAbrangenciaPng: c.mapaAbrangenciaPng,
           fotosEquipe: (c.fotosEquipe || []).filter(f => f.data).map(f => ({ caminho: f.caminho, data: f.data, equipe: f.equipe || '' })),
           artImagens: c.artImagens || [],
+          incluirMapa3D: !!document.getElementById('rel-topo-txt-mapa3d')?.checked,
         };
         const res = await window.electronAPI.topografia.previewCidade(params);
         if (!res?.ok) {
@@ -30870,7 +31661,7 @@ window.MODULES = {
     desc: 'Projetos de água/esgoto: cadastro, GRD, conferência OSE, orçamento, GIS, perfis, mapas, Civil 3D',
     color: '#0891b2',
     iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2.5C8 8 5 11.5 5 15a7 7 0 0014 0c0-3.5-3-7-7-12.5z"/><path d="M9 15a3 3 0 003 3"/></svg>',
-    tabs: ['cronograma','planner','dashboard','grd','renomear','coleta-end','conferencia','orcamento','planilhas-gis','relatorios','diretoria','verificar','history'],
+    tabs: ['cronograma','planner','dashboard','grd','renomear','coleta-end','conferencia','gerar-pdf-ose','orcamento','planilhas-gis','relatorios','diretoria','verificar','history'],
     extraButtons: ['civil3dSbBtn'],
   },
   estoque_compras: {
@@ -30899,7 +31690,7 @@ window.MODULES = {
     desc: 'Cadastro de funcionários com documentos privados + timeline + alertas e folha de pagamento mensal com lançamentos (proventos/descontos) e holerite imprimível',
     color: '#7c3aed',
     iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3.5"/><path d="M2 21v-2a4 4 0 014-4h6a4 4 0 014 4v2"/><circle cx="17" cy="9" r="2.5"/><path d="M22 20v-1.5a3 3 0 00-2.5-3"/></svg>',
-    tabs: ['rh-funcionarios','rh-folha'],
+    tabs: ['rh-funcionarios','rh-folha','rh-curriculos'],
   },
   reunioes_lembretes: {
     name: 'Reuniões e Lembretes',
@@ -31013,7 +31804,7 @@ function renderModulosGrid() {
   const PLANO_TIER = { trial:3, essencial:1, profissional:2, empresarial:3, sob_medida:3, solo:1, time:2, empresa:3 };
   const tier = PLANO_TIER[plano] || 1;
   const TAB_REQUIRES = { generator:1, projects:1, history:1, dashboard:1, perfil:1, sobre:1,
-    grd:2, orcamento:2, 'planilhas-gis':2, renomear:2, 'coleta-end':2, estoque:2, pedidos:2, relatorios:2,
+    grd:2, orcamento:2, 'gerar-pdf-ose':2, 'planilhas-gis':2, renomear:2, 'coleta-end':2, estoque:2, pedidos:2, relatorios:2,
     'frotas-veiculos':2, 'frotas-abastec':2,
     'obras-vistorias':2, 'obras-diario':2, 'obras-medicao':2, 'obras-nc':2,
     'rh-funcionarios':2, 'rh-folha':2,
@@ -31122,6 +31913,7 @@ window.switchTab=(tab,btn)=>{
   if(tab==='obras-nc') window.obrasNcInit?.();
   if(tab==='rh-funcionarios') window.rhFuncionariosInit?.();
   if(tab==='rh-folha') window.rhFolhaInit?.();
+  if(tab==='rh-curriculos') window.rhCurriculosInit?.();
   if(tab==='reunioes') window.reunioesInit?.();
   if(tab==='lembretes') window.lembretesInit?.();
   if(tab==='modulos') window.renderModulosGrid?.();
@@ -35984,13 +36776,34 @@ try {
     } else {
       try {
         const sb = window.sb || window.supabase;
-        const { data } = await sb.from('programas_acessos')
-          .select('ativo,expires_at')
-          .eq('usuario_id', u.id).eq('programa', 'civil3d').maybeSingle();
-        if (data && data.ativo) {
-          if (!data.expires_at || new Date(data.expires_at) >= new Date(new Date().toDateString())) {
-            temAcesso = true;
-            exp = data.expires_at;
+        // Valida pelo MESMO RPC SECURITY DEFINER que a DLL usa: imune a RLS/tenant/sessão.
+        // (Ler programas_acessos direto pelo client quebrava quando o tenant_id da linha
+        //  não batia com o tenant do usuário → "Sem permissão" mesmo com licença válida.)
+        let row = null;
+        if (u.access_code) {
+          const { data, error } = await sb.rpc('validar_licenca_civil3d', { p_access_code: u.access_code });
+          if (error) throw error;
+          row = Array.isArray(data) ? data[0] : data;
+        }
+        if (row) {
+          if (String(row.role || '').trim().toLowerCase() === 'master') {
+            temAcesso = true; masterBypass = true;
+          } else if (row.programa_ativo) {
+            if (!row.programa_expires || new Date(row.programa_expires) >= new Date(new Date().toDateString())) {
+              temAcesso = true;
+              exp = row.programa_expires;
+            }
+          }
+        } else {
+          // Fallback defensivo (RPC indisponível): lê a tabela sem depender do wrapper de tenant.
+          const { data } = await sb.from('programas_acessos')
+            .select('ativo,expires_at')
+            .eq('usuario_id', u.id).eq('programa', 'civil3d').maybeSingle();
+          if (data && data.ativo) {
+            if (!data.expires_at || new Date(data.expires_at) >= new Date(new Date().toDateString())) {
+              temAcesso = true;
+              exp = data.expires_at;
+            }
           }
         }
       } catch(e) { console.warn('c3d acesso check', e); }
@@ -42493,6 +43306,113 @@ window.deleteFromBucket = async function(bucketName, path) {
     else libera();
     // o tenant_id chega após o login carregar — re-tenta por alguns segundos
     let _n = 0; const _iv = setInterval(() => { libera(); if (_shown || ++_n > 20) clearInterval(_iv); }, 1000);
+  })();
+  </script>
+
+  <!-- ===== RH · Base de Currículos (índice local + busca) ===== -->
+  <script>
+  (function(){
+    window.rhCvState = window.rhCvState || { map:{}, carregado:false };
+    function api(){ return (window.electronAPI && window.electronAPI.rhCv) || null; }
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+    function chip(txt,cor){ return '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+cor+'22;color:'+cor+';border:1px solid '+cor+'55">'+esc(txt)+'</span>'; }
+    var CORTAG={projetista:'#7c3aed',topografo:'#0891b2',agua:'#2563eb'};
+
+    window.rhCvRender = function(d){
+      var lista=document.getElementById('rhCvLista'), cont=document.getElementById('rhCvContagem');
+      if(!lista) return;
+      window.rhCvState.map={};
+      if(!d || !d.ok){ lista.innerHTML='<div style="color:var(--danger,#dc2626);font-size:13px;padding:10px">Erro: '+esc(d&&d.erro||'desconhecido')+'</div>'; return; }
+      (d.itens||[]).forEach(function(it){ window.rhCvState.map[it.id]=it; });
+      if(cont) cont.textContent = (d.encontrados||0)+' de '+(d.total||0)+' currículos';
+      if(!(d.itens||[]).length){ lista.innerHTML='<div style="font-size:13px;color:var(--text2);padding:14px">Nenhum currículo encontrado. '+(d.total?'Tente outra palavra-chave.':'Use “Importar pasta” pra carregar os currículos.')+'</div>'; return; }
+      lista.innerHTML = d.itens.map(function(it){
+        var tags=(it.tags||[]).map(function(t){return chip(t, CORTAG[t]||'#64748b');}).join(' ');
+        var loc=[it.cidade||'', it.estado||''].filter(Boolean).join('/');
+        var meta=[loc, it.sexo||'', it.estado_civil||'', it.regiao||''].filter(Boolean).join(' · ');
+        return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px">'
+          + '<div style="flex:1;min-width:0">'
+          +   '<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(it.nome)+'</div>'
+          +   '<div style="font-size:11px;color:var(--text2);margin-top:2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+esc(meta)+' '+tags+'</div>'
+          + '</div>'
+          + '<button onclick="window.rhCvAbrir(\''+it.id+'\')" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer">Abrir</button>'
+          + '<button onclick="window.rhCvExcluir(\''+it.id+'\')" style="background:transparent;color:var(--danger,#dc2626);border:1px solid var(--danger,#dc2626);border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer">Excluir</button>'
+          + '</div>';
+      }).join('');
+    };
+
+    function rhCvFiltros(){
+      function v(id){ var e=document.getElementById(id); return e&&e.value?e.value:''; }
+      return { estado:v('rhCvFEstado'), cidade:v('rhCvFCidade'), sexo:v('rhCvFSexo'), estado_civil:v('rhCvFEcivil'), tag:v('rhCvFTag') };
+    }
+    function rhCvFillSel(id, arr, label){
+      var s=document.getElementById(id); if(!s) return;
+      var cur=s.value;
+      var opts='<option value="">'+esc(label)+'</option>';
+      (arr||[]).forEach(function(o){ opts+='<option value="'+esc(o.v)+'">'+esc(o.v)+' ('+o.n+')</option>'; });
+      s.innerHTML=opts;
+      s.value = (cur && (arr||[]).some(function(o){return o.v===cur;})) ? cur : '';
+    }
+    window.rhCvBuscar = async function(){
+      var a=api(); if(!a) return;
+      var q=(document.getElementById('rhCvBusca')||{}).value||'';
+      var st=document.getElementById('rhCvStatus'); if(st) st.textContent='Buscando…';
+      var d=await a.buscar(q, rhCvFiltros());
+      if(st) st.textContent='';
+      if(d&&d.facetas){
+        rhCvFillSel('rhCvFEstado', d.facetas.estado, 'Estado (UF)');
+        rhCvFillSel('rhCvFCidade', d.facetas.cidade, 'Cidade');
+        rhCvFillSel('rhCvFSexo', d.facetas.sexo, 'Sexo');
+        rhCvFillSel('rhCvFEcivil', d.facetas.estado_civil, 'Estado civil');
+        rhCvFillSel('rhCvFTag', d.facetas.tag, 'Área');
+      }
+      window.rhCvRender(d); window.rhCvState.carregado=true;
+    };
+    window.rhCvLimparFiltros = function(){
+      ['rhCvFEstado','rhCvFCidade','rhCvFSexo','rhCvFEcivil','rhCvFTag'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+      window.rhCvBuscar();
+    };
+    window.rhCvReindex = async function(){
+      var a=api(); if(!a||!a.reindex) return;
+      var st=document.getElementById('rhCvStatus'); if(st) st.textContent='Atualizando filtros (lendo os currículos já importados)…';
+      var d=await a.reindex();
+      if(st) st.textContent = (d&&d.ok) ? ('Filtros atualizados em '+d.reindexados+' currículos.') : ('Erro: '+esc(d&&d.erro||'?'));
+      window.rhCvState.carregado=false; await window.rhCvBuscar();
+    };
+    window.rhCurriculosInit = function(){ if(!window.rhCvState.carregado) window.rhCvBuscar(); };
+
+    window.rhCvImportarPasta = async function(){
+      var a=api(); if(!a) return;
+      var st=document.getElementById('rhCvStatus'); if(st) st.textContent='Importando pasta (extraindo texto dos currículos, pode levar alguns minutos)…';
+      var d=await a.importarPasta();
+      if(d&&d.cancelado){ if(st) st.textContent=''; return; }
+      if(st) st.textContent = d&&d.ok ? ('Importados '+d.importados+' (de '+d.encontrados+' encontrados, '+d.duplicados+' já existiam). Total na base: '+d.total) : ('Erro: '+esc(d&&d.erro||'?'));
+      window.rhCvState.carregado=false; await window.rhCvBuscar();
+    };
+    window.rhCvAdicionar = async function(){
+      var a=api(); if(!a) return;
+      var st=document.getElementById('rhCvStatus'); if(st) st.textContent='Adicionando…';
+      var d=await a.adicionarArquivos();
+      if(d&&d.cancelado){ if(st) st.textContent=''; return; }
+      if(st) st.textContent = d&&d.ok ? ('Adicionados '+d.importados+' ('+d.duplicados+' já existiam).') : ('Erro: '+esc(d&&d.erro||'?'));
+      window.rhCvState.carregado=false; await window.rhCvBuscar();
+    };
+    window.rhCvExcluir = async function(id){
+      var a=api(); if(!a) return;
+      var it=window.rhCvState.map[id];
+      if(!confirm('Excluir da base: '+(it?it.nome:id)+' ?\n(o arquivo original na origem não é afetado)')) return;
+      var d=await a.excluir([id]);
+      var st=document.getElementById('rhCvStatus'); if(st) st.textContent = d&&d.ok ? ('Removido ('+d.removidos+').') : ('Erro: '+esc(d&&d.erro||'?'));
+      window.rhCvState.carregado=false; await window.rhCvBuscar();
+    };
+    window.rhCvAbrir = async function(id){
+      var a=api(); if(!a) return; var it=window.rhCvState.map[id]; if(!it) return;
+      await a.abrir(it.arquivo);
+    };
+
+    document.addEventListener('keydown', function(e){
+      if(e.key==='Enter' && document.activeElement && document.activeElement.id==='rhCvBusca'){ e.preventDefault(); window.rhCvBuscar(); }
+    });
   })();
   </script>
 

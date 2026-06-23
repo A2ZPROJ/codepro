@@ -115,6 +115,41 @@ window.electronAPI = {
       return () => ipcRenderer.off('topografia:progresso', handler);
     },
   },
+  // Orçamento RCE — gera orçamento de Rede Coletora de Esgoto a partir de
+  // um arquivo de OSEs, via gerador Python (scripts/orcamento).
+  orcRce: {
+    selectOses: ()      => ipcRenderer.invoke('orc-rce:select-oses'),
+    pickSave:   (name)  => ipcRenderer.invoke('orc-rce:pick-save', name),
+    gerar:      (cfg)   => ipcRenderer.invoke('orc-rce:gerar', cfg),
+    abrir:      (p)     => ipcRenderer.invoke('orc-rce:abrir', p),
+  },
+  // RH — Banco de Currículos (índice local + busca por palavra-chave).
+  rhCv: {
+    importarPasta:    ()      => ipcRenderer.invoke('rh-cv:importar-pasta'),
+    adicionarArquivos:()      => ipcRenderer.invoke('rh-cv:adicionar-arquivos'),
+    buscar:           (q,filtros) => ipcRenderer.invoke('rh-cv:buscar', { query:q, filtros:filtros||{} }),
+    reindex:          ()      => ipcRenderer.invoke('rh-cv:reindex'),
+    excluir:          (ids)   => ipcRenderer.invoke('rh-cv:excluir', ids),
+    abrir:            (p)     => ipcRenderer.invoke('rh-cv:abrir', p),
+  },
+  // Memorial Descritivo RCE — gera o .docx do Memorial Descritivo a partir
+  // dos arquivos do projeto (OSE/TXT/soleiras/interferencias) + dados do
+  // projeto + construtor de fluxograma, via gerador Python (scripts/memorial).
+  memorial: {
+    pickFile: (kind)   => ipcRenderer.invoke('memorial:pick-file', kind),
+    pickDir:  (kind)   => ipcRenderer.invoke('memorial:pick-dir', kind),
+    pickSave: (name)   => ipcRenderer.invoke('memorial:pick-save', name),
+    gerar:    (cfg)    => ipcRenderer.invoke('memorial:gerar', cfg),
+    abrir:    (p)      => ipcRenderer.invoke('memorial:abrir', p),
+  },
+  // Abas Excel → PDF — exporta cada aba de uma planilha como um PDF separado
+  // (nome do PDF = nome da aba), via motor Python (Excel COM).
+  abasPdf: {
+    selectXlsx: ()    => ipcRenderer.invoke('abas-pdf:select-xlsx'),
+    pickDir:    ()    => ipcRenderer.invoke('abas-pdf:pick-dir'),
+    gerar:      (cfg) => ipcRenderer.invoke('abas-pdf:gerar', cfg),
+    abrir:      (p)   => ipcRenderer.invoke('abas-pdf:abrir', p),
+  },
   civil3dBundle: {
     status:    () => ipcRenderer.invoke('civil3d:bundle:status'),
     install:   () => ipcRenderer.invoke('civil3d:bundle:install'),

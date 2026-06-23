@@ -1291,7 +1291,7 @@ ipcMain.handle('topografia:listar-cidades', async (_e, pastaRaiz) => {
   }
 });
 
-ipcMain.handle('topografia:gerar-lote', async (event, { cidades, pastaSaida, assinatura, uf }) => {
+ipcMain.handle('topografia:gerar-lote', async (event, { cidades, pastaSaida, assinatura, uf, incluirMapa3D }) => {
   try {
     const { gerarRelatorioCidade } = require('./modulos/topografia/src');
     // Sanitiza nome de cidade pra pasta válida no Windows
@@ -1305,6 +1305,8 @@ ipcMain.handle('topografia:gerar-lote', async (event, { cidades, pastaSaida, ass
       mapaAbrangenciaPng: c.mapaAbrangenciaPng || undefined,
       fotosEquipe: Array.isArray(c.fotosEquipe) ? c.fotosEquipe : [],
       artImagens: Array.isArray(c.artImagens) ? c.artImagens : [],
+      // toggle por-cidade cai pro toggle global; default = true
+      incluirMapa3D: (c.incluirMapa3D ?? incluirMapa3D) !== false,
     }));
 
     const debug = cidadesIn.map(c => ({
@@ -1360,6 +1362,7 @@ ipcMain.handle('topografia:preview-cidade', async (event, params) => {
       mapaAbrangenciaPng: params.mapaAbrangenciaPng || undefined,
       fotosEquipe: Array.isArray(params.fotosEquipe) ? params.fotosEquipe : [],
       artImagens: Array.isArray(params.artImagens) ? params.artImagens : [],
+      incluirMapa3D: params.incluirMapa3D !== false,
       onProgresso: (etapa, pct) => {
         try { event.sender.send('topografia:progresso', { municipio: params.municipio || params.nome, idx: 0, total: 1, etapa, pct }); } catch {}
       },
@@ -1557,6 +1560,413 @@ ipcMain.handle('topografia:converter-art', async (_e, caminhos) => {
 
 ipcMain.handle('topografia:abrir-pasta', async (_e, p) => {
   try { await shell.openPath(p); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ────────────────────────────────────────────────────────────────────
+// ORÇAMENTO RCE — gera o orçamento de Rede Coletora de Esgoto a partir de
+// um arquivo de OSEs (.xlsx), chamando o gerador Python
+// (scripts/orcamento/gerar_orcamento_rce.py). Padrão isolado: handlers com
+// prefixo "orc-rce:" pra não colidir com a aba Orçamento (Supabase) existente.
+// ────────────────────────────────────────────────────────────────────
+
+// >>> PONTO ÚNICO DE CONFIGURAÇÃO DO PYTHON <<<
+// Ordem de tentativa: 1) candidatos abaixo (1º que existir/responder), 2) "python"
+// no PATH, 3) "py -3" (launcher Windows). Edite/adicione caminhos aqui se mudar.
+const ORC_RCE_PYTHON_CANDIDATES = [
+  process.env.NEXUS_PYTHON || '',
+  'C:\\Users\\lcabd\\AppData\\Local\\Programs\\Python\\Python312\\python.exe',
+  'C:\\Users\\lcabd\\AppData\\Local\\Programs\\Python\\Python313\\python.exe',
+  'C:\\Users\\lcabd\\AppData\\Local\\Programs\\Python\\Python311\\python.exe',
+].filter(Boolean);
+
+function orcRceResolveScript() {
+  // dev: <repo>/scripts/orcamento ; packaged: extraResources -> resourcesPath/scripts/orcamento
+  const candidates = [
+    path.join(__dirname, '..', 'scripts', 'orcamento', 'gerar_orcamento_rce.py'),
+    path.join(process.resourcesPath || '', 'scripts', 'orcamento', 'gerar_orcamento_rce.py'),
+    path.join(app.getAppPath(), '..', 'scripts', 'orcamento', 'gerar_orcamento_rce.py'),
+  ];
+  for (const c of candidates) {
+    try { if (c && fs.existsSync(c)) return c; } catch {}
+  }
+  return null;
+}
+
+function orcRceResolvePython() {
+  // 1) candidatos absolutos existentes
+  for (const c of ORC_RCE_PYTHON_CANDIDATES) {
+    try { if (c && fs.existsSync(c)) return { cmd: c, args: [] }; } catch {}
+  }
+  // 2) "python" no PATH
+  try {
+    const { execFileSync } = require('child_process');
+    execFileSync('python', ['--version'], { stdio: 'ignore', windowsHide: true });
+    return { cmd: 'python', args: [] };
+  } catch {}
+  // 3) launcher do Windows "py -3"
+  try {
+    const { execFileSync } = require('child_process');
+    execFileSync('py', ['-3', '--version'], { stdio: 'ignore', windowsHide: true });
+    return { cmd: 'py', args: ['-3'] };
+  } catch {}
+  return null;
+}
+
+ipcMain.handle('orc-rce:select-oses', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecionar arquivo de OSEs',
+    properties: ['openFile'],
+    filters: [{ name: 'Excel', extensions: ['xlsx'] }, { name: 'Todos os arquivos', extensions: ['*'] }],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('orc-rce:pick-save', async (_e, defaultName) => {
+  if (!mainWindow) return null;
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Salvar orçamento RCE',
+    defaultPath: defaultName || 'Orcamento_RCE.xlsx',
+    filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+  });
+  return result.canceled ? null : result.filePath;
+});
+
+ipcMain.handle('orc-rce:gerar', async (_e, cfg) => {
+  try {
+    cfg = cfg || {};
+    if (!cfg.oses)  return { ok: false, erro: 'Arquivo de OSEs não informado.' };
+    if (!cfg.saida) return { ok: false, erro: 'Caminho de saída não informado.' };
+    if (cfg.ligacoes == null || cfg.ligacoes === '')
+      return { ok: false, erro: 'Nº de ligações prediais não informado.' };
+
+    const script = orcRceResolveScript();
+    if (!script) return { ok: false, erro: 'Gerador Python não encontrado (scripts/orcamento/gerar_orcamento_rce.py).' };
+
+    const py = orcRceResolvePython();
+    if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
+
+    // grava config.json num tmp
+    const tmpJson = path.join(os.tmpdir(), `nexus_orc_rce_${Date.now()}.json`);
+    fs.writeFileSync(tmpJson, JSON.stringify(cfg, null, 2), 'utf8');
+
+    const { spawn } = require('child_process');
+    const args = [...py.args, script, '--config', tmpJson];
+
+    return await new Promise((resolve) => {
+      let out = '', err = '';
+      let proc;
+      try {
+        proc = spawn(py.cmd, args, { windowsHide: true });
+      } catch (e) {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        return resolve({ ok: false, erro: 'Falha ao iniciar o Python: ' + e.message });
+      }
+      proc.stdout.on('data', d => out += d.toString());
+      proc.stderr.on('data', d => err += d.toString());
+      proc.on('error', (e) => {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        resolve({ ok: false, erro: 'Erro ao executar o Python: ' + e.message });
+      });
+      proc.on('close', (code) => {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        // última linha não-vazia do stdout = JSON
+        const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        let parsed = null;
+        for (let i = lines.length - 1; i >= 0; i--) {
+          try { parsed = JSON.parse(lines[i]); break; } catch {}
+        }
+        if (parsed && typeof parsed === 'object') {
+          resolve(parsed);
+        } else {
+          resolve({ ok: false, erro: (err || out || `Python saiu com código ${code} sem JSON.`).slice(-1200) });
+        }
+      });
+    });
+  } catch (e) {
+    return { ok: false, erro: e.message };
+  }
+});
+
+ipcMain.handle('orc-rce:abrir', async (_e, p) => {
+  try { const r = await shell.openPath(p); return { ok: !r, error: r || null }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ────────────────────────────────────────────────────────────────────
+// RH — BANCO DE CURRÍCULOS (índice local + busca por palavra-chave).
+// Store em userData\curriculos (arquivos copiados + index.json). Extração
+// de texto via scripts/rh/curriculos.py. Reusa orcRceResolvePython().
+// ────────────────────────────────────────────────────────────────────
+function rhCvScript() {
+  const cands = [
+    path.join(__dirname, '..', 'scripts', 'rh', 'curriculos.py'),
+    path.join(process.resourcesPath || '', 'scripts', 'rh', 'curriculos.py'),
+    path.join(app.getAppPath(), '..', 'scripts', 'rh', 'curriculos.py'),
+  ];
+  for (const c of cands) { try { if (fs.existsSync(c)) return c; } catch {} }
+  return null;
+}
+function rhCvStore() { return path.join(app.getPath('userData'), 'curriculos'); }
+async function rhCvRun(cfg) {
+  const script = rhCvScript();
+  if (!script) return { ok: false, erro: 'Script curriculos.py não encontrado.' };
+  const py = orcRceResolvePython();
+  if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
+  cfg.store = rhCvStore();
+  const tmpJson = path.join(os.tmpdir(), `nexus_rh_cv_${Date.now()}.json`);
+  fs.writeFileSync(tmpJson, JSON.stringify(cfg), 'utf8');
+  const { spawn } = require('child_process');
+  const args = [...py.args, script, '--config', tmpJson];
+  return await new Promise((resolve) => {
+    let out = '', err = '';
+    let proc;
+    try { proc = spawn(py.cmd, args, { windowsHide: true }); }
+    catch (e) { try { fs.unlinkSync(tmpJson); } catch {} return resolve({ ok: false, erro: 'Falha ao iniciar o Python: ' + e.message }); }
+    proc.stdout.on('data', d => out += d.toString());
+    proc.stderr.on('data', d => err += d.toString());
+    proc.on('error', (e) => { try { fs.unlinkSync(tmpJson); } catch {} resolve({ ok: false, erro: 'Erro ao executar o Python: ' + e.message }); });
+    proc.on('close', (code) => {
+      try { fs.unlinkSync(tmpJson); } catch {}
+      const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      let parsed = null;
+      for (let i = lines.length - 1; i >= 0; i--) { try { parsed = JSON.parse(lines[i]); break; } catch {} }
+      resolve(parsed && typeof parsed === 'object' ? parsed : { ok: false, erro: (err || out || `Python saiu com código ${code} sem JSON.`).slice(-1200) });
+    });
+  });
+}
+ipcMain.handle('rh-cv:importar-pasta', async () => {
+  if (!mainWindow) return { ok: false, erro: 'sem janela' };
+  const r = await dialog.showOpenDialog(mainWindow, { title: 'Escolher pasta de currículos (importa tudo, inclusive subpastas)', properties: ['openDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return { ok: false, cancelado: true };
+  return await rhCvRun({ op: 'importar', paths: [r.filePaths[0]], raiz: r.filePaths[0] });
+});
+ipcMain.handle('rh-cv:adicionar-arquivos', async () => {
+  if (!mainWindow) return { ok: false, erro: 'sem janela' };
+  const r = await dialog.showOpenDialog(mainWindow, { title: 'Adicionar currículos', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Currículos', extensions: ['pdf', 'docx', 'doc', 'odt', 'txt', 'rtf'] }, { name: 'Todos', extensions: ['*'] }] });
+  if (r.canceled || !r.filePaths.length) return { ok: false, cancelado: true };
+  return await rhCvRun({ op: 'importar', paths: r.filePaths });
+});
+ipcMain.handle('rh-cv:buscar', async (_e, p) => {
+  if (typeof p === 'string') p = { query: p };
+  p = p || {};
+  return rhCvRun({ op: 'buscar', query: p.query || '', filtros: p.filtros || {} });
+});
+ipcMain.handle('rh-cv:reindex', async () => rhCvRun({ op: 'reindex' }));
+ipcMain.handle('rh-cv:excluir', async (_e, ids) => rhCvRun({ op: 'excluir', ids: ids || [] }));
+ipcMain.handle('rh-cv:abrir', async (_e, p) => {
+  try { const r = await shell.openPath(p); return { ok: !r, error: r || null }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ────────────────────────────────────────────────────────────────────
+// MEMORIAL DESCRITIVO RCE — gera o .docx do Memorial Descritivo chamando o
+// gerador Python (scripts/memorial/gerar_memorial_descritivo.py), dirigido por
+// um JSON de configuracao com caminhos do projeto + dados + fluxograma.
+// Padrao isolado: handlers com prefixo "memorial:". Reusa o resolvedor de
+// Python do RCE (orcRceResolvePython).
+// ────────────────────────────────────────────────────────────────────
+function memorialResolveScript() {
+  const candidates = [
+    path.join(__dirname, '..', 'scripts', 'memorial', 'gerar_memorial_descritivo.py'),
+    path.join(process.resourcesPath || '', 'scripts', 'memorial', 'gerar_memorial_descritivo.py'),
+    path.join(app.getAppPath(), '..', 'scripts', 'memorial', 'gerar_memorial_descritivo.py'),
+  ];
+  for (const c of candidates) {
+    try { if (c && fs.existsSync(c)) return c; } catch {}
+  }
+  return null;
+}
+
+ipcMain.handle('memorial:pick-file', async (_e, kind) => {
+  if (!mainWindow) return null;
+  const filtros = {
+    ose:           [{ name: 'Excel', extensions: ['xlsx'] }],
+    interferencias:[{ name: 'Shapefile', extensions: ['shp'] }],
+    soleiras:      [{ name: 'Shapefile / ZIP', extensions: ['shp', 'zip'] }],
+    template:      [{ name: 'Word', extensions: ['docx'] }],
+    dados_json:    [{ name: 'JSON', extensions: ['json'] }],
+  };
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecionar arquivo',
+    properties: ['openFile'],
+    filters: (filtros[kind] || []).concat([{ name: 'Todos os arquivos', extensions: ['*'] }]),
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('memorial:pick-dir', async (_e, _kind) => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecionar pasta',
+    properties: ['openDirectory'],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('memorial:pick-save', async (_e, defaultName) => {
+  if (!mainWindow) return null;
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Salvar Memorial Descritivo',
+    defaultPath: defaultName || 'Memorial_Descritivo.docx',
+    filters: [{ name: 'Word', extensions: ['docx'] }],
+  });
+  return result.canceled ? null : result.filePath;
+});
+
+ipcMain.handle('memorial:gerar', async (_e, cfg) => {
+  try {
+    cfg = cfg || {};
+    if (!cfg.saida) return { ok: false, erro: 'Caminho de saída não informado.' };
+
+    const script = memorialResolveScript();
+    if (!script) return { ok: false, erro: 'Gerador Python não encontrado (scripts/memorial/gerar_memorial_descritivo.py).' };
+
+    const py = orcRceResolvePython();
+    if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
+
+    // grava config.json num tmp
+    const tmpJson = path.join(os.tmpdir(), `nexus_memorial_${Date.now()}.json`);
+    fs.writeFileSync(tmpJson, JSON.stringify(cfg, null, 2), 'utf8');
+
+    const { spawn } = require('child_process');
+    const args = [...py.args, script, '--config', tmpJson];
+
+    return await new Promise((resolve) => {
+      let out = '', err = '';
+      let proc;
+      try {
+        // cwd = pasta do script p/ os imports (gerar_fluxograma, mapa*) resolverem
+        proc = spawn(py.cmd, args, { windowsHide: true, cwd: path.dirname(script) });
+      } catch (e) {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        return resolve({ ok: false, erro: 'Falha ao iniciar o Python: ' + e.message });
+      }
+      proc.stdout.on('data', d => out += d.toString());
+      proc.stderr.on('data', d => err += d.toString());
+      proc.on('error', (e) => {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        resolve({ ok: false, erro: 'Erro ao executar o Python: ' + e.message });
+      });
+      proc.on('close', (code) => {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        // última linha não-vazia do stdout = JSON
+        const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        let parsed = null;
+        for (let i = lines.length - 1; i >= 0; i--) {
+          try { parsed = JSON.parse(lines[i]); break; } catch {}
+        }
+        if (parsed && typeof parsed === 'object') {
+          resolve(parsed);
+        } else {
+          resolve({ ok: false, erro: (err || out || `Python saiu com código ${code} sem JSON.`).slice(-1500) });
+        }
+      });
+    });
+  } catch (e) {
+    return { ok: false, erro: e.message };
+  }
+});
+
+ipcMain.handle('memorial:abrir', async (_e, p) => {
+  try { const r = await shell.openPath(p); return { ok: !r, error: r || null }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ────────────────────────────────────────────────────────────────────
+// ABAS EXCEL → PDF — exporta cada aba de uma planilha (.xlsx) como um PDF
+// separado (nome do PDF = nome da aba), chamando o motor Python
+// (scripts/orcamento/excel_abas_para_pdf.py) via Excel COM. Padrão isolado:
+// handlers com prefixo "abas-pdf:". Reusa o resolvedor de Python do RCE
+// (ORC_RCE_PYTHON_CANDIDATES / orcRceResolvePython).
+// ────────────────────────────────────────────────────────────────────
+
+function abasPdfResolveScript() {
+  const candidates = [
+    path.join(__dirname, '..', 'scripts', 'orcamento', 'excel_abas_para_pdf.py'),
+    path.join(process.resourcesPath || '', 'scripts', 'orcamento', 'excel_abas_para_pdf.py'),
+    path.join(app.getAppPath(), '..', 'scripts', 'orcamento', 'excel_abas_para_pdf.py'),
+  ];
+  for (const c of candidates) {
+    try { if (c && fs.existsSync(c)) return c; } catch {}
+  }
+  return null;
+}
+
+ipcMain.handle('abas-pdf:select-xlsx', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecionar planilha (.xlsx)',
+    properties: ['openFile'],
+    filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm', 'xls'] }, { name: 'Todos os arquivos', extensions: ['*'] }],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('abas-pdf:pick-dir', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecionar pasta de destino dos PDFs',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('abas-pdf:gerar', async (_e, cfg) => {
+  try {
+    cfg = cfg || {};
+    if (!cfg.planilha) return { ok: false, erro: 'Planilha (.xlsx) não informada.' };
+    if (!cfg.destino)  return { ok: false, erro: 'Pasta de destino não informada.' };
+
+    const script = abasPdfResolveScript();
+    if (!script) return { ok: false, erro: 'Motor Python não encontrado (scripts/orcamento/excel_abas_para_pdf.py).' };
+
+    const py = orcRceResolvePython();
+    if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
+
+    const tmpJson = path.join(os.tmpdir(), `nexus_abas_pdf_${Date.now()}.json`);
+    fs.writeFileSync(tmpJson, JSON.stringify(cfg, null, 2), 'utf8');
+
+    const { spawn } = require('child_process');
+    const args = [...py.args, script, '--config', tmpJson];
+
+    return await new Promise((resolve) => {
+      let out = '', err = '';
+      let proc;
+      try {
+        proc = spawn(py.cmd, args, { windowsHide: true });
+      } catch (e) {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        return resolve({ ok: false, erro: 'Falha ao iniciar o Python: ' + e.message });
+      }
+      proc.stdout.on('data', d => out += d.toString());
+      proc.stderr.on('data', d => err += d.toString());
+      proc.on('error', (e) => {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        resolve({ ok: false, erro: 'Erro ao executar o Python: ' + e.message });
+      });
+      proc.on('close', (code) => {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        let parsed = null;
+        for (let i = lines.length - 1; i >= 0; i--) {
+          try { parsed = JSON.parse(lines[i]); break; } catch {}
+        }
+        if (parsed && typeof parsed === 'object') {
+          resolve(parsed);
+        } else {
+          resolve({ ok: false, erro: (err || out || `Python saiu com código ${code} sem JSON.`).slice(-1200) });
+        }
+      });
+    });
+  } catch (e) {
+    return { ok: false, erro: e.message };
+  }
+});
+
+ipcMain.handle('abas-pdf:abrir', async (_e, p) => {
+  try { const r = await shell.openPath(p); return { ok: !r, error: r || null }; }
+  catch (e) { return { ok: false, error: e.message }; }
 });
 
 // Auto-install/refresh no startup do Nexus. Roda silencioso; falhas (Civil

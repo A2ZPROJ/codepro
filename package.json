@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "2.83.0",
+  "version": "2.84.16",
   "description": "Nexus — Gestão Integrada A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
@@ -10,7 +10,8 @@
     "precompile": "node scripts/embed-civil3d.js && node scripts/compile-obfuscate.js && node scripts/obfuscate-html.js",
     "postrestore": "node scripts/restore-source.js",
     "build": "npm run precompile && electron-builder --win && npm run postrestore",
-    "build:publish": "npm run precompile && electron-builder --win --publish always && npm run postrestore",
+    "build:publish": "npm run precompile && electron-builder --win --publish always && npm run postrestore && node scripts/commit-release.js",
+    "postbuild:publish": "node scripts/nexus-office-push.js",
     "test": "vitest run"
   },
   "build": {
@@ -31,6 +32,32 @@
       "package.json",
       "!**/*.src",
       "!**/*.jsc"
+    ],
+    "extraResources": [
+      {
+        "from": "scripts/orcamento",
+        "to": "scripts/orcamento",
+        "filter": [
+          "**/*.py"
+        ]
+      },
+      {
+        "from": "scripts/memorial",
+        "to": "scripts/memorial",
+        "filter": [
+          "**/*.py",
+          "assets/**/*",
+          "cache/**/*",
+          "!sample_amapora/**"
+        ]
+      },
+      {
+        "from": "scripts/rh",
+        "to": "scripts/rh",
+        "filter": [
+          "**/*.py"
+        ]
+      }
     ],
     "win": {
       "target": "nsis",

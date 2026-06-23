@@ -1,9 +1,9 @@
 // Construção do relatório XLSX de OSE (Trechos + abas por OSE).
 // Separado de main.js para permitir uso fora do Electron (testes).
 
-const { classifyOse, crossCheckPVs, TOL, tlShouldBePv } = require('./oseStatus');
+const { classifyOse, crossCheckPVs, buildCrossContext, TOL, tlShouldBePv } = require('./oseStatus');
 
-function buildOseWorkbook(data) {
+function buildOseWorkbook(data, opts) {
   const ExcelJS = require('exceljs');
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Nexus - A2Z Projetos';
@@ -35,8 +35,11 @@ function buildOseWorkbook(data) {
       .filter(v => v != null && !isNaN(v));
     return vals.length ? Math.max(...vals) : null;
   }
-  // Pre-compute classificação por OSE (lógica única em oseStatus.js)
-  const oseMeta = data.map(r => classifyOse(r));
+  // Pre-compute classificação por OSE (lógica única em oseStatus.js).
+  // Aceita tipoObra do caller (UI repassa o que estiver selecionado no
+  // dropdown da aba Conferência) pra usar as mesmas premissas no relatório.
+  const _ctx = buildCrossContext(data, opts);
+  const oseMeta = data.map(r => classifyOse(r, _ctx));
 
   // ============================================================
   // ABA TRECHOS — 1 linha por OSE
@@ -173,7 +176,7 @@ function buildOseWorkbook(data) {
       const ctErrPerf = pv.diff_ct_perf !== null && pv.diff_ct_perf > CT_TOL;
       const cfErrPerf = pv.diff_cf_perf !== null && pv.diff_cf_perf > CF_TOL;
       const pvErr = ctErrMapa || cfErrMapa || ctErrPerf || cfErrPerf;
-      const tlBadH = tlShouldBePv(pv);
+      const tlBadH = tlShouldBePv(pv, r.pvs);
       const idLabel = tlBadH != null ? (pv.id + ' <- deve ser PV') : pv.id;
 
       const row = ws2.addRow([

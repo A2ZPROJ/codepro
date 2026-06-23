@@ -1,0 +1,122 @@
+{
+  "identificacao": {
+    "municipio": "Amaporã - PR",
+    "bacia": "Bacia 02",
+    "sub_bacias": [
+      "BACIA 02 B"
+    ],
+    "concessionaria": "ACCIONA",
+    "contratada": "2S Engenharia e Geotecnologia",
+    "sistema": "Rede Coletora de Esgoto (RCE)",
+    "metodo_executivo": {
+      "distribuicao": {
+        "M.N.D.": 221
+      }
+    },
+    "DN": {
+      "distribuicao_por_ose": {
+        "DN 150mm - PVC": 221
+      }
+    },
+    "pavimentos": {
+      "PASSEIO REVESTIDO": 221
+    },
+    "datum": "SIRGAS 2000 / UTM 22S",
+    "arquivo_fonte": "OSEs-AMAPORÃ - BACIA 02 - M.N.D - R1.xlsx"
+  },
+  "quantitativos": {
+    "n_oses": 221,
+    "extensao_total_m": 9719.2,
+    "extensao_total_conferencia_somatorio": 9719.23,
+    "n_PV": 398,
+    "n_TL": 44,
+    "n_PIT": 3096,
+    "n_TQ": null,
+    "n_TQ_obs": "Nao foi possivel quantificar tubos de queda (TQ) de forma confiavel. O rotulo 'DEGRAU  m' aparece como linha-modelo (1 por aba, em 168 das 221 abas) sem valor de degrau preenchido na coluna adjacente - e artefato do template, nao um TQ real. Para contar TQs reais seria necessario o campo de degrau preenchido ou o modelo SewerGEMS.",
+    "extensao_por_DN_m": {
+      "DN 150mm - PVC": 9719.21
+    },
+    "profundidade_por_faixa_estruturas": {
+      "ate_1_25": 77,
+      "1_25_a_2_00": 178,
+      "2_00_a_3_00": 168,
+      "3_00_a_4_00": 17,
+      "acima_4_00": 2
+    },
+    "metodo_extensao": {
+      "regra": "OSE/trecho com profundidade max > 3,00 m classificado como VCA",
+      "MND_m": 9188.45,
+      "VCA_m": 530.78,
+      "n_OSE_VCA": 14
+    }
+  },
+  "parametros_vazoes": {
+    "encontrado": false,
+    "observacao": "A planilha de OSEs contem apenas geometria/cotas/quantitativos da rede. NAO ha parametros populacionais, per capita, K1/K2/K3, coef. retorno, taxa de infiltracao, vazoes, horizonte de projeto nem indice de atendimento populacional nesta fonte."
+  },
+  "soleiras": {
+    "total_imoveis": 462,
+    "atendidas_positiva": 457,
+    "nao_atendidas_negativa": 5,
+    "indice_atendimento_pct": 98.92,
+    "escopo": "Bacia 02 (sub-bacia BACIA 02 B)",
+    "campo_classificacao": "STATUS (SOLEIRA-POSITIVA / SOLEIRA-NEGATIVA); DIF_COTA = cota soleira - frente",
+    "fonte": "\\\\2s-eng-servidor\\maringa\\AMAPORÃ\\ARQ APOIO\\SOL\\SOLEIRA_AMAPORA (2).zip",
+    "datum": "SIRGAS 2000 / UTM 22S (EPSG:31982)",
+    "observacao": "Numeros referentes a Bacia 02 (462 imoveis): 457 atendidas / 5 nao atendidas; indice 98,9%."
+  },
+  "interferencias": {
+    "agua_trechos": 293,
+    "drenagem_trechos": 62,
+    "observacao": "Cruzamentos do tracado projetado com redes existentes de agua (293 trechos) e de drenagem (62 trechos), exigindo verificacao de cotas/travessias.",
+    "fonte": "2S Engenharia, 2026"
+  },
+  "topografia": {
+    "arquivos": 4,
+    "total_pontos": 10035,
+    "z_min": 369.831,
+    "z_max": 406.331,
+    "z_media": 391.087,
+    "bbox": {
+      "x_min": 316008.806,
+      "x_max": 318257.449,
+      "y_min": 7444049.207,
+      "y_max": 7445956.926
+    },
+    "datum": "SIRGAS 2000 / UTM Zone 22S (EPSG:31982)",
+    "formato": "PONTO,DESCRICAO,NORTHING(Y),EASTING(X),Z,+campos GNSS",
+    "por_arquivo": [
+      {
+        "file": "22-01-2026-Equipe 02-3980.txt",
+        "pontos": 3950,
+        "z_min": 373.889,
+        "z_max": 404.5
+      },
+      {
+        "file": "22-01-2026-Equipe 04-2580.txt",
+        "pontos": 2549,
+        "z_min": 374.048,
+        "z_max": 406.331
+      },
+      {
+        "file": "23-01-2026-Equipe 02-1830.txt",
+        "pontos": 1816,
+        "z_min": 370.804,
+        "z_max": 394.981
+      },
+      {
+        "file": "23-01-2026-Equipe 04-1735.txt",
+        "pontos": 1720,
+        "z_min": 369.831,
+        "z_max": 401.661
+      }
+    ]
+  },
+  "geo_arquivos": {
+    "pvs_tls_csv": "geo_amapora/estruturas_pv_tl.csv",
+    "rede_trechos_geojson": "geo_amapora/rede_trechos.geojson",
+    "rede_trechos_csv": "geo_amapora/rede_trechos.csv",
+    "soleiras_csv": "geo_amapora/soleiras.csv",
+    "soleiras_shapefile": "geo_amapora/soleiras_shp/"
+  }
+}

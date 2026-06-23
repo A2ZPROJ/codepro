@@ -23,3 +23,11 @@ dist/
 
 # Scraper node_modules (separado do principal)
 scripts/scraper/node_modules/
+
+# Scratch / temporários (testes de DXF/DOCX, samples, logs de build)
+tmp_refs/
+_publish_log.txt
+
+# Python cache
+__pycache__/
+*.pyc
