@@ -213,10 +213,13 @@ function classifyOse(r, ctx) {
     // sinalizando que o perfil foi parseado mas esse PV específico falta.
     const anyPvHasPerf = (r.pvs || []).some(p => p.in_pv_perfil);
     const anyPvHasMapa = (r.pvs || []).some(p => p.in_pv_mapa);
-    if (anyPvHasMapa && pv.in_pv_mapa === false && !isExistingPv(pv.id)) {
+    // TL co-locado com um PV (mesmo ponto): o PV representa o ponto no mapa/perfil.
+    // O TL é só o terminal de limpeza desenhado junto — não acusar "ausente".
+    const colocatedTL = isTL(pv.id) && hasColocatedPv(pv, r.pvs);
+    if (anyPvHasMapa && pv.in_pv_mapa === false && !isExistingPv(pv.id) && !colocatedTL) {
       errors.push(pv.id + ' ausente no Mapa (existe na Planilha mas falta multileader CT/CF no desenho)');
     }
-    if (anyPvHasPerf && pv.in_pv_perfil === false && !isExistingPv(pv.id)) {
+    if (anyPvHasPerf && pv.in_pv_perfil === false && !isExistingPv(pv.id) && !colocatedTL) {
       errors.push(pv.id + ' ausente no Perfil (existe na Planilha mas falta bloco no perfil DXF)');
     }
 

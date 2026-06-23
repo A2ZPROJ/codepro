@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "2.84.16",
+  "version": "2.84.17",
   "description": "Nexus — Gestão Integrada A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
