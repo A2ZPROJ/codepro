@@ -258,22 +258,35 @@ function cleanMtext(raw) {
 function detectPerfilLabels(items, cx, cy) {
   // Janela de busca: à esquerda do bloco (dx < 5) e abaixo da anchor.
   // Aumentamos pra dy = -250 pra cobrir blocos de perfil em escalas altas.
-  const labels = { topo: null, cc: null, cs: null, gi: null, prof: null, ext: null, decl: null, pv: null, diam: null };
+  const labels = { topo: null, cc: null, cs: null, gi: null, prof: null, ext: null, decl: null, pv: null, diam: null,
+                   gs: null, eixo: null, declpct: null, dnalarg: null };
   const PATTERNS = [
     { key: 'topo', re: /^COTA\s*TOPO\b/i },
     { key: 'cc',   re: /^CC[:.\s]+GI/i },
     { key: 'cs',   re: /^CS[:.\s]+GI/i },
+    // MND template: bandas extras do alargador (cravação). Detectá-las é o que
+    // permite identificar o template como MND e ler as bandas pelo índice
+    // (a posição do RÓTULO não casa com a do VALOR, então janela por rótulo erra).
+    { key: 'gs',   re: /^GS\s*ALARG/i },         // GS ALARGADOR (logo abaixo de COTA TOPO)
+    { key: 'eixo', re: /^EIXO\s*ALARG/i },       // EIXO ALARGADOR
     // MND: banda única de GI ("GI TUBO / ALARG.", "GI DO TUBO") sem prefixo CC/CS.
     // Usada como fallback de cc/cs quando o template não separa chegada/saída.
     { key: 'gi',   re: /^GI[\s:.\/]/i },
     { key: 'prof', re: /^PROFUNDIDADE\b/i },
+    // DECLIV. (%) precisa ser detectada ANTES da regra `decl` genérica casar a
+    // banda errada; usamos pra fixar a ordem das bandas no MND.
+    { key: 'declpct', re: /^DECLIV.*%/i },
     { key: 'ext',  re: /^EXTENS[ÃA]O\b/i },
     // Aceita "DECLIVIDADE" (VCA) e "DECLIV. (m/m)" / "DECLIV. (%)" (MND).
     { key: 'decl', re: /^DECLIV/i },
     { key: 'pv',   re: /^PV$/i },
-    // DN do tubo: aceita "DIÂMETRO", "DIAMETRO", "DN", "Ø", "MATERIAL/DIAM"
-    // Linha geralmente posicionada entre EXTENSÃO e DECLIVIDADE no perfil 2S.
-    { key: 'diam', re: /^(?:DI[ÂA]METRO|D[ÂA]M|DN|MATERIAL|Ø|TUBO)\b/i },
+    // DN ALARG. (mm) — banda do alargador, NÃO é o DN do tubo. Detectada à parte
+    // pra não ser confundida com a banda DN TUBO pelo padrão genérico abaixo.
+    { key: 'dnalarg', re: /^DN\s*ALARG/i },
+    // DN do tubo: aceita "DIÂMETRO", "DIAMETRO", "DN", "Ø", "MATERIAL/DIAM".
+    // No MND a banda correta é "DN TUBO (mm)" — o lookahead negativo evita casar
+    // "DN ALARG. (mm)" (alargador). Linha geralmente entre EXTENSÃO e DECLIVIDADE.
+    { key: 'diam', re: /^(?:DI[ÂA]METRO|D[ÂA]M|DN(?!\s*ALARG)|MATERIAL|Ø|TUBO)\b/i },
   ];
   for (const it of items) {
     const dx = it.x - cx, dy = it.y - cy;
@@ -677,7 +690,8 @@ function parsePerfisDxf(filePath) {
     // Tolerância vertical em torno do dy de cada label. ~½ do espaçamento
     // típico entre linhas adjacentes é seguro (não invade a linha vizinha).
     // Usamos o menor espaçamento detectado entre labels consecutivas como base.
-    const labelDys = [labels.topo, labels.cc, labels.cs, labels.prof, labels.ext, labels.decl, labels.pv, labels.diam]
+    const labelDys = [labels.topo, labels.gs, labels.eixo, labels.cc, labels.cs, labels.prof,
+                      labels.declpct, labels.ext, labels.decl, labels.pv, labels.diam, labels.dnalarg]
       .filter(v => v != null).sort((a, b) => a - b);
     let lineGap = 7.5; // espaçamento típico no template 2S
     if (labelDys.length >= 2) {
@@ -804,10 +818,97 @@ function parsePerfisDxf(filePath) {
       return rec;
     }
 
+    // Template MND (cravação): tem as bandas extras do alargador
+    //   COTA TOPO / GS ALARGADOR / EIXO ALARGADOR / GI TUBO / ALARG. /
+    //   PROFUNDIDADE / DECLIV.(m/m) / DECLIV.(%) / DN TUBO / DN ALARG. / EXTENSÃO …
+    // Nesse template a posição do RÓTULO da banda NÃO coincide com a do VALOR
+    // (justificação de texto diferente), então a janela por rótulo lê a banda
+    // de cima ou de baixo (CT vira GS, declividade vira PROFUNDIDADE).
+    // Como as bandas têm passo fixo (lineGap) e ordem rígida, lemos por ÍNDICE
+    // ancorando na COTA TOPO (o maior valor de cota da coluna): o número de
+    // cada banda é o item cujo dy fica a k*lineGap abaixo do topo.
+    const isMnd = labels.gs != null && labels.eixo != null;
+    function extractPvMnd(colDx) {
+      const tolDx = 2.0;
+      const rec = { ct: null, h: null, cf: null, cf_chegada: null, cf_saida: null, ext_acum: null, decl: null, diam: null };
+      // Junta os itens numéricos desta coluna com seu dy. Limita à janela
+      // vertical do bloco (rdyMin..rdyMax em torno do dyPv) — sem isso, colunas
+      // de OUTROS blocos no MESMO X (layouts empilhados no model space) entram
+      // e o "maior cota" cai em outro perfil (bug OSE-121: lia bloco 4000u acima).
+      const cells = [];
+      for (const it of items) {
+        const dx = it.x - cx, dy = it.y - cy;
+        if (Math.abs(dx - colDx) > tolDx) continue;
+        const rdy = dy - dyPv;
+        if (!(rdy > rdyMin && rdy < rdyMax)) continue;
+        const t = cleanMtext(it.text);
+        cells.push({ dy, t });
+      }
+      // COTA TOPO = maior cota (>=100) da coluna; é sempre a banda mais alta.
+      let topoDy = null, topoVal = null;
+      for (const c of cells) {
+        const m = c.t.match(/^(\d{2,4}[.,]\d{2,4})$/);
+        if (!m) continue;
+        const n = parseFloat(m[1].replace(',', '.'));
+        if (n >= 100 && (topoDy == null || c.dy > topoDy)) { topoDy = c.dy; topoVal = n; }
+      }
+      if (topoDy == null) return rec;
+      rec.ct = topoVal;
+      // slot(k) = dy esperado da k-ésima banda abaixo do topo (k=0 é o topo).
+      const slot = (k) => topoDy - k * lineGap;
+      const tolY = lineGap * 0.5;
+      // Pega o item cujo dy mais se aproxima de slot(k), dentro de tolY.
+      const pick = (k) => {
+        let best = null, bestD = tolY;
+        for (const c of cells) {
+          const d = Math.abs(c.dy - slot(k));
+          if (d < bestD) { bestD = d; best = c; }
+        }
+        return best;
+      };
+      const cotaAt = (k) => {
+        const c = pick(k);
+        if (!c) return null;
+        const m = c.t.match(/^(\d{2,4}[.,]\d{2,4})$/);
+        if (!m) return null;
+        const n = parseFloat(m[1].replace(',', '.'));
+        return n >= 100 ? n : null;
+      };
+      // Bandas: 0=CT, 1=GS ALARG, 2=EIXO ALARG, 3=GI TUBO (fundo real),
+      //         4=PROFUNDIDADE, 5=DECLIV(m/m), 6=DECLIV(%), 7=DN TUBO, 8=DN ALARG.
+      const giVal = cotaAt(3);
+      if (giVal != null) { rec.cf_saida = giVal; rec.cf_chegada = giVal; }
+      const profC = pick(4);
+      if (profC) {
+        const m = profC.t.match(/^(\d+[.,]\d+)$/);
+        if (m) { const n = parseFloat(m[1].replace(',', '.')); if (n > 0 && n < 20) rec.h = n; }
+      }
+      const declC = pick(5);
+      if (declC) {
+        const m = declC.t.match(/^(\d+[.,]\d+)$/);
+        if (m) { let n = parseFloat(m[1].replace(',', '.')); if (n >= 1) n = n / 100; if (n > 0 && n < 0.2) rec.decl = n; }
+      }
+      // Banda 7 = DN TUBO (mm) — o DN do TUBO, não o do alargador (banda 8).
+      // Ler por índice evita pegar a banda DN ALARG. logo abaixo (bug: 142 lia 200).
+      const dnC = pick(7);
+      if (dnC) {
+        const m = dnC.t.match(/^(\d{2,4})$/);
+        if (m) { const n = parseInt(m[1], 10); if (n >= 50 && n <= 1500) rec.diam = n; }
+      }
+      return rec;
+    }
+
     const blockPvs = {}; // id_norm → { ext_acum, decl }
     for (const name in cols) {
       const colDx = cols[name].dx;
-      const rec = extractPv(colDx, false);
+      let rec;
+      if (isMnd) {
+        // No MND a leitura por índice de banda é confiável; janela por rótulo
+        // (extractPv) erra a banda. ext_acum no MND fica em coluna central
+        // do trecho (não no PV) — resolvido pelo fallback "por trecho" abaixo.
+        rec = extractPvMnd(colDx);
+      } else {
+      rec = extractPv(colDx, false);
 
       // Segunda passada ampliada preenche APENAS campos que ficaram null
       // — não sobrescreve o que já foi detectado no offset canônico.
@@ -818,6 +919,7 @@ function parsePerfisDxf(filePath) {
         for (const k of Object.keys(rec)) {
           if (rec[k] == null && rec2[k] != null) rec[k] = rec2[k];
         }
+      }
       }
       // canonical cf = fundo real do PV = menor entre saída e chegada
       if (rec.cf_saida != null && rec.cf_chegada != null) {
@@ -832,6 +934,7 @@ function parsePerfisDxf(filePath) {
         ext_acum: rec.ext_acum, decl: rec.decl,
         cf: rec.cf, cf_chegada: rec.cf_chegada, cf_saida: rec.cf_saida,
         ct: rec.ct, h: rec.h,
+        diam: rec.diam != null ? rec.diam : null,   // DN TUBO por PV (só MND)
       };
 
       // só armazena no global se houver algum dado
@@ -917,7 +1020,16 @@ function parsePerfisDxf(filePath) {
     // "MATERIAL/DIÂMETRO: PVC OCRE 150". Pegamos o MAIOR DN encontrado na linha
     // (caso o desenho mostre "150" e "DN150" lado a lado, dá no mesmo).
     let Dblock = null;
-    if (OFF_DIAM) {
+    if (isMnd) {
+      // No MND lemos o DN TUBO por banda-índice em cada coluna de PV (banda 7,
+      // distinta da banda DN ALARG.). Pega o DN do tubo mais frequente do bloco.
+      const dnByPv = Object.values(blockPvs).map(b => b.diam).filter(v => v != null);
+      if (dnByPv.length) {
+        const counts = {};
+        for (const d of dnByPv) counts[d] = (counts[d] || 0) + 1;
+        Dblock = parseInt(Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0], 10);
+      }
+    } else if (OFF_DIAM) {
       const candDiam = [];
       for (const it of items) {
         const dx = it.x - cx, dy = it.y - cy;
