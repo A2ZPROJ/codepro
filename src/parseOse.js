@@ -427,7 +427,11 @@ function parseMapaDxf(filePath) {
     if (!buf) return;
     // Aceita PV-###, TL-###, PIT-###, TQ-### e variantes com qualificador
     // intermediário como PV-EX-### (existente) ou PV-INT-### (interligação).
-    const mId = buf.match(/;?\b((?:PV|TL|PIT|TQ)(?:[\s\-]+[A-Z]{1,4})?[\s\-]+\d+)/i);
+    // Também aceita PV EXISTENTE / PV-EXIST (sem número) — PV de campo levantado
+    // que o mapa rotula só como "PV-EXISTENTE" (sem código), antes era ignorado
+    // porque o regex exigia um número no fim.
+    const mId = buf.match(/;?\b((?:PV|TL|PIT|TQ)(?:[\s\-]+[A-Z]{1,4})?[\s\-]+\d+)/i)
+             || buf.match(/;?\b((?:PV|TL|PIT|TQ)[\s\-]+EXIST\w*)/i);
     const cleaned = buf.replace(/\\f[^;]*;/gi, '').replace(/[{}]/g, '');
     const mCt = cleaned.match(/(?:\\P|^|\s)CT\s*:\s*([\d.,]+)/i);
     const mCf = cleaned.match(/(?:\\P|^|\s)CF\s*:\s*([\d.,]+)/i);
@@ -454,6 +458,40 @@ function parseMapaDxf(filePath) {
     }
   }
 
+  // Extrai um rótulo de OSE (L=, i=, DN) de um blob de texto. O rótulo da OSE
+  // (nome/L/i/DN) é SEMPRE MTEXT (só o rótulo de PV é que pode vir como
+  // MULTILEADER ou MTEXT). Por isso esta função só é chamada no flushMtext.
+  function ingestOseLabel(buf) {
+    if (!buf) return;
+    const plain = buf.replace(/\\f[^;]*;/gi, '').replace(/[{}]/g, '');
+    // Unidade `m` após o valor de L é OPCIONAL — muitos rótulos vêm como
+    // `L=25,09\PØ150mm  i=0,0470` (o `m` só aparece em `mm` depois).
+    // Antes o regex exigia `m` logo após o número, derrubando a OSE.
+    // Antes tinha `(\d+)\b` — quebrava quando o label vem colado: "OSE - 380L=73,16m"
+    // (sem espaço entre 380 e L). `\b` não casa entre `0` e `L` (ambos word chars).
+    // i pode ser NEGATIVO (declividade adversa / contra-caimento): "i=-0,0100".
+    // Sem o `-?` o regex inteiro não casava e a OSE sumia do mapa (in_mapa=false)
+    // — era o caso da OSE-003/004/005 de Amaporã BACIA-02-B.
+    const m = plain.match(/OSE[\s\-]+(\d+[A-Za-z]?)[\s\S]*?L=\s*(-?[\d.,]+)\s*m?[\s\S]*?i\s*=\s*(-?[\d.,]+)/i);
+    if (!m) return;
+    const num = normOseNum(m[1]);
+    // Captura DN se presente no MESMO label da OSE — formatos comuns:
+    //   "Ø150mm" / "Ø 200" / "DN150" / "DN 200" / "PVC 150mm"
+    // Limita a 4 dígitos pra evitar casar com cota (ex.: 380.5). Range
+    // 50..1500 cobre coletor sanitário típico (mínimo PVC 100, máximo PEAD 1500).
+    let dn = null;
+    const dnMatch = plain.match(/(?:Ø|DN|D\.N\.)\s*(\d{2,4})/i);
+    if (dnMatch) {
+      const n = parseInt(dnMatch[1], 10);
+      if (n >= 50 && n <= 1500) dn = n;
+    }
+    oses[num] = {
+      L: parseFloat(m[2].replace(',', '.')),
+      i: parseFloat(m[3].replace(',', '.')),
+      diam: dn,
+    };
+  }
+
   function flushMultiLeader() {
     ingestPvLabel(mlBuf, mlX, mlY);
     mlBuf = ''; mlX = null; mlY = null;
@@ -461,33 +499,9 @@ function parseMapaDxf(filePath) {
 
   function flushMtext() {
     if (!mtText) { mtX = null; mtY = null; return; }
-    // PV pode estar em MTEXT (entrega recente do mapa) — tenta extrair também.
+    // PV (e OSE) podem estar em MTEXT (entrega recente do mapa) — extrai ambos.
     ingestPvLabel(mtText, mtX, mtY);
-    const plain = mtText.replace(/\\f[^;]*;/gi, '').replace(/[{}]/g, '');
-    // Unidade `m` após o valor de L é OPCIONAL — muitos rótulos vêm como
-    // `L=25,09\PØ150mm  i=0,0470` (o `m` só aparece em `mm` depois).
-    // Antes o regex exigia `m` logo após o número, derrubando a OSE.
-    // Antes tinha `(\d+)\b` — quebrava quando o label vem colado: "OSE - 380L=73,16m"
-    // (sem espaço entre 380 e L). `\b` não casa entre `0` e `L` (ambos word chars).
-    const m = plain.match(/OSE[\s\-]+(\d+[A-Za-z]?)[\s\S]*?L=\s*([\d.,]+)\s*m?[\s\S]*?i\s*=\s*([\d.,]+)/i);
-    if (m) {
-      const num = normOseNum(m[1]);
-      // Captura DN se presente no MESMO label da OSE — formatos comuns:
-      //   "Ø150mm" / "Ø 200" / "DN150" / "DN 200" / "PVC 150mm"
-      // Limita a 4 dígitos pra evitar casar com cota (ex.: 380.5). Range
-      // 50..1500 cobre coletor sanitário típico (mínimo PVC 100, máximo PEAD 1500).
-      let dn = null;
-      const dnMatch = plain.match(/(?:Ø|DN|D\.N\.)\s*(\d{2,4})/i);
-      if (dnMatch) {
-        const n = parseInt(dnMatch[1], 10);
-        if (n >= 50 && n <= 1500) dn = n;
-      }
-      oses[num] = {
-        L: parseFloat(m[2].replace(',', '.')),
-        i: parseFloat(m[3].replace(',', '.')),
-        diam: dn,
-      };
-    }
+    ingestOseLabel(mtText);
     mtText = ''; mtX = null; mtY = null;
   }
 

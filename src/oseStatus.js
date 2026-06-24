@@ -99,10 +99,13 @@ function isTL(id) {
 }
 
 // PV existente (levantado em campo) — h e CT imutáveis, fora das regras de
-// profundidade mínima do projeto. Casa "PV-EX-###" e também "PV-EXIST-###".
+// profundidade mínima do projeto. Casa "PV-EX-###", "PV-EXIST-###" e também
+// "PV-EXISTENTE" (sem número). Tolera a forma normalizada sem traço/espaço
+// (normalizeId vira "PVEXISTENTE"/"PVEX1"/"PVINT5") removendo separadores antes.
 function isExistingPv(id) {
   if (typeof id !== 'string') return false;
-  return /^PV-EX/i.test(id.trim()) || /^PV-INT/i.test(id.trim());
+  const s = id.trim().replace(/[\s\-]+/g, '').toUpperCase();
+  return /^PV(EX|INT)/.test(s);
 }
 
 function maxProf(pv) {
