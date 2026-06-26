@@ -16916,10 +16916,15 @@ body.presenting #presentingBadge { display: flex; }
               <button onclick="window.monoPickPpp()" style="background:var(--gray-900);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Selecionar arquivo do PPP (.zip)</button>
               <span id="mono-pdf-path" style="font-size:12px;color:var(--text3)">Nenhum arquivo selecionado</span>
             </div>
+            <!-- Fotos AUTO: pasta-raiz pré-configurada; acha a subpasta do marco e pega as 2 melhores -->
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+              <button onclick="window.monoPickFotosPasta()" style="background:var(--gray-900);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Pasta de fotos (busca automática)</button>
+              <span id="mono-fotos-pasta-path" style="font-size:11px;color:var(--text3)" title="Raiz das fotos; o Nexus entra na subpasta com o nome do marco e pega as 2 melhores">padrão: \\2s-eng-servidor\maringa\_DADOS BRUTOS MARCOS TOPOGRÁFICOS\_FOTOS</span>
+            </div>
+            <!-- Fotos MANUAL (opcional): escolher os arquivos exatos; sobrepõe o automático -->
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
-              <button onclick="window.monoPickFotos()" style="background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Escolher as fotos (1 ou 2)</button>
-              <span id="mono-fotos-path" style="font-size:12px;color:var(--text3)">Nenhuma — selecione os arquivos (a 1ª = FOTO 1, a 2ª = FOTO 2)</span>
-              <button onclick="window.monoPickFotosPasta()" title="Alternativa: apontar uma pasta e deixar achar as 2 melhores" style="background:transparent;color:var(--text3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-family:inherit;font-size:11px;cursor:pointer">ou pasta</button>
+              <button onclick="window.monoPickFotos()" style="background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Escolher as fotos manualmente</button>
+              <span id="mono-fotos-path" style="font-size:12px;color:var(--text3)">opcional — vazio = busca automática (1ª = FOTO 1, 2ª = FOTO 2)</span>
             </div>
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
               <label style="font-size:12px;color:var(--text2);font-weight:600;min-width:46px">Marco</label>
@@ -24189,7 +24194,11 @@ body.presenting #presentingBadge { display: flex; }
     };
 
     // ── Monografia de Marco Topográfico (PPP-IBGE → DOCX) ──
-    window._monoPdf = null; window._monoFotos = null; window._monoUltimoDocx = null;
+    // Pasta-raiz das fotos PRÉ-CONFIGURADA: o Nexus entra na subpasta com o nome do
+    // marco e pega as 2 melhores sozinho (busca automática, padrão).
+    window._monoFotosDefault = '\\\\2s-eng-servidor\\maringa\\_DADOS BRUTOS MARCOS TOPOGRÁFICOS\\_FOTOS';
+    window._monoPdf = null; window._monoFotos = window._monoFotosDefault;
+    window._monoFotoFiles = null; window._monoUltimoDocx = null;
     window.monoPickPpp = async function () {
       const p = await window.electronAPI.selectFile([
         { name: 'PPP-IBGE (zip / pdf)', extensions: ['zip', 'pdf'] },
@@ -24223,13 +24232,15 @@ body.presenting #presentingBadge { display: flex; }
       el.textContent = paths.map(p => p.split(/[\\/]/).pop()).join('   |   ');
       el.style.color = 'var(--text)';
     };
-    // (legado) apontar a PASTA e deixar achar/auto-selecionar — fallback opcional
+    // Apontar a PASTA-RAIZ (auto): acha a subpasta do marco e pega as 2 melhores. Vem pré-preenchida.
     window.monoPickFotosPasta = async function () {
       const p = await window.electronAPI.selectFolder();
       if (!p) return;
       window._monoFotos = p; window._monoFotoFiles = null;
-      const el = document.getElementById('mono-fotos-path');
-      el.textContent = '[pasta] ' + p.split(/[\\/]/).pop(); el.style.color = 'var(--text)';
+      const el = document.getElementById('mono-fotos-pasta-path');
+      if (el) { el.textContent = p; el.style.color = 'var(--text)'; }
+      const elm = document.getElementById('mono-fotos-path');
+      if (elm) { elm.textContent = 'opcional — vazio = busca automática (1ª = FOTO 1, 2ª = FOTO 2)'; elm.style.color = 'var(--text3)'; }
     };
     window.monoGerar = async function () {
       if (!window._monoPdf) { alert('Selecione o arquivo do PPP (.zip) primeiro.'); return; }
