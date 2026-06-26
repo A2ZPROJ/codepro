@@ -16909,7 +16909,7 @@ body.presenting #presentingBadge { display: flex; }
         <div class="gis-card" style="margin-bottom:14px">
           <div class="gis-card-head">
             <h3>Arquivos</h3>
-            <span style="font-size:11px;color:var(--text3)">Arquivo .zip do PPP-IBGE (o específico do marco) · pasta das fotos</span>
+            <span style="font-size:11px;color:var(--text3)">Arquivo .zip do PPP-IBGE (o específico do marco) · escolha as fotos que vão na monografia</span>
           </div>
           <div class="gis-card-body">
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
@@ -16917,8 +16917,9 @@ body.presenting #presentingBadge { display: flex; }
               <span id="mono-pdf-path" style="font-size:12px;color:var(--text3)">Nenhum arquivo selecionado</span>
             </div>
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
-              <button onclick="window.monoPickFotos()" style="background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Selecionar pasta de fotos</button>
-              <span id="mono-fotos-path" style="font-size:12px;color:var(--text3)">Nenhuma — pode ser a raiz (acha a subpasta do marco) ou a pasta do marco</span>
+              <button onclick="window.monoPickFotos()" style="background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Escolher as fotos (1 ou 2)</button>
+              <span id="mono-fotos-path" style="font-size:12px;color:var(--text3)">Nenhuma — selecione os arquivos (a 1ª = FOTO 1, a 2ª = FOTO 2)</span>
+              <button onclick="window.monoPickFotosPasta()" title="Alternativa: apontar uma pasta e deixar achar as 2 melhores" style="background:transparent;color:var(--text3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-family:inherit;font-size:11px;cursor:pointer">ou pasta</button>
             </div>
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
               <label style="font-size:12px;color:var(--text2);font-weight:600;min-width:46px">Marco</label>
@@ -24205,12 +24206,30 @@ body.presenting #presentingBadge { display: flex; }
         if (m && inp && !inp.value.trim()) inp.value = (m[1].toUpperCase() + '-' + String(m[2]).padStart(4, '0'));
       } catch {}
     };
+    // Seleciona OS ARQUIVOS de foto que o usuário quer (1 ou 2; 1ª = FOTO 1, 2ª = FOTO 2)
     window.monoPickFotos = async function () {
+      const filt = [{ name: 'Imagens', extensions: ['jpg', 'jpeg', 'png'] }];
+      let paths = [];
+      if (typeof window.electronAPI.selectFiles === 'function') {
+        paths = (await window.electronAPI.selectFiles(filt)) || [];
+      } else {
+        const p = await window.electronAPI.selectFile(filt);
+        if (p) paths = [p];
+      }
+      if (!paths.length) return;
+      if (paths.length > 2) { paths = paths.slice(0, 2); }
+      window._monoFotoFiles = paths;
+      const el = document.getElementById('mono-fotos-path');
+      el.textContent = paths.map(p => p.split(/[\\/]/).pop()).join('   |   ');
+      el.style.color = 'var(--text)';
+    };
+    // (legado) apontar a PASTA e deixar achar/auto-selecionar — fallback opcional
+    window.monoPickFotosPasta = async function () {
       const p = await window.electronAPI.selectFolder();
       if (!p) return;
-      window._monoFotos = p;
+      window._monoFotos = p; window._monoFotoFiles = null;
       const el = document.getElementById('mono-fotos-path');
-      el.textContent = p.split(/[\\/]/).pop(); el.style.color = 'var(--text)';
+      el.textContent = '[pasta] ' + p.split(/[\\/]/).pop(); el.style.color = 'var(--text)';
     };
     window.monoGerar = async function () {
       if (!window._monoPdf) { alert('Selecione o arquivo do PPP (.zip) primeiro.'); return; }
@@ -24225,8 +24244,11 @@ body.presenting #presentingBadge { display: flex; }
         log.textContent += msg + '\n'; log.scrollTop = log.scrollHeight;
       });
       try {
+        const ff = window._monoFotoFiles || [];
         const res = await window.electronAPI.monografia.gerar({
           pdfPath: window._monoPdf,
+          foto1: ff[0] || '',
+          foto2: ff[1] || '',
           fotosPath: window._monoFotos || '',
           marco: document.getElementById('mono-marco').value,
           basemap: document.getElementById('mono-basemap').value,

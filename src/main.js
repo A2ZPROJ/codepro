@@ -1892,6 +1892,8 @@ ipcMain.handle('monografia:gerar', async (event, params) => {
     if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
 
     const args = [...py.args, script, params.pdfPath];
+    if (params.foto1) args.push('--foto1', params.foto1);
+    if (params.foto2) args.push('--foto2', params.foto2);
     if (params.fotosPath) args.push('--fotos', params.fotosPath);
     if (params.marco) args.push('--marco', params.marco);
     if (params.basemap) args.push('--basemap', params.basemap);
