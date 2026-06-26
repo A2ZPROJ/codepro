@@ -16909,16 +16909,16 @@ body.presenting #presentingBadge { display: flex; }
         <div class="gis-card" style="margin-bottom:14px">
           <div class="gis-card-head">
             <h3>Arquivos</h3>
-            <span style="font-size:11px;color:var(--text3)">Pasta do PPP-IBGE (zips do IBGE) · pasta raiz de fotos (subpastas por marco)</span>
+            <span style="font-size:11px;color:var(--text3)">Arquivo .zip do PPP-IBGE (o específico do marco) · pasta das fotos</span>
           </div>
           <div class="gis-card-body">
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
-              <button onclick="window.monoPickPpp()" style="background:var(--gray-900);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Selecionar pasta do PPP</button>
-              <span id="mono-pdf-path" style="font-size:12px;color:var(--text3)">Nenhuma pasta selecionada</span>
+              <button onclick="window.monoPickPpp()" style="background:var(--gray-900);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Selecionar arquivo do PPP (.zip)</button>
+              <span id="mono-pdf-path" style="font-size:12px;color:var(--text3)">Nenhum arquivo selecionado</span>
             </div>
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
-              <button onclick="window.monoPickFotos()" style="background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Pasta de fotos (raiz, opcional)</button>
-              <span id="mono-fotos-path" style="font-size:12px;color:var(--text3)">Nenhuma — usa placeholders</span>
+              <button onclick="window.monoPickFotos()" style="background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Selecionar pasta de fotos</button>
+              <span id="mono-fotos-path" style="font-size:12px;color:var(--text3)">Nenhuma — pode ser a raiz (acha a subpasta do marco) ou a pasta do marco</span>
             </div>
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
               <label style="font-size:12px;color:var(--text2);font-weight:600;min-width:46px">Marco</label>
@@ -24190,11 +24190,20 @@ body.presenting #presentingBadge { display: flex; }
     // ── Monografia de Marco Topográfico (PPP-IBGE → DOCX) ──
     window._monoPdf = null; window._monoFotos = null; window._monoUltimoDocx = null;
     window.monoPickPpp = async function () {
-      const p = await window.electronAPI.selectFolder();
+      const p = await window.electronAPI.selectFile([
+        { name: 'PPP-IBGE (zip / pdf)', extensions: ['zip', 'pdf'] },
+        { name: 'Todos', extensions: ['*'] },
+      ]);
       if (!p) return;
       window._monoPdf = p;
       const el = document.getElementById('mono-pdf-path');
       el.textContent = p.split(/[\\/]/).pop(); el.style.color = 'var(--text)';
+      // auto-preenche o Marco a partir do nome do zip (ex: ..._3400319174K-M0007.zip_LIB_...)
+      try {
+        const m = String(p).match(/-([A-Za-z]{1,3})\s?-?0*(\d{2,})\.zip/i) || String(p).match(/\b([A-Za-z]{1,3})\s?-?0*(\d{2,})\b/);
+        const inp = document.getElementById('mono-marco');
+        if (m && inp && !inp.value.trim()) inp.value = (m[1].toUpperCase() + '-' + String(m[2]).padStart(4, '0'));
+      } catch {}
     };
     window.monoPickFotos = async function () {
       const p = await window.electronAPI.selectFolder();
@@ -24204,7 +24213,7 @@ body.presenting #presentingBadge { display: flex; }
       el.textContent = p.split(/[\\/]/).pop(); el.style.color = 'var(--text)';
     };
     window.monoGerar = async function () {
-      if (!window._monoPdf) { alert('Selecione a pasta do PPP primeiro.'); return; }
+      if (!window._monoPdf) { alert('Selecione o arquivo do PPP (.zip) primeiro.'); return; }
       const btn = document.getElementById('mono-btn-gerar');
       const status = document.getElementById('mono-status');
       const log = document.getElementById('mono-log');
