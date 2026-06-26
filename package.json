@@ -1,7 +1,7 @@
 {
   "name": "codepro",
-  "version": "2.84.19",
-  "description": "Nexus — Gestão Integrada A2Z Projetos",
+  "version": "2.84.20",
+  "description": "Nexus â€” GestÃ£o Integrada A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
@@ -17,7 +17,7 @@
   "build": {
     "appId": "com.a2zprojetos.codepro",
     "productName": "Nexus",
-    "copyright": "Copyright © 2026 A2Z Projetos",
+    "copyright": "Copyright Â© 2026 A2Z Projetos",
     "directories": {
       "output": "dist"
     },

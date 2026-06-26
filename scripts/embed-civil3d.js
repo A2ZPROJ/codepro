@@ -60,6 +60,15 @@ function encryptDll(plainBuf) {
 
 function main() {
   if (!fs.existsSync(DLL_SOURCE)) {
+    // Máquina sem o projeto NETLOAD (ex.: ACER): se o bundle JÁ existe e está
+    // versionado (DLL inalterada desde o último build no PREDATOR), reusa o
+    // civil3d.bin + civil3d-deps existentes em vez de abortar. Assim dá pra
+    // publicar uma versão que só mexe no app, sem rebuildar a DLL.
+    if (fs.existsSync(OUT_FILE) && fs.existsSync(DEPS_OUT_DIR)) {
+      console.warn('[embed-civil3d] DLL-fonte ausente:', DLL_SOURCE);
+      console.warn('[embed-civil3d] Reusando bundle existente (DLL inalterada):', OUT_FILE);
+      return;
+    }
     console.error('[embed-civil3d] ERRO — DLL não encontrada em:', DLL_SOURCE);
     console.error('[embed-civil3d] Rode `dotnet build -c Release` no projeto NETLOAD CIVIL 3D antes.');
     process.exit(1);

@@ -1874,6 +1874,66 @@ ipcMain.handle('memorial:abrir', async (_e, p) => {
 });
 
 // ────────────────────────────────────────────────────────────────────
+// MONOGRAFIA DE MARCO TOPOGRÁFICO — gera o .docx (padrão 2S/ACCIONA/SANEPAR)
+// a partir do PDF do PPP-IBGE (+ fotos opcionais), chamando o pipeline Python
+// em ~/jarvis/gerar_monografia.py (parser PPP → geocoding → mapa → DOCX).
+// Reusa o resolvedor de Python do RCE (orcRceResolvePython). As linhas de
+// progresso ([1/5]…) sobem por 'monografia:progresso'; a última linha = JSON.
+// ────────────────────────────────────────────────────────────────────
+ipcMain.handle('monografia:gerar', async (event, params) => {
+  try {
+    params = params || {};
+    if (!params.pdfPath || !fs.existsSync(params.pdfPath))
+      return { ok: false, erro: 'PDF do PPP-IBGE inválido ou não encontrado.' };
+    const script = path.join(os.homedir(), 'jarvis', 'gerar_monografia.py');
+    if (!fs.existsSync(script))
+      return { ok: false, erro: 'Gerador não encontrado: ' + script };
+    const py = orcRceResolvePython();
+    if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
+
+    const args = [...py.args, script, params.pdfPath];
+    if (params.fotosPath) args.push('--fotos', params.fotosPath);
+    if (params.marco) args.push('--marco', params.marco);
+    if (params.basemap) args.push('--basemap', params.basemap);
+    const opt = {
+      '--responsavel': params.responsavel, '--rev': params.rev,
+      '--contrato': params.contrato, '--material': params.material,
+      '--equipamento': params.equipamento,
+    };
+    for (const [k, v] of Object.entries(opt)) if (v) args.push(k, String(v));
+
+    const { spawn } = require('child_process');
+    const send = (m) => { try { event.sender.send('monografia:progresso', m); } catch {} };
+
+    return await new Promise((resolve) => {
+      let out = '', err = '', proc;
+      try {
+        proc = spawn(py.cmd, args, {
+          windowsHide: true, cwd: path.dirname(script),
+          env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+        });
+      } catch (e) { return resolve({ ok: false, erro: 'Falha ao iniciar o Python: ' + e.message }); }
+      proc.stdout.setEncoding('utf8'); proc.stderr.setEncoding('utf8');
+      proc.stdout.on('data', d => { out += d; d.split(/\r?\n/).forEach(l => { l = l.trim(); if (l && l[0] !== '{') send(l); }); });
+      proc.stderr.on('data', d => { err += d; d.split(/\r?\n/).forEach(l => { l = l.trim(); if (l) send('⚠ ' + l); }); });
+      proc.on('error', (e) => resolve({ ok: false, erro: 'Erro ao executar o Python: ' + e.message }));
+      proc.on('close', (code) => {
+        const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        let parsed = null;
+        for (let i = lines.length - 1; i >= 0; i--) { try { parsed = JSON.parse(lines[i]); break; } catch {} }
+        if (parsed && typeof parsed === 'object') resolve(parsed);
+        else resolve({ ok: false, erro: (err || out || `Python saiu com código ${code} sem JSON.`).slice(-1500) });
+      });
+    });
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
+
+ipcMain.handle('monografia:abrir', async (_e, p) => {
+  try { const r = await shell.openPath(p); return { ok: !r, error: r || null }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ────────────────────────────────────────────────────────────────────
 // ABAS EXCEL → PDF — exporta cada aba de uma planilha (.xlsx) como um PDF
 // separado (nome do PDF = nome da aba), chamando o motor Python
 // (scripts/orcamento/excel_abas_para_pdf.py) via Excel COM. Padrão isolado:

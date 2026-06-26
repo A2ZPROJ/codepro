@@ -16507,6 +16507,9 @@ body.presenting #presentingBadge { display: flex; }
         <button id="rel-sub-memorial" class="rel-sub-btn" onclick="relSwitchSub('memorial')" style="padding:10px 18px;background:none;border:none;border-bottom:2.5px solid transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;margin-bottom:-1.5px;letter-spacing:-.01em">
           Memorial Descritivo
         </button>
+        <button id="rel-sub-monografia" class="rel-sub-btn" onclick="relSwitchSub('monografia')" style="padding:10px 18px;background:none;border:none;border-bottom:2.5px solid transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;margin-bottom:-1.5px;letter-spacing:-.01em">
+          Monografia de Marco
+        </button>
         <button class="rel-sub-btn" disabled style="padding:10px 18px;background:none;border:none;border-bottom:2.5px solid transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--text3);cursor:not-allowed;opacity:.5">
           As-Built <span style="font-size:9px;background:var(--surface2);padding:2px 6px;border-radius:3px;margin-left:4px">em breve</span>
         </button>
@@ -16898,6 +16901,77 @@ body.presenting #presentingBadge { display: flex; }
 
         </div>
       </div><!-- /rel-pane-memorial -->
+
+      <!-- Sub-aba: Monografia de Marco Topográfico (PPP-IBGE → DOCX) -->
+      <div id="rel-pane-monografia" style="display:none">
+
+        <!-- Card 1: arquivos -->
+        <div class="gis-card" style="margin-bottom:14px">
+          <div class="gis-card-head">
+            <h3>Arquivos</h3>
+            <span style="font-size:11px;color:var(--text3)">Pasta do PPP-IBGE (zips do IBGE) · pasta raiz de fotos (subpastas por marco)</span>
+          </div>
+          <div class="gis-card-body">
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+              <button onclick="window.monoPickPpp()" style="background:var(--gray-900);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Selecionar pasta do PPP</button>
+              <span id="mono-pdf-path" style="font-size:12px;color:var(--text3)">Nenhuma pasta selecionada</span>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+              <button onclick="window.monoPickFotos()" style="background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Pasta de fotos (raiz, opcional)</button>
+              <span id="mono-fotos-path" style="font-size:12px;color:var(--text3)">Nenhuma — usa placeholders</span>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+              <label style="font-size:12px;color:var(--text2);font-weight:600;min-width:46px">Marco</label>
+              <input id="mono-marco" placeholder="ex: M-0007 — filtra a pasta (vazio = único PPP da pasta)" style="flex:1;max-width:420px;padding:7px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <label style="font-size:12px;color:var(--text2);font-weight:600;min-width:46px">Mapa</label>
+              <select id="mono-basemap" style="padding:7px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none">
+                <option value="opentopo">Topográfico — OpenTopoMap (relevo + curvas)</option>
+                <option value="topo">Topográfico — Esri WorldTopoMap (mais limpo)</option>
+                <option value="imagery">Satélite — Esri WorldImagery</option>
+                <option value="positron">Claro — CartoDB Positron</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: dados do documento (CONFIG editável) -->
+        <div class="gis-card" style="margin-bottom:14px">
+          <div class="gis-card-head">
+            <h3>Dados do documento</h3>
+            <span style="font-size:11px;color:var(--text3)">Pré-preenchidos — ajuste se necessário</span>
+          </div>
+          <div class="gis-card-body">
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+              <div><label style="display:block;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Responsável Técnico</label>
+                <input id="mono-responsavel" value="Rodrigo Antonio Zanatta" style="width:100%;padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/></div>
+              <div><label style="display:block;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Revisão</label>
+                <input id="mono-rev" value="R00" style="width:100%;padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/></div>
+              <div><label style="display:block;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Material</label>
+                <input id="mono-material" value="Concreto" style="width:100%;padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/></div>
+              <div><label style="display:block;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Equipamento</label>
+                <input id="mono-equipamento" value="CHC i73+" style="width:100%;padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/></div>
+              <div style="grid-column:1/3"><label style="display:block;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Contrato</label>
+                <input id="mono-contrato" value="CT-027.2025 — ACCIONA / SANEPAR — Lote 2 — 48 Municípios / PR" style="width:100%;padding:8px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: gerar -->
+        <div class="gis-card" style="margin-bottom:14px">
+          <div class="gis-card-head">
+            <h3>Gerar monografia</h3>
+            <span id="mono-status" style="font-size:11px;color:var(--text3);margin-left:auto"></span>
+          </div>
+          <div class="gis-card-body">
+            <button class="btn-accent" id="mono-btn-gerar" onclick="window.monoGerar()" style="padding:10px 22px;font-size:13px">Gerar Monografia</button>
+            <pre id="mono-log" style="display:none;margin-top:14px;max-height:240px;overflow:auto;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:var(--font-mono,monospace);font-size:11px;line-height:1.5;color:var(--text2);white-space:pre-wrap"></pre>
+            <div id="mono-result" style="display:none;margin-top:12px"></div>
+          </div>
+        </div>
+
+      </div><!-- /rel-pane-monografia -->
     </div>
   </div>
 
@@ -24111,6 +24185,71 @@ body.presenting #presentingBadge { display: flex; }
       document.querySelectorAll('#tab-relatorios [id^="rel-pane-"]').forEach(p => p.style.display = 'none');
       const pane = document.getElementById('rel-pane-' + sub);
       if (pane) pane.style.display = '';
+    };
+
+    // ── Monografia de Marco Topográfico (PPP-IBGE → DOCX) ──
+    window._monoPdf = null; window._monoFotos = null; window._monoUltimoDocx = null;
+    window.monoPickPpp = async function () {
+      const p = await window.electronAPI.selectFolder();
+      if (!p) return;
+      window._monoPdf = p;
+      const el = document.getElementById('mono-pdf-path');
+      el.textContent = p.split(/[\\/]/).pop(); el.style.color = 'var(--text)';
+    };
+    window.monoPickFotos = async function () {
+      const p = await window.electronAPI.selectFolder();
+      if (!p) return;
+      window._monoFotos = p;
+      const el = document.getElementById('mono-fotos-path');
+      el.textContent = p.split(/[\\/]/).pop(); el.style.color = 'var(--text)';
+    };
+    window.monoGerar = async function () {
+      if (!window._monoPdf) { alert('Selecione a pasta do PPP primeiro.'); return; }
+      const btn = document.getElementById('mono-btn-gerar');
+      const status = document.getElementById('mono-status');
+      const log = document.getElementById('mono-log');
+      const result = document.getElementById('mono-result');
+      btn.disabled = true; btn.style.opacity = .6;
+      status.textContent = 'Gerando…'; status.style.color = 'var(--text3)';
+      log.style.display = 'block'; log.textContent = ''; result.style.display = 'none';
+      const unsub = window.electronAPI.monografia.onProgresso((msg) => {
+        log.textContent += msg + '\n'; log.scrollTop = log.scrollHeight;
+      });
+      try {
+        const res = await window.electronAPI.monografia.gerar({
+          pdfPath: window._monoPdf,
+          fotosPath: window._monoFotos || '',
+          marco: document.getElementById('mono-marco').value,
+          basemap: document.getElementById('mono-basemap').value,
+          responsavel: document.getElementById('mono-responsavel').value,
+          rev: document.getElementById('mono-rev').value,
+          contrato: document.getElementById('mono-contrato').value,
+          material: document.getElementById('mono-material').value,
+          equipamento: document.getElementById('mono-equipamento').value,
+        });
+        if (res && res.ok) {
+          status.textContent = '✓ Concluído'; status.style.color = '#16a34a';
+          window._monoUltimoDocx = res.caminhoDocx;
+          const nome = String(res.caminhoDocx).split(/[\\/]/).pop();
+          result.style.display = 'block';
+          result.innerHTML =
+            '<div style="display:flex;gap:10px;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">'
+            + '<span style="font-size:13px;color:var(--text)">📄 ' + window.esc(nome) + '</span>'
+            + '<button onclick="window.electronAPI.monografia.abrir(window._monoUltimoDocx)" style="margin-left:auto;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Abrir DOCX</button>'
+            + '</div>';
+          window.electronAPI.monografia.abrir(res.caminhoDocx);
+        } else {
+          status.textContent = '✕ Erro'; status.style.color = '#dc2626';
+          log.textContent += '\nERRO: ' + ((res && (res.erro || res.error)) || 'desconhecido') + '\n';
+          log.scrollTop = log.scrollHeight;
+        }
+      } catch (e) {
+        status.textContent = '✕ Erro'; status.style.color = '#dc2626';
+        log.textContent += '\nERRO: ' + e.message + '\n';
+      } finally {
+        btn.disabled = false; btn.style.opacity = 1;
+        try { unsub && unsub(); } catch {}
+      }
     };
 
     let _relTopoFiles = []; // [{ path, municipio, rows }]

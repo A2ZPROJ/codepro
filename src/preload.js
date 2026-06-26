@@ -142,6 +142,17 @@ window.electronAPI = {
     gerar:    (cfg)    => ipcRenderer.invoke('memorial:gerar', cfg),
     abrir:    (p)      => ipcRenderer.invoke('memorial:abrir', p),
   },
+  // Monografia de Marco Topográfico — gera o .docx a partir do PDF do PPP-IBGE
+  // (+ fotos opcionais), via pipeline Python (jarvis/gerar_monografia.py).
+  monografia: {
+    gerar:       (params) => ipcRenderer.invoke('monografia:gerar', params),
+    abrir:       (p)      => ipcRenderer.invoke('monografia:abrir', p),
+    onProgresso: (cb) => {
+      const handler = (_e, msg) => { try { cb(msg); } catch {} };
+      ipcRenderer.on('monografia:progresso', handler);
+      return () => ipcRenderer.off('monografia:progresso', handler);
+    },
+  },
   // Abas Excel → PDF — exporta cada aba de uma planilha como um PDF separado
   // (nome do PDF = nome da aba), via motor Python (Excel COM).
   abasPdf: {
