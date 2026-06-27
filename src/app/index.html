@@ -8596,12 +8596,25 @@ body.presenting #presentingBadge { display: flex; }
     /* Modo somente-leitura do cronograma embutido */
     #plCronoHost.crono-ro #cronoList{pointer-events:none}
     #plCronoHost.crono-ro .crono-edit-only{display:none!important}
+    /* Painel de gestão */
+    .pn-row{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+    .pn-name{display:flex;align-items:center;gap:6px;width:150px;font-size:12px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+    .pn-track{flex:1;height:14px;background:var(--surface2);border-radius:7px;overflow:hidden}
+    .pn-fill{height:100%;background:var(--accent);border-radius:7px;position:relative;min-width:2px}
+    .pn-late{position:absolute;right:0;top:0;height:100%;background:#dc2626}
+    .pn-num{width:130px;text-align:right;font-size:12px;color:var(--text2);font-weight:600;flex-shrink:0}
+    .pn-flux{display:flex;align-items:flex-end;gap:8px;height:130px}
+    .pn-fcol{flex:1;display:flex;flex-direction:column;align-items:center;height:100%}
+    .pn-fbars{flex:1;display:flex;align-items:flex-end;gap:3px;width:100%;justify-content:center}
+    .pn-fbar{width:14px;border-radius:3px 3px 0 0;min-height:2px}
+    .pn-flbl{font-size:10px;color:var(--text3);margin-top:5px}
   </style>
   <div class="tab-content" id="tab-planner">
     <div style="max-width:1320px;margin:0 auto;padding:28px 24px 60px">
       <!-- Sub-abas do Planner: Quadro (kanban) | Cronograma -->
       <div class="pl-subnav">
         <button id="plSubBtnQuadro" class="pl-subtab active" onclick="window.plannerSubTab('quadro')">Quadro</button>
+        <button id="plSubBtnPainel" class="pl-subtab" onclick="window.plannerSubTab('painel')">Painel</button>
         <button id="plSubBtnCrono" class="pl-subtab" onclick="window.plannerSubTab('cronograma')">Cronograma</button>
       </div>
 
@@ -8664,6 +8677,9 @@ body.presenting #presentingBadge { display: flex; }
         </div>
         <div id="plCronoHost"></div>
       </div>
+
+      <!-- ───── SUB-ABA: PAINEL (gestão à vista das demandas) ───── -->
+      <div id="plSubPainel" style="display:none"></div>
     </div>
   </div>
 
@@ -43062,6 +43078,7 @@ window.deleteFromBucket = async function(bucketName, path) {
     _plLoaded = true;
     window.plannerRender();
     window.plannerRenderDash?.();
+    if(document.getElementById('plSubPainel')?.style.display!=='none') window.plannerRenderPainel?.();
     if(!_plRtSub && sb().channel){
       _plRtSub = true;
       sb().channel('demandas-rt').on('postgres_changes',{event:'*',schema:'public',table:'demandas'},loadDemandas).subscribe();
@@ -43095,16 +43112,14 @@ window.deleteFromBucket = async function(bucketName, path) {
     if(!_plLoaded) loadDemandas(); else window.plannerRender();
   };
 
-  // ── Sub-abas do Planner: Quadro (kanban) | Cronograma ──
+  // ── Sub-abas do Planner: Quadro (kanban) | Painel (gestão) | Cronograma ──
   window.plannerSubTab = function(which){
-    const crono = which==='cronograma';
-    const q=document.getElementById('plSubQuadro'), c=document.getElementById('plSubCrono');
-    const bq=document.getElementById('plSubBtnQuadro'), bc=document.getElementById('plSubBtnCrono');
-    if(q) q.style.display = crono ? 'none' : '';
-    if(c) c.style.display = crono ? '' : 'none';
-    bq && bq.classList.toggle('active', !crono);
-    bc && bc.classList.toggle('active', crono);
-    if(crono) plannerLoadCrono();
+    const views = { quadro:'plSubQuadro', painel:'plSubPainel', cronograma:'plSubCrono' };
+    const btns  = { quadro:'plSubBtnQuadro', painel:'plSubBtnPainel', cronograma:'plSubBtnCrono' };
+    Object.entries(views).forEach(([k,id])=>{ const el=document.getElementById(id); if(el) el.style.display=(k===which)?'':'none'; });
+    Object.entries(btns).forEach(([k,id])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('active', k===which); });
+    if(which==='cronograma') plannerLoadCrono();
+    if(which==='painel') window.plannerRenderPainel();
   };
 
   // Realoca o conteúdo do antigo #tab-cronograma pra dentro do Planner (1x) e inicializa.
@@ -43137,6 +43152,82 @@ window.deleteFromBucket = async function(bucketName, path) {
     if(hint) hint.textContent = _plCronoMode==='view'
       ? 'Somente leitura'
       : 'Edição liberada — clique numa cidade para editar datas, empresa, status…';
+  };
+
+  // ── Painel de gestão à vista (calculado das demandas + datas) ──
+  window.plannerRenderPainel = function(){
+    const host=document.getElementById('plSubPainel'); if(!host) return;
+    const ds = window._demandas||[];
+    const isC = d=>d.status==='concluido';
+    const abertas = ds.filter(d=>!isC(d));
+    const concl   = ds.filter(isC);
+    const atras   = ds.filter(isAtrasada);
+    const venc    = ds.filter(isVencendo);
+    // No prazo: concluídas com previsão + fim real, fim real <= previsão
+    const base   = concl.filter(d=>d.data_entrega && d.data_fim_real);
+    const onTime = base.filter(d=> d.data_fim_real <= d.data_entrega).length;
+    const onPct  = base.length ? Math.round(onTime/base.length*100) : null;
+    // Lead time médio (início → fim real) em dias
+    const leads = concl.filter(d=>d.data_inicio && d.data_fim_real)
+      .map(d=> Math.round((new Date(d.data_fim_real+'T00:00:00') - new Date(d.data_inicio+'T00:00:00'))/86400000))
+      .filter(x=>x>=0);
+    const leadAvg = leads.length ? Math.round(leads.reduce((a,b)=>a+b,0)/leads.length) : null;
+
+    const kpi=(lbl,val,col)=>`<div class="kpi-card"><div class="kpi-content"><div class="kpi-label">${lbl}</div><div class="kpi-value"${col?` style="color:${col}"`:''}>${val}</div></div></div>`;
+    let h='<div class="kpi-grid" style="grid-template-columns:repeat(6,1fr)">'
+      + kpi('Abertas', abertas.length)
+      + kpi('Vencendo (7d)', venc.length, '#d97706')
+      + kpi('Atrasadas', atras.length, '#dc2626')
+      + kpi('Concluídas', concl.length, '#16a34a')
+      + kpi('No prazo', onPct==null?'—':onPct+'%', onPct==null?null:(onPct>=80?'#16a34a':onPct>=50?'#d97706':'#dc2626'))
+      + kpi('Lead time', leadAvg==null?'—':leadAvg+'d')
+      + '</div>';
+
+    // Carga por pessoa (demandas abertas atribuídas)
+    const carga=(window._responsaveis||[]).map(r=>{
+      const mine=abertas.filter(d=>respIdsOf(d).includes(r.id));
+      return {r, total:mine.length, late:mine.filter(isAtrasada).length};
+    }).filter(x=>x.total>0).sort((a,b)=>b.total-a.total);
+    const maxC=carga.reduce((m,x)=>Math.max(m,x.total),0)||1;
+    const cargaH = carga.length ? carga.map(x=>{
+      const w=Math.round(x.total/maxC*100);
+      const lateW=x.total?Math.round(x.late/x.total*100):0;
+      return `<div class="pn-row"><div class="pn-name" title="${esc(x.r.nome)}"><span class="pl-resp-av" style="background:${safeCor(x.r.empresa?.cor)};width:22px;height:22px">${esc(initials(x.r.nome))}</span>${esc(x.r.nome.split(' ')[0])}</div>`
+        +`<div class="pn-track"><div class="pn-fill" style="width:${w}%"><div class="pn-late" style="width:${lateW}%"></div></div></div>`
+        +`<div class="pn-num">${x.total}${x.late?` <span style="color:#dc2626">(${x.late} atras.)</span>`:''}</div></div>`;
+    }).join('') : '<div style="color:var(--text3);font-size:12px;padding:8px 0">Nenhuma demanda aberta atribuída.</div>';
+
+    // Fluxo — últimas 8 semanas (criadas vs concluídas)
+    const today=new Date(); today.setHours(0,0,0,0);
+    const W=8, weeks=[];
+    for(let i=W-1;i>=0;i--){ const end=new Date(today); end.setDate(end.getDate()-i*7); const start=new Date(end); start.setDate(start.getDate()-6); weeks.push({start,end,cri:0,con:0}); }
+    const inW=(dt,w)=> dt>=w.start && dt<=new Date(w.end.getTime()+86399999);
+    ds.forEach(d=>{
+      if(d.criado_em){ const t=new Date(d.criado_em); weeks.forEach(w=>{ if(inW(t,w)) w.cri++; }); }
+      if(d.concluido_em){ const t=new Date(d.concluido_em); weeks.forEach(w=>{ if(inW(t,w)) w.con++; }); }
+    });
+    const maxW=weeks.reduce((m,w)=>Math.max(m,w.cri,w.con),0)||1;
+    const fmtW=w=>w.end.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+    const fluxoH = `<div class="pn-flux">`+weeks.map(w=>
+        `<div class="pn-fcol" title="Semana até ${fmtW(w)} — criadas ${w.cri}, concluídas ${w.con}">`
+        +`<div class="pn-fbars"><div class="pn-fbar" style="height:${Math.round(w.cri/maxW*100)}%;background:var(--accent)"></div><div class="pn-fbar" style="height:${Math.round(w.con/maxW*100)}%;background:#16a34a"></div></div>`
+        +`<div class="pn-flbl">${fmtW(w)}</div></div>`).join('')+`</div>`
+      +`<div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--text3)"><span><span style="display:inline-block;width:9px;height:9px;background:var(--accent);border-radius:2px;vertical-align:middle"></span> Criadas</span><span><span style="display:inline-block;width:9px;height:9px;background:#16a34a;border-radius:2px;vertical-align:middle"></span> Concluídas</span></div>`;
+
+    // Por disciplina (tags)
+    const tagH = PL_TAGS.map(t=>{
+      const open=abertas.filter(d=>(d.tags||[]).includes(t.key)).length;
+      const done=concl.filter(d=>(d.tags||[]).includes(t.key)).length;
+      if(!open && !done) return '';
+      return `<div class="pn-row"><div class="pn-name" style="width:auto"><span class="pl-tag" style="background:${t.bg};color:${t.color}">${esc(t.key)}</span></div><div class="pn-num" style="flex:1;text-align:right;width:auto">${open} aberta(s) · ${done} concluída(s)</div></div>`;
+    }).filter(Boolean).join('') || '<div style="color:var(--text3);font-size:12px;padding:8px 0">Sem tags atribuídas.</div>';
+
+    const card=(title,inner)=>`<div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:18px 20px;margin-top:14px"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:14px">${title}</div>${inner}</div>`;
+
+    host.innerHTML = h
+      + card('Carga por pessoa (demandas abertas)', cargaH)
+      + card('Fluxo — últimas 8 semanas', fluxoH)
+      + card('Por disciplina', tagH);
   };
 
   // ── Render board ──
