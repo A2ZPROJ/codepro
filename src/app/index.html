@@ -7599,11 +7599,7 @@ body.presenting #presentingBadge { display: flex; }
           <span class="sb-label">Projetos</span>
         </button>
         <!-- 1b. Cronograma de Entregas (novo — cidades/distritos → documentos) -->
-        <button class="sb-item" data-tab="cronograma" data-label="Cronograma de Entregas" data-requires-online="1" onclick="switchTab('cronograma',this)">
-          <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
-          <span class="sb-label">Cronograma de Entregas</span>
-        </button>
-        <!-- 2b. Planner -->
+        <!-- 2b. Planner (o Cronograma agora vive como sub-aba DENTRO do Planner) -->
         <button class="sb-item" data-tab="planner" data-label="Planner" data-requires-online="1" onclick="switchTab('planner',this)">
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/><path d="M6 7h0M12 7h0M18 7h0"/></svg>
           <span class="sb-label">Planner</span>
@@ -8573,9 +8569,44 @@ body.presenting #presentingBadge { display: flex; }
     .pl-empty{font-size:11px;color:var(--text3);text-align:center;padding:14px 4px;font-style:italic}
     .pl-add{margin:0 10px 10px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:7px;padding:7px;font-family:inherit;font-size:12px;cursor:pointer;transition:.15s}
     .pl-add:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+    /* Planner — múltiplos responsáveis, tags e datas */
+    .plf-resp-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+    .plf-resp-row select{flex:1;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none;cursor:pointer}
+    .plf-resp-rm{background:transparent;border:1.5px solid var(--border2);color:var(--text3);border-radius:7px;width:34px;height:36px;font-size:18px;line-height:1;cursor:pointer;flex-shrink:0}
+    .plf-resp-rm:hover{border-color:#fecaca;color:#dc2626}
+    .plf-resp-add{background:transparent;border:1.5px dashed var(--border2);color:var(--accent);border-radius:7px;padding:5px 11px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer}
+    .plf-resp-add:hover{border-color:var(--accent);background:var(--accent-soft)}
+    .plf-dates{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    .plf-tagchip{font-size:11px;font-weight:600;padding:5px 11px;border-radius:14px;border:1.5px solid var(--border2);color:var(--text2);background:var(--surface);cursor:pointer;user-select:none;transition:.12s}
+    .plf-tagchip.on{color:#fff;border-color:transparent}
+    .pl-resp-stack{display:flex;align-items:center;margin-left:auto}
+    .pl-resp-stack .pl-resp-av{margin-left:-6px;border:2px solid var(--surface)}
+    .pl-resp-stack .pl-resp-av:first-child{margin-left:0}
+    .pl-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+    .pl-tag{font-size:9px;font-weight:700;padding:2px 7px;border-radius:6px;text-transform:uppercase;letter-spacing:.03em}
+    /* Sub-abas do Planner (Quadro | Cronograma) */
+    .pl-subnav{display:flex;gap:4px;border-bottom:1.5px solid var(--border);margin-bottom:18px}
+    .pl-subtab{background:transparent;border:none;border-bottom:2.5px solid transparent;color:var(--text3);font-family:inherit;font-size:14px;font-weight:600;padding:10px 16px;margin-bottom:-1.5px;cursor:pointer;transition:.15s}
+    .pl-subtab:hover{color:var(--text)}
+    .pl-subtab.active{color:var(--accent);border-bottom-color:var(--accent)}
+    .pl-crono-bar{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+    .pl-crono-btn{background:var(--surface);border:1.5px solid var(--border2);color:var(--text2);border-radius:8px;padding:8px 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
+    .pl-crono-btn:hover{border-color:var(--accent);color:var(--text)}
+    .pl-crono-btn.active{background:var(--accent);border-color:transparent;color:#fff}
+    /* Modo somente-leitura do cronograma embutido */
+    #plCronoHost.crono-ro #cronoList{pointer-events:none}
+    #plCronoHost.crono-ro .crono-edit-only{display:none!important}
   </style>
   <div class="tab-content" id="tab-planner">
     <div style="max-width:1320px;margin:0 auto;padding:28px 24px 60px">
+      <!-- Sub-abas do Planner: Quadro (kanban) | Cronograma -->
+      <div class="pl-subnav">
+        <button id="plSubBtnQuadro" class="pl-subtab active" onclick="window.plannerSubTab('quadro')">Quadro</button>
+        <button id="plSubBtnCrono" class="pl-subtab" onclick="window.plannerSubTab('cronograma')">Cronograma</button>
+      </div>
+
+      <!-- ───── SUB-ABA: QUADRO (kanban de demandas) ───── -->
+      <div id="plSubQuadro">
       <div class="page-hero">
         <div class="page-hero-content">
           <h1 class="page-title">Planner</h1>
@@ -8611,6 +8642,9 @@ body.presenting #presentingBadge { display: flex; }
         <select id="plFilterProj" onchange="window.plannerRender()" style="padding:7px 11px;font-family:inherit;font-size:12px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none;cursor:pointer">
           <option value="">Todos os projetos</option>
         </select>
+        <select id="plFilterTag" onchange="window.plannerRender()" style="padding:7px 11px;font-family:inherit;font-size:12px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none;cursor:pointer">
+          <option value="">Todas as tags</option>
+        </select>
         <span style="flex:1"></span>
         <button onclick="window.plannerOpenModal()" style="background:var(--accent);color:#fff;border:none;border-radius:7px;padding:9px 18px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px var(--accent-glow);display:flex;align-items:center;gap:6px">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -8619,6 +8653,17 @@ body.presenting #presentingBadge { display: flex; }
       </div>
 
       <div id="plBoard" class="pl-board"></div>
+      </div><!-- /plSubQuadro -->
+
+      <!-- ───── SUB-ABA: CRONOGRAMA (visualizar / editar) ───── -->
+      <div id="plSubCrono" style="display:none">
+        <div class="pl-crono-bar">
+          <button id="plCronoView" class="pl-crono-btn active" onclick="window.plannerCronoMode('view')">👁 Visualizar</button>
+          <button id="plCronoEdit" class="pl-crono-btn" onclick="window.plannerCronoMode('edit')">✏ Editar cronograma</button>
+          <span id="plCronoModeHint" style="font-size:12px;color:var(--text3);margin-left:6px"></span>
+        </div>
+        <div id="plCronoHost"></div>
+      </div>
     </div>
   </div>
 
@@ -8640,11 +8685,16 @@ body.presenting #presentingBadge { display: flex; }
           <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">Descrição</div>
           <textarea id="plfDescricao" rows="3" placeholder="Detalhes da demanda..." style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none;resize:vertical"></textarea>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div>
-            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">Responsável</div>
-            <select id="plfResp" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none;cursor:pointer"></select>
+        <!-- Responsáveis (múltiplos) -->
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px">Responsáveis</div>
+            <span style="flex:1"></span>
+            <button type="button" class="plf-resp-add" onclick="window.plannerAddRespRow()">+ Adicionar responsável</button>
           </div>
+          <div id="plfRespList"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div>
             <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">Projeto</div>
             <select id="plfProj" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none;cursor:pointer"></select>
@@ -8654,23 +8704,39 @@ body.presenting #presentingBadge { display: flex; }
             <select id="plfPrio" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none;cursor:pointer">
               <option value="baixa">Baixa</option>
               <option value="media" selected>Média</option>
-              <option value="alta">Alta</option>
-              <option value="urgente">Urgente</option>
+              <option value="alta">Fudeu</option>
+              <option value="urgente">Fudeu muito</option>
             </select>
+          </div>
+        </div>
+        <!-- Datas: início / previsão de fim / fim real -->
+        <div class="plf-dates">
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">Data de início</div>
+            <input id="plfInicio" type="date" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none"/>
           </div>
           <div>
-            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">Data de entrega</div>
+            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">Previsão de fim</div>
             <input id="plfData" type="date" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none"/>
           </div>
-          <div style="grid-column:1/-1">
-            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">Coluna</div>
-            <select id="plfStatus" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none;cursor:pointer">
-              <option value="a_fazer">A fazer</option>
-              <option value="fazendo">Em andamento</option>
-              <option value="revisao">Em revisão</option>
-              <option value="concluido">Concluído</option>
-            </select>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">Data real de fim</div>
+            <input id="plfFimReal" type="date" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none"/>
           </div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">Coluna</div>
+          <select id="plfStatus" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none;cursor:pointer">
+            <option value="a_fazer">A fazer</option>
+            <option value="fazendo">Em andamento</option>
+            <option value="revisao">Em revisão</option>
+            <option value="concluido">Concluído</option>
+          </select>
+        </div>
+        <!-- Tags -->
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">Tags</div>
+          <div id="plfTags" style="display:flex;flex-wrap:wrap;gap:6px"></div>
         </div>
       </div>
       <div id="plfAceiteBox" style="display:none;align-items:center;gap:8px;padding:10px 20px;border-top:1px solid var(--border);background:var(--surface2)"></div>
@@ -15929,9 +15995,9 @@ body.presenting #presentingBadge { display: flex; }
         const isDoc=(a.atividade==='PROJ_EXECUTIVO'||a.atividade==='EEE_LRE');
         h+='<tr style="border-bottom:1px solid var(--border)">'+
           '<td style="padding:9px 6px"><b style="color:var(--text)">'+esc(ATIVLBL[a.atividade]||a.atividade)+'</b>'+(a.parte?' <span style="color:var(--text3);font-size:11px">· '+esc(a.parte)+'</span>':'')+'<div style="color:var(--text3);font-size:11px">'+(a.ext_calc?(+a.ext_calc).toFixed(2)+' km'+(a.dias?' · '+Math.ceil(a.dias)+'d':''):'—')+'</div></td>'+
-          '<td>'+trackB+'</td>'+
+          '<td style="white-space:nowrap">'+trackB+' <select onchange="window.cronoSaveAtiv(\''+a.id+'\',\'track\',this.value)" title="Empresa responsável" style="'+di+'"><option value="2S"'+(a.track!=='E-AGUA'?' selected':'')+'>2S</option><option value="E-AGUA"'+(a.track==='E-AGUA'?' selected':'')+'>E-Água</option></select></td>'+
           '<td>'+qtyCell(a)+'</td>'+
-          '<td style="white-space:nowrap'+(late?';color:#dc2626;font-weight:600':';color:var(--text2)')+'">'+fmtD(a.previsao_inicio)+' → '+fmtD(a.previsao_fim)+(late?' ⚠':'')+'</td>'+
+          '<td style="white-space:nowrap"><input type="date" value="'+(a.previsao_inicio?String(a.previsao_inicio).slice(0,10):'')+'" title="Previsão de início" onchange="window.cronoSaveAtiv(\''+a.id+'\',\'previsao_inicio\',this.value)" style="'+di+(late?';border-color:#dc2626':'')+'"> → <input type="date" value="'+(a.previsao_fim?String(a.previsao_fim).slice(0,10):'')+'" title="Previsão de fim" onchange="window.cronoSaveAtiv(\''+a.id+'\',\'previsao_fim\',this.value)" style="'+di+(late?';border-color:#dc2626;font-weight:600':'')+'">'+(late?' <span style="color:#dc2626" title="Atrasada">⚠</span>':'')+'</td>'+
           '<td style="white-space:nowrap"><input type="date" value="'+(a.real_inicio?String(a.real_inicio).slice(0,10):'')+'" onchange="window.cronoSaveAtiv(\''+a.id+'\',\'real_inicio\',this.value)" style="'+di+'"> → <input type="date" value="'+(a.real_fim?String(a.real_fim).slice(0,10):'')+'" onchange="window.cronoSaveAtiv(\''+a.id+'\',\'real_fim\',this.value)" style="'+di+'"></td>'+
           '<td>'+(isDoc?respAvatars(a):'<span style="color:var(--text3)">—</span>')+'</td>'+
           '<td><select onchange="window.cronoSaveAtiv(\''+a.id+'\',\'status\',this.value)" style="'+di+';border-left:3px solid '+col+'">'+opt(a.status)+'</select></td>'+
@@ -16064,7 +16130,7 @@ body.presenting #presentingBadge { display: flex; }
       for(const w of wanted){
         const desc=w.roles.join(' / ');
         if(exById[w.id]){ await sb().from('demandas').update({titulo,descricao:desc,data_entrega:dataEntrega,projeto_id:ativ.projeto_id,atualizado_em:new Date().toISOString()}).eq('id',exById[w.id].id); }
-        else { const payload={ titulo,descricao:desc,responsavel_id:w.id,projeto_id:ativ.projeto_id,data_entrega:dataEntrega,prioridade:'media',status:'a_fazer',origem:'cronograma_ativ',origem_id:ativ.id,aceite_status:'pendente',criado_por:uname(),criado_por_id:uid() };
+        else { const payload={ titulo,descricao:desc,responsavel_id:w.id,responsavel_ids:[w.id],projeto_id:ativ.projeto_id,data_entrega:dataEntrega,prioridade:'media',status:'a_fazer',origem:'cronograma_ativ',origem_id:ativ.id,aceite_status:'pendente',criado_por:uname(),criado_por_id:uid() };
           if(window._tenantId)payload.tenant_id=window._tenantId; await sb().from('demandas').insert(payload); }
       }
       const wantedIds=new Set(wanted.map(w=>w.id));
@@ -42877,7 +42943,10 @@ window.deleteFromBucket = async function(bucketName, path) {
 <!-- ───────────────────────── PLANNER (demandas do escritório) ───────────────────────── -->
 <script>
 (function(){
-  const sb = window.sb;
+  // window.sb é criado no <script type="module"> (deferido), que roda DEPOIS deste
+  // <script> clássico. Por isso capturar o valor agora pegaria undefined — resolvemos
+  // o cliente sempre na hora da chamada via sb().
+  const sb = () => window.sb;
   const esc = window.esc || (s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
 
   const PL_COLS = [
@@ -42887,21 +42956,73 @@ window.deleteFromBucket = async function(bucketName, path) {
     {key:'concluido', label:'Concluído',     color:'#16a34a'},
   ];
   const PL_PRIO = {
-    baixa:   {label:'Baixa',   bg:'#f1f5f9', color:'#64748b'},
-    media:   {label:'Média',   bg:'#dbeafe', color:'#2563eb'},
-    alta:    {label:'Alta',    bg:'#fef3c7', color:'#d97706'},
-    urgente: {label:'Urgente', bg:'#fee2e2', color:'#dc2626'},
+    baixa:   {label:'Baixa',       bg:'#f1f5f9', color:'#64748b'},
+    media:   {label:'Média',       bg:'#dbeafe', color:'#2563eb'},
+    alta:    {label:'Fudeu',       bg:'#fef3c7', color:'#d97706'},
+    urgente: {label:'Fudeu muito', bg:'#fee2e2', color:'#dc2626'},
   };
+  const PL_TAGS = [
+    {key:'Anteprojeto',          color:'#7c3aed', bg:'#ede9fe'},
+    {key:'Modelagem Hidráulica', color:'#0891b2', bg:'#cffafe'},
+    {key:'Projeto Básico',       color:'#2563eb', bg:'#dbeafe'},
+    {key:'Projeto Executivo',    color:'#16a34a', bg:'#dcfce7'},
+    {key:'Topografia',           color:'#ca8a04', bg:'#fef9c3'},
+    {key:'Interferências',       color:'#dc2626', bg:'#fee2e2'},
+    {key:'Elevatória',           color:'#db2777', bg:'#fce7f3'},
+  ];
+  const PL_TAG_MAP = Object.fromEntries(PL_TAGS.map(t=>[t.key,t]));
 
   window._demandas = window._demandas || [];
   let _plDragId = null;
   let _plLoaded = false;
   let _plRtSub = false;
+  let _plCronoMoved = false;     // cronograma já foi realocado pra dentro do Planner?
+  let _plCronoMode = 'view';     // 'view' (somente leitura) | 'edit'
 
   function safeCor(c){ return (typeof c==='string' && /^(#[0-9a-fA-F]{3,8}|rgb)/.test(c)) ? c : '#2563eb'; }
   function initials(nome){ return String(nome||'?').trim().split(/\s+/).filter(w=>w.length).slice(0,2).map(w=>w[0]).join('').toUpperCase()||'?'; }
   function respById(id){ return (window._responsaveis||[]).find(r=>r.id===id); }
   function projById(id){ return (window._projects||[]).find(p=>p.id===id); }
+  // Lista de responsáveis de uma demanda (novo responsavel_ids[]; fallback p/ responsavel_id antigo)
+  function respIdsOf(d){
+    if(Array.isArray(d.responsavel_ids) && d.responsavel_ids.length) return d.responsavel_ids;
+    return d.responsavel_id ? [d.responsavel_id] : [];
+  }
+  function plRespOptionsHtml(sel){
+    return '<option value="">— Selecionar —</option>'+(window._responsaveis||[])
+      .map(r=>`<option value="${esc(r.id)}"${r.id===sel?' selected':''}>${esc(r.nome)}${r.cargo?' · '+esc(r.cargo):''}</option>`).join('');
+  }
+  window.plannerAddRespRow = function(sel){
+    const list=document.getElementById('plfRespList'); if(!list) return;
+    const row=document.createElement('div'); row.className='plf-resp-row';
+    row.innerHTML='<select class="plf-resp-sel">'+plRespOptionsHtml(typeof sel==='string'?sel:'')+'</select>'
+      +'<button type="button" class="plf-resp-rm" title="Remover" onclick="window.plannerRemoveRespRow(this)">&times;</button>';
+    list.appendChild(row);
+  };
+  window.plannerRemoveRespRow = function(btn){
+    const list=document.getElementById('plfRespList'); if(!list) return;
+    const row=btn.closest('.plf-resp-row'); if(row) row.remove();
+    if(!list.querySelector('.plf-resp-row')) window.plannerAddRespRow(); // mantém ao menos 1 linha
+  };
+  function plSelectedRespIds(){
+    return [...new Set(Array.from(document.querySelectorAll('#plfRespList .plf-resp-sel')).map(s=>s.value).filter(Boolean))];
+  }
+  function plRenderTagChips(selected){
+    const box=document.getElementById('plfTags'); if(!box) return;
+    const set=new Set(selected||[]);
+    box.innerHTML = PL_TAGS.map(t=>{
+      const on=set.has(t.key);
+      return `<span class="plf-tagchip${on?' on':''}" data-tag="${esc(t.key)}" onclick="window.plannerToggleTag(this)"${on?` style="background:${t.color}"`:''}>${esc(t.key)}</span>`;
+    }).join('');
+  }
+  window.plannerToggleTag = function(el){
+    const t=PL_TAG_MAP[el.dataset.tag];
+    const on=el.classList.toggle('on');
+    el.style.background = (on && t) ? t.color : '';
+  };
+  function plSelectedTags(){
+    return Array.from(document.querySelectorAll('#plfTags .plf-tagchip.on')).map(e=>e.dataset.tag);
+  }
 
   function dateTag(iso, status){
     if(!iso) return '';
@@ -42930,8 +43051,8 @@ window.deleteFromBucket = async function(bucketName, path) {
 
   // ── Carregamento ──
   async function loadDemandas(){
-    if(!sb) return;
-    const {data,error}=await sb.from('demandas')
+    if(!sb()) return;
+    const {data,error}=await sb().from('demandas')
       .select('*')
       .is('deleted_at',null)
       .order('ordem',{ascending:true})
@@ -42941,9 +43062,9 @@ window.deleteFromBucket = async function(bucketName, path) {
     _plLoaded = true;
     window.plannerRender();
     window.plannerRenderDash?.();
-    if(!_plRtSub && sb.channel){
+    if(!_plRtSub && sb().channel){
       _plRtSub = true;
-      sb.channel('demandas-rt').on('postgres_changes',{event:'*',schema:'public',table:'demandas'},loadDemandas).subscribe();
+      sb().channel('demandas-rt').on('postgres_changes',{event:'*',schema:'public',table:'demandas'},loadDemandas).subscribe();
     }
   }
   window.loadDemandas = loadDemandas;
@@ -42961,11 +43082,61 @@ window.deleteFromBucket = async function(bucketName, path) {
       fp.innerHTML='<option value="">Todos os projetos</option>'+(window._projects||[]).map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
       fp.value=cur;
     }
+    const ft=document.getElementById('plFilterTag');
+    if(ft){
+      const cur=ft.value;
+      ft.innerHTML='<option value="">Todas as tags</option>'+PL_TAGS.map(t=>`<option value="${esc(t.key)}">${esc(t.key)}</option>`).join('');
+      ft.value=cur;
+    }
   }
 
   window.plannerInit = function(){
     populateFilters();
     if(!_plLoaded) loadDemandas(); else window.plannerRender();
+  };
+
+  // ── Sub-abas do Planner: Quadro (kanban) | Cronograma ──
+  window.plannerSubTab = function(which){
+    const crono = which==='cronograma';
+    const q=document.getElementById('plSubQuadro'), c=document.getElementById('plSubCrono');
+    const bq=document.getElementById('plSubBtnQuadro'), bc=document.getElementById('plSubBtnCrono');
+    if(q) q.style.display = crono ? 'none' : '';
+    if(c) c.style.display = crono ? '' : 'none';
+    bq && bq.classList.toggle('active', !crono);
+    bc && bc.classList.toggle('active', crono);
+    if(crono) plannerLoadCrono();
+  };
+
+  // Realoca o conteúdo do antigo #tab-cronograma pra dentro do Planner (1x) e inicializa.
+  function plannerLoadCrono(){
+    const host=document.getElementById('plCronoHost');
+    const crono=document.getElementById('tab-cronograma');
+    if(host && crono && !_plCronoMoved){
+      const body=crono.querySelector('.app-body');
+      if(body){
+        host.appendChild(body);
+        // marca o botão de Parâmetros como "edição" (some no modo Visualizar)
+        const pbtn=host.querySelector('button[onclick*="cronoOpenParams"]');
+        if(pbtn) pbtn.classList.add('crono-edit-only');
+        _plCronoMoved=true;
+      }
+    }
+    try{ window.cronoInit?.(); }catch(e){ console.error('cronoInit:',e); }
+    window.plannerCronoMode(_plCronoMode);
+  }
+
+  // Alterna leitura / edição do cronograma embutido.
+  window.plannerCronoMode = function(mode){
+    _plCronoMode = (mode==='edit') ? 'edit' : 'view';
+    const host=document.getElementById('plCronoHost');
+    if(host) host.classList.toggle('crono-ro', _plCronoMode==='view');
+    const bv=document.getElementById('plCronoView'), be=document.getElementById('plCronoEdit');
+    bv && bv.classList.toggle('active', _plCronoMode==='view');
+    be && be.classList.toggle('active', _plCronoMode==='edit');
+    const hint=document.getElementById('plCronoModeHint');
+    if(hint) hint.textContent = _plCronoMode==='view'
+      ? 'Somente leitura'
+      : 'Edição liberada — clique numa cidade para editar datas, empresa, status…';
   };
 
   // ── Render board ──
@@ -42975,9 +43146,11 @@ window.deleteFromBucket = async function(bucketName, path) {
     populateFilters();
     const fResp=document.getElementById('plFilterResp')?.value||'';
     const fProj=document.getElementById('plFilterProj')?.value||'';
+    const fTag=document.getElementById('plFilterTag')?.value||'';
     let list=window._demandas||[];
-    if(fResp) list=list.filter(d=>d.responsavel_id===fResp);
+    if(fResp) list=list.filter(d=>respIdsOf(d).includes(fResp));
     if(fProj) list=list.filter(d=>d.projeto_id===fProj);
+    if(fTag) list=list.filter(d=>(d.tags||[]).includes(fTag));
 
     board.innerHTML = PL_COLS.map(col=>{
       const cards=list.filter(d=>(d.status||'a_fazer')===col.key);
@@ -43001,11 +43174,16 @@ window.deleteFromBucket = async function(bucketName, path) {
   function aceiteBadge(st){ const a=ACEITE_BADGE[st||'pendente']; if(!a)return ''; return `<span title="${esc(a.t)}" style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:${a.bg};color:${a.c}">${esc(a.t)}</span>`; }
   function cardHtml(d){
     const prio=PL_PRIO[d.prioridade]||PL_PRIO.media;
-    const r=respById(d.responsavel_id);
+    const resps=respIdsOf(d).map(respById).filter(Boolean);
+    const respHtml = resps.length ? `<span class="pl-resp-stack" title="${esc(resps.map(r=>r.nome).join(', '))}">`
+      + resps.slice(0,4).map(r=>`<span class="pl-resp-av" style="background:${safeCor(r.empresa?.cor)}">${esc(initials(r.nome))}</span>`).join('')
+      + (resps.length>4?`<span class="pl-resp-av" style="background:var(--text3)">+${resps.length-4}</span>`:'')
+      + `</span>` : '';
     const p=projById(d.projeto_id);
-    const respHtml = r ? `<span class="pl-resp" title="${esc(r.nome)}"><span class="pl-resp-av" style="background:${safeCor(r.empresa?.cor)}">${esc(initials(r.nome))}</span>${esc(r.nome.split(' ')[0])}</span>` : '';
     const projHtml = p ? `<span class="pl-proj-tag" title="${esc(p.name)}">${esc(p.name)}</span>` : '';
     const descHtml = d.descricao ? `<div class="pl-card-desc">${esc(d.descricao)}</div>` : '';
+    const tags=(d.tags||[]);
+    const tagsHtml = tags.length ? `<div class="pl-tags">`+tags.map(t=>{ const c=PL_TAG_MAP[t]; return `<span class="pl-tag" style="background:${c?c.bg:'var(--surface2)'};color:${c?c.color:'var(--text3)'}">${esc(t)}</span>`; }).join('')+`</div>` : '';
     const aceHtml = d.origem ? aceiteBadge(d.aceite_status) : '';
     const motivoHtml = (d.aceite_status==='rejeitado'&&d.aceite_motivo) ? `<div class="pl-card-desc" style="color:#b91c1c">Motivo: ${esc(d.aceite_motivo)}</div>` : '';
     return `<div class="pl-card" draggable="true" style="border-left-color:${prio.color}"
@@ -43015,6 +43193,7 @@ window.deleteFromBucket = async function(bucketName, path) {
         <span class="pl-prio" style="background:${prio.bg};color:${prio.color}">${esc(prio.label)}</span>
       </div>
       ${descHtml}
+      ${tagsHtml}
       ${motivoHtml}
       <div class="pl-card-meta">
         ${projHtml}
@@ -43038,18 +43217,19 @@ window.deleteFromBucket = async function(bucketName, path) {
     const d=(window._demandas||[]).find(x=>x.id===id);
     if(!d || d.status===colKey) return;
     const prev=d.status;
+    const prevFim=d.data_fim_real;
     d.status=colKey;
     d.concluido_em = colKey==='concluido' ? new Date().toISOString() : null;
+    const patch={status:colKey, concluido_em:d.concluido_em, atualizado_em:new Date().toISOString()};
+    if(colKey==='concluido' && !d.data_fim_real){ d.data_fim_real=new Date().toISOString().slice(0,10); patch.data_fim_real=d.data_fim_real; }
     window.plannerRender(); window.plannerRenderDash?.();
-    const {error}=await sb.from('demandas').update({status:colKey, concluido_em:d.concluido_em, atualizado_em:new Date().toISOString()}).eq('id',id);
-    if(error){ d.status=prev; window.plannerRender(); window.toastError?.('Erro ao mover: '+error.message); }
+    const {error}=await sb().from('demandas').update(patch).eq('id',id);
+    if(error){ d.status=prev; d.data_fim_real=prevFim; window.plannerRender(); window.toastError?.('Erro ao mover: '+error.message); }
     else { try{ window.audit?.log('demanda_move',{id,de:prev,para:colKey}); }catch{} }
   };
 
   // ── Modal ──
   function fillModalSelects(){
-    const sr=document.getElementById('plfResp');
-    if(sr) sr.innerHTML='<option value="">— Sem responsável —</option>'+(window._responsaveis||[]).map(r=>`<option value="${esc(r.id)}">${esc(r.nome)}${r.cargo?' · '+esc(r.cargo):''}</option>`).join('');
     const sp=document.getElementById('plfProj');
     if(sp) sp.innerHTML='<option value="">— Sem projeto —</option>'+(window._projects||[]).map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
   }
@@ -43060,11 +43240,21 @@ window.deleteFromBucket = async function(bucketName, path) {
     document.getElementById('plfId').value = d?.id || '';
     document.getElementById('plfTitulo').value = d?.titulo || '';
     document.getElementById('plfDescricao').value = d?.descricao || '';
-    document.getElementById('plfResp').value = d?.responsavel_id || '';
+    // Responsáveis (múltiplos): edição preenche os existentes; nova demanda começa com 2 campos
+    const respList=document.getElementById('plfRespList');
+    if(respList){
+      respList.innerHTML='';
+      const ids = d ? respIdsOf(d) : [];
+      if(ids.length){ ids.forEach(rid=>window.plannerAddRespRow(rid)); }
+      else { window.plannerAddRespRow(); window.plannerAddRespRow(); }
+    }
     document.getElementById('plfProj').value = d?.projeto_id || '';
     document.getElementById('plfPrio').value = d?.prioridade || 'media';
+    document.getElementById('plfInicio').value = d?.data_inicio || '';
     document.getElementById('plfData').value = d?.data_entrega || '';
+    document.getElementById('plfFimReal').value = d?.data_fim_real || '';
     document.getElementById('plfStatus').value = d?.status || colKey || 'a_fazer';
+    plRenderTagChips(d?.tags || []);
     document.getElementById('plModalTitle').textContent = d ? 'Editar demanda' : 'Nova demanda';
     document.getElementById('plfDelete').style.display = d ? '' : 'none';
     // Caixa de aceite (só pra demandas geradas do cronograma)
@@ -43090,46 +43280,67 @@ window.deleteFromBucket = async function(bucketName, path) {
   window.plannerCloseModal=()=>{ document.getElementById('plModal').style.display='none'; };
 
   window.plannerSave=async()=>{
+    const alertFn = window.nexusAlert || ((m)=>alert(m));
+    const errFn = window.toastError || window.nexusAlert || ((m)=>alert(m));
     const id=document.getElementById('plfId').value;
     const titulo=document.getElementById('plfTitulo').value.trim();
-    if(!titulo){ window.nexusAlert?.('Informe o título da demanda.'); return; }
+    if(!titulo){ alertFn('Informe o título da demanda.'); return; }
+    const respIds = plSelectedRespIds();
+    if(!respIds.length){ alertFn('Selecione pelo menos um responsável.'); return; }
     const status=document.getElementById('plfStatus').value;
+    const todayStr=new Date().toISOString().slice(0,10);
+    const fimRealInput=document.getElementById('plfFimReal').value||null;
     const payload={
       titulo,
       descricao:document.getElementById('plfDescricao').value.trim()||null,
-      responsavel_id:document.getElementById('plfResp').value||null,
+      responsavel_ids:respIds,
+      responsavel_id:respIds[0]||null, // compat com código/filtros antigos
       projeto_id:document.getElementById('plfProj').value||null,
       prioridade:document.getElementById('plfPrio').value,
+      data_inicio:document.getElementById('plfInicio').value||null,
       data_entrega:document.getElementById('plfData').value||null,
+      data_fim_real: fimRealInput || (status==='concluido' ? todayStr : null),
+      tags:plSelectedTags(),
       status,
       atualizado_em:new Date().toISOString(),
     };
-    const btn=document.getElementById('plfSave'); btn.disabled=true; btn.textContent='Salvando...';
-    let error;
-    if(id){
-      const cur=(window._demandas||[]).find(x=>x.id===id);
-      payload.concluido_em = status==='concluido' ? (cur?.concluido_em||new Date().toISOString()) : null;
-      ({error}=await sb.from('demandas').update(payload).eq('id',id));
-    }else{
-      payload.concluido_em = status==='concluido' ? new Date().toISOString() : null;
-      payload.criado_por = window._currentUserData?.nome || null;
-      payload.criado_por_id = window._currentUserData?.id || null;
-      if(window._tenantId) payload.tenant_id = window._tenantId;
-      ({error}=await sb.from('demandas').insert(payload));
+    const btn=document.getElementById('plfSave');
+    const reset=()=>{ if(btn){ btn.disabled=false; btn.textContent='Salvar'; } };
+    if(btn){ btn.disabled=true; btn.textContent='Salvando...'; }
+    try{
+      const op=(async()=>{
+        if(id){
+          const cur=(window._demandas||[]).find(x=>x.id===id);
+          payload.concluido_em = status==='concluido' ? (cur?.concluido_em||new Date().toISOString()) : null;
+          return await sb().from('demandas').update(payload).eq('id',id);
+        } else {
+          payload.concluido_em = status==='concluido' ? new Date().toISOString() : null;
+          payload.criado_por = window._currentUserData?.nome || null;
+          payload.criado_por_id = window._currentUserData?.id || null;
+          if(window._tenantId) payload.tenant_id = window._tenantId;
+          return await sb().from('demandas').insert(payload);
+        }
+      })();
+      const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Tempo esgotado ao salvar — verifique a conexão e se você está logado.')),15000));
+      const { error } = await Promise.race([op, timeout]);
+      if(error) throw error;
+      try{ window.audit?.log(id?'demanda_update':'demanda_create',{titulo}); }catch{}
+      window.plannerCloseModal();
+      await loadDemandas();
+      window.toastSuccess?.(id?'Demanda atualizada':'Demanda criada');
+    } catch(err){
+      console.error('plannerSave:', err);
+      errFn('Erro ao salvar: '+(err?.message||err));
+    } finally {
+      reset();
     }
-    btn.disabled=false; btn.textContent='Salvar';
-    if(error){ window.toastError?.('Erro: '+error.message); return; }
-    try{ window.audit?.log(id?'demanda_update':'demanda_create',{titulo}); }catch{}
-    window.plannerCloseModal();
-    await loadDemandas();
-    window.toastSuccess?.(id?'Demanda atualizada':'Demanda criada');
   };
 
   window.plannerDelete=async()=>{
     const id=document.getElementById('plfId').value;
     if(!id) return;
     if(!(await (window.nexusConfirm?.('Remover esta demanda?')??Promise.resolve(confirm('Remover esta demanda?'))))) return;
-    const {error}=await sb.from('demandas').update({deleted_at:new Date().toISOString()}).eq('id',id);
+    const {error}=await sb().from('demandas').update({deleted_at:new Date().toISOString()}).eq('id',id);
     if(error){ window.toastError?.('Erro: '+error.message); return; }
     try{ window.audit?.log('demanda_delete',{id}); }catch{}
     window.plannerCloseModal();
@@ -43139,7 +43350,7 @@ window.deleteFromBucket = async function(bucketName, path) {
   // ── Aceitar / Rejeitar demanda (gerada do cronograma) ──
   window.demandaAceitar=async(id)=>{
     const patch={ aceite_status:'aceito', aceite_motivo:null, aceite_em:new Date().toISOString(), aceite_por_id:window._currentUserData?.id||null, atualizado_em:new Date().toISOString() };
-    const {error}=await sb.from('demandas').update(patch).eq('id',id);
+    const {error}=await sb().from('demandas').update(patch).eq('id',id);
     if(error){ window.toastError?.('Erro: '+error.message); return; }
     try{ window.audit?.log('demanda_aceitar',{id}); }catch{}
     window.plannerCloseModal(); await loadDemandas(); window.toastSuccess?.('Demanda aceita ✓');
@@ -43149,7 +43360,7 @@ window.deleteFromBucket = async function(bucketName, path) {
     if(motivo==null) return;
     if(!String(motivo).trim()){ window.nexusAlert?.('A rejeição exige um motivo.'); return; }
     const patch={ aceite_status:'rejeitado', aceite_motivo:String(motivo).trim(), aceite_em:new Date().toISOString(), aceite_por_id:window._currentUserData?.id||null, atualizado_em:new Date().toISOString() };
-    const {error}=await sb.from('demandas').update(patch).eq('id',id);
+    const {error}=await sb().from('demandas').update(patch).eq('id',id);
     if(error){ window.toastError?.('Erro: '+error.message); return; }
     try{ window.audit?.log('demanda_rejeitar',{id,motivo}); }catch{}
     window.plannerCloseModal(); await loadDemandas(); window.toastSuccess?.('Demanda rejeitada');
