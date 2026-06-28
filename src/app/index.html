@@ -271,6 +271,17 @@
     window._isSuperAdmin = !!currentUser.is_super_admin;
     window._tenantId = currentUser.tenant_id || null;
     window._canCreate = ROLES[currentUser.role]?.canCreate ?? false;
+    // Persiste a "marca" do último acesso pro SPLASH da próxima abertura: se for da
+    // 2S Engenharia, o splash mostra a logo da 2S; senão A2Z. Na 1ª vez (antes de
+    // qualquer login) não tem como saber, então fica A2Z. Trocar pra um acesso
+    // não-2S volta pra A2Z. (require disponível — nodeIntegration ligado.)
+    try {
+      const _brand = /2s\s*engenharia/i.test(currentUser?.empresa || '') ? '2s' : 'a2z';
+      const _fs = require('fs'), _os = require('os'), _path = require('path');
+      const _dir = _path.join(_os.homedir(), 'AppData', 'Roaming', 'Nexus');
+      _fs.mkdirSync(_dir, { recursive: true });
+      _fs.writeFileSync(_path.join(_dir, 'brand-pref.json'), JSON.stringify({ brand: _brand, updated: new Date().toISOString() }));
+    } catch {}
 
     // Fase D: telemetria — init + login event + heartbeat de presence
     try {
@@ -32594,8 +32605,8 @@ window.loadUserThemePreferences = async function() {
     if (!sb) return;
     // Fase B-3: get_user_prefs com caller auth (self-fetch é sempre OK)
     const { data: prefs, error } = await sb.rpc('get_user_prefs', { p_id: u.id, p_caller_code: u.access_code });
-    if (error || !prefs) return;
-    const p = prefs;
+    if (error) return;
+    const p = prefs || {};
     if (p.theme_mode) {
       document.documentElement.setAttribute('data-theme', p.theme_mode);
       localStorage.setItem('codepro_theme', p.theme_mode);
@@ -32616,6 +32627,24 @@ window.loadUserThemePreferences = async function() {
       localStorage.setItem('codepro_density', p.theme_density);
       if (typeof updateDensityUI === 'function') updateDensityUI(p.theme_density);
     }
+    // 2S Engenharia: PADRÃO INICIAL = "Opção 1" (tema claro + vermelho 2S), só quando
+    // o usuário AINDA NÃO escolheu uma cor (p.theme_color vazio). Quem já personalizou
+    // mantém o seu; outras empresas continuam no padrão atual. O usuário 2S pode trocar
+    // (a troca é salva e passa a vencer este default).
+    try {
+      const emp = (window._currentUserData?.empresa || window._tenant?.nome || '');
+      const is2S = /2s\s*engenharia/i.test(emp);
+      if (is2S && !p.theme_color) {
+        document.documentElement.setAttribute('data-theme', 'light');
+        document.documentElement.setAttribute('data-theme-color', 'vermelho');
+        document.documentElement.setAttribute('data-theme-pattern', 'none');
+        localStorage.setItem('codepro_theme', 'light');
+        localStorage.setItem('codepro_theme_color', 'vermelho');
+        localStorage.setItem('codepro_theme_pattern', 'none');
+        updateThemeModeUI('light'); updateThemeColorUI('vermelho'); updateThemePatternUI('none');
+        if (window.saveUserThemePreferences) window.saveUserThemePreferences();
+      }
+    } catch {}
   } catch(e) { console.warn('loadUserThemePreferences', e); }
 };
 // Helper: renderiza ícones Lucide em runtime.
