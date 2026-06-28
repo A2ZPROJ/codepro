@@ -92,11 +92,27 @@ for (const file of targets) {
   if (!fs.existsSync(backup)) fs.writeFileSync(backup, original);
 
   try {
-    const result = JavaScriptObfuscator.obfuscate(original, OBF_OPTIONS).getObfuscatedCode();
+    // sourceMap separado: gera <file>.map ao lado do ofuscado pra o Sentry
+    // de-ofuscar os stacks (sem isso o stack vem como _0x1a2b...). Os .map
+    // são SUBIDOS pro Sentry no build (scripts/sentry-upload-sourcemaps.js) e
+    // NÃO vão pro instalador (electron-builder exclui **/*.map). Limpos pelo
+    // restore-source.js no fim.
+    const obf = JavaScriptObfuscator.obfuscate(original, {
+      ...OBF_OPTIONS,
+      sourceMap: true,
+      sourceMapMode: 'separate',
+      inputFileName: file,
+      sourceMapFileName: file + '.map',
+    });
+    const result = obf.getObfuscatedCode();
     fs.writeFileSync(srcPath, result);
+    try {
+      const map = obf.getSourceMap();
+      if (map) fs.writeFileSync(srcPath + '.map', map);
+    } catch {}
     const origKB = (Buffer.byteLength(original) / 1024).toFixed(1);
     const obfKB = (Buffer.byteLength(result) / 1024).toFixed(1);
-    console.log(`  ✓  ${file}  ${origKB}KB → ${obfKB}KB`);
+    console.log(`  ✓  ${file}  ${origKB}KB → ${obfKB}KB  (+map)`);
     done++;
   } catch (e) {
     console.error(`  ✗  ${file} — erro: ${e.message}`);

@@ -40,9 +40,9 @@ for (const f of files) {
   }
 }
 
-// Remove .jsc
+// Remove .jsc e .map (source maps da ofuscação — já subiram pro Sentry no build)
 for (const f of files) {
-  if (f.endsWith('.jsc')) {
+  if (f.endsWith('.jsc') || f.endsWith('.map')) {
     fs.unlinkSync(f);
     console.log('  🗑  ' + path.relative(SRC, f));
     cleaned++;

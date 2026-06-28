@@ -49,6 +49,10 @@ const PUBLIC_DEPS = [
   'Microsoft.Web.WebView2.WinForms.dll',
   'Microsoft.Web.WebView2.Wpf.dll',
   'runtimes/win-x64/native/WebView2Loader.dll',
+  // Monitoramento de erros do plugin (SentryMonitor.cs). DLL pública, sem
+  // segredo — vai em claro junto da DLL principal. Sem deps transitivas
+  // (System.Text.Json etc. são in-box no .NET 8/10).
+  'Sentry.dll',
 ];
 
 // Mesma constante usada em src/main.js no decrypt — NÃO ALTERAR
