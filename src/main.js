@@ -945,10 +945,12 @@ function initDashboardBackground() {
 // CIVIL 3D — extração da DLL embedded encriptada
 // ────────────────────────────────────────────────────────────────────
 //
-// A DLL do plugin Civil 3D fica criptografada em src/app/assets/civil3d.bin
-// (gerada por scripts/embed-civil3d.js). Quando o user com acesso clica
-// "Liberar Civil 3D" no Nexus, decryptamos pra %APPDATA%\Nexus\plugins\
-// e a DLL passa a poder ser carregada via NETLOAD.
+// As DLLs do plugin (uma por versão de CAD) ficam criptografadas em
+// src/app/assets/civil3d-2026.bin e civil3d-2027.bin (geradas por
+// scripts/embed-civil3d.js). O caminho normal é o BUNDLE, que instala as duas
+// e deixa o AutoCAD escolher (ver c3dInstallBundleSync). O "Liberar Civil 3D"
+// manual detecta a versão do CAD aberto e decrypta a DLL certa pra
+// %APPDATA%\Nexus\plugins\ pra carregar via NETLOAD sem reabrir o CAD.
 //
 // Quando o Nexus fecha, a DLL é apagada (lifecycle binding).
 // Sem Nexus aberto → DLL não existe no disco em formato utilizável.
@@ -957,13 +959,27 @@ const C3D_KEY_SEED = 'NexusCivil3D-A2Z-Embed-2026-v1-SecureKeyDerivation';
 const C3D_PLUGIN_DIR  = path.join(os.homedir(), 'AppData', 'Roaming', 'Nexus', 'plugins');
 const C3D_PLUGIN_PATH = path.join(C3D_PLUGIN_DIR, 'GerarProjetoMND.dll');
 
+// Versões de Civil 3D suportadas. Cada uma tem sua DLL própria, compilada pro
+// runtime daquela versão (2026 = .NET 8 / 2027 = .NET 10), embutida num blob
+// separado. No bundle, o AutoCAD escolhe a DLL certa SOZINHO via
+// RuntimeRequirements (SeriesMin/Max) no PackageContents.xml — o usuário não
+// precisa indicar nada. acadMajor = versão do acad.exe (25=2026, 26=2027),
+// usada pra detectar qual DLL liberar no NETLOAD manual.
+const C3D_TARGETS = [
+  { ver: '2026', blob: 'civil3d-2026.bin', seriesMin: 'R25.1', seriesMax: 'R25.1', acadMajor: 25 },
+  { ver: '2027', blob: 'civil3d-2027.bin', seriesMin: 'R26.0', seriesMax: 'R26.0', acadMajor: 26 },
+];
+
 // Bundle permanente — instalado em %APPDATA%\Autodesk\ApplicationPlugins\Nexus.bundle\
 // Civil 3D carrega automaticamente sem precisar do Nexus rodar.
 const C3D_BUNDLE_ROOT = path.join(os.homedir(), 'AppData', 'Roaming', 'Autodesk', 'ApplicationPlugins', 'Nexus.bundle');
-const C3D_BUNDLE_DLL_DIR = path.join(C3D_BUNDLE_ROOT, 'Contents', 'Civil3D', '2026');
-const C3D_BUNDLE_DLL = path.join(C3D_BUNDLE_DLL_DIR, 'GerarProjetoMND.dll');
+const C3D_BUNDLE_CONTENTS = path.join(C3D_BUNDLE_ROOT, 'Contents', 'Civil3D');
 const C3D_BUNDLE_XML = path.join(C3D_BUNDLE_ROOT, 'PackageContents.xml');
 const C3D_BUNDLE_VERSION_FILE = path.join(C3D_BUNDLE_ROOT, 'Version.txt');
+
+// Pasta da DLL no bundle pra uma versão (…\Contents\Civil3D\2026 ou \2027)
+function c3dBundleDllDir(ver) { return path.join(C3D_BUNDLE_CONTENTS, ver); }
+function c3dBundleDllPath(ver) { return path.join(c3dBundleDllDir(ver), 'GerarProjetoMND.dll'); }
 
 function c3dDeriveKey() {
   const crypto = require('crypto');
@@ -990,25 +1006,64 @@ function c3dDecryptBlob(blob) {
   return plain;
 }
 
-function c3dGetBlobPath() {
-  // No build (asar): o asset fica em <resources>/app.asar/src/app/assets/civil3d.bin
-  // No dev: D:\PROGRAMAÇÃO\NEXUS\src\app\assets\civil3d.bin
-  return path.join(__dirname, 'app', 'assets', 'civil3d.bin');
+function c3dGetBlobPath(blobName) {
+  // No build (asar): <resources>/app.asar/src/app/assets/<blob>
+  // No dev: <projeto>\src\app\assets\<blob>
+  return path.join(__dirname, 'app', 'assets', blobName);
+}
+
+function c3dGetDepsSrcDir(ver) {
+  return path.join(__dirname, 'app', 'assets', 'civil3d-deps', ver);
+}
+
+// Detecta a versão do AutoCAD/Civil 3D ABERTO via COM (acad.Version -> major).
+// Retorna { major, ver } (ex.: 25 -> '2026', 26 -> '2027') ou null se não houver
+// instância aberta. Usado só no NETLOAD manual — pra escolher a DLL certa.
+function c3dDetectRunningCad() {
+  try {
+    const { spawnSync } = require('child_process');
+    const ps = `
+      $ErrorActionPreference='Stop';
+      try {
+        $a=[Runtime.InteropServices.Marshal]::GetActiveObject('AutoCAD.Application');
+        Write-Output $a.Version;
+      } catch { Write-Output 'NONE'; }
+    `.trim();
+    const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps],
+      { windowsHide: true, timeout: 8000, encoding: 'utf8' });
+    const out = (r.stdout || '').trim();
+    if (!out || out === 'NONE') return null;
+    const major = parseInt(String(out).split('.')[0], 10);
+    if (!Number.isFinite(major)) return null;
+    const t = C3D_TARGETS.find(x => x.acadMajor === major);
+    return { major, ver: t ? t.ver : null };
+  } catch { return null; }
 }
 
 ipcMain.handle('civil3d:extract', async () => {
   try {
-    const blobPath = c3dGetBlobPath();
-    if (!fs.existsSync(blobPath)) {
-      return { ok: false, error: 'Blob da DLL não encontrado no bundle. Build incompleto?' };
+    // NETLOAD manual só faz sentido com o CAD aberto (não dá pra carregar numa
+    // instância fechada). Aproveitamos pra detectar a versão e liberar a DLL
+    // CERTA (2026 ou 2027). O caminho normal é o bundle, que auto-carrega as
+    // duas no startup — este botão é só pra "carregar agora sem reabrir o CAD".
+    const running = c3dDetectRunningCad();
+    if (!running) {
+      return { ok: false, error: 'Abra o Civil 3D antes de liberar o plugin manualmente. (Pelo bundle ele carrega sozinho ao abrir.)' };
     }
-    const blob = fs.readFileSync(blobPath);
-    const dll  = c3dDecryptBlob(blob);
+    if (!running.ver) {
+      return { ok: false, error: `Versão de Civil 3D não suportada (acad ${running.major}). Suportadas: 2026 e 2027.` };
+    }
+    const t = C3D_TARGETS.find(x => x.ver === running.ver);
+    const blobPath = c3dGetBlobPath(t.blob);
+    if (!fs.existsSync(blobPath)) {
+      return { ok: false, error: `Blob da DLL ${t.ver} não encontrado. Build incompleto?` };
+    }
+    const dll = c3dDecryptBlob(fs.readFileSync(blobPath));
 
     fs.mkdirSync(C3D_PLUGIN_DIR, { recursive: true });
     fs.writeFileSync(C3D_PLUGIN_PATH, dll);
 
-    return { ok: true, path: C3D_PLUGIN_PATH, size: dll.length };
+    return { ok: true, path: C3D_PLUGIN_PATH, size: dll.length, cadVersion: t.ver };
   } catch (e) {
     logUpdate('civil3d:extract error: ' + e.message);
     return { ok: false, error: e.message };
@@ -1088,11 +1143,9 @@ function c3dGetBundleInstalledVersion() {
   } catch { return null; }
 }
 
-const C3D_DEPS_SRC_DIR = path.join(__dirname, 'app', 'assets', 'civil3d-deps');
-
-function c3dCopyDepsSync(destDir) {
+function c3dCopyDepsSync(srcDir, destDir) {
   try {
-    if (!fs.existsSync(C3D_DEPS_SRC_DIR)) return;
+    if (!fs.existsSync(srcDir)) return;
     const walk = (src, dst) => {
       for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
         const s = path.join(src, entry.name);
@@ -1107,17 +1160,40 @@ function c3dCopyDepsSync(destDir) {
         }
       }
     };
-    walk(C3D_DEPS_SRC_DIR, destDir);
+    walk(srcDir, destDir);
   } catch (e) {
     logUpdate('civil3d:bundle deps copy error: ' + e.message);
   }
 }
 
+// Instalado = XML presente E pelo menos uma DLL de versão presente.
 function c3dBundleIsInstalled() {
-  return fs.existsSync(C3D_BUNDLE_DLL) && fs.existsSync(C3D_BUNDLE_XML);
+  if (!fs.existsSync(C3D_BUNDLE_XML)) return false;
+  return C3D_TARGETS.some(t => fs.existsSync(c3dBundleDllPath(t.ver)));
 }
 
-function c3dBuildPackageContents(version) {
+// Monta o PackageContents com um <Components> por versão instalada. O AutoCAD
+// usa o RuntimeRequirements (SeriesMin/Max) pra carregar só o bloco que casa
+// com a versão dele — 2026 carrega a net8, 2027 carrega a net10.
+function c3dBuildPackageContents(version, vers) {
+  const blocks = vers.map(ver => {
+    const t = C3D_TARGETS.find(x => x.ver === ver);
+    return `  <Components Description="Nexus Civil 3D ${ver}">
+    <RuntimeRequirements
+        OS="Win64"
+        Platform="Civil3D"
+        SeriesMin="${t.seriesMin}"
+        SeriesMax="${t.seriesMax}" />
+    <ComponentEntry
+        AppName="Nexus${ver}"
+        Version="${version}"
+        ModuleName="./Contents/Civil3D/${ver}/GerarProjetoMND.dll"
+        AppDescription="Nexus Civil 3D Plugin"
+        LoadOnAutoCADStartup="True"
+        PerDocument="True" />
+  </Components>`;
+  }).join('\n');
+
   return `<?xml version="1.0" encoding="utf-8"?>
 <ApplicationPackage SchemaVersion="1.0"
     ProductType="Application"
@@ -1126,69 +1202,70 @@ function c3dBuildPackageContents(version) {
     Description="Nexus Civil 3D Plugin — A2Z Projetos"
     Author="Lucas Nasser Santos Abdala">
   <CompanyDetails Name="A2Z Projetos" />
-  <Components Description="Nexus Civil 3D 2026">
-    <RuntimeRequirements
-        OS="Win64"
-        Platform="Civil3D"
-        SeriesMin="R25.1"
-        SeriesMax="R25.1" />
-    <ComponentEntry
-        AppName="Nexus"
-        Version="${version}"
-        ModuleName="./Contents/Civil3D/2026/GerarProjetoMND.dll"
-        AppDescription="Nexus Civil 3D Plugin"
-        LoadOnAutoCADStartup="True"
-        PerDocument="True" />
-  </Components>
+${blocks}
 </ApplicationPackage>
 `;
 }
 
-// Instala/atualiza o bundle. Idempotente — se já está instalado com a mesma
-// versão, não faz nada. Se Civil 3D estiver aberto, falha o write da DLL e
-// retorna { ok: false, restartCad: true }.
+// Instala/atualiza o bundle pras DUAS versões (2026 e 2027). Idempotente — se
+// já está instalado com a mesma versão e DLLs idênticas, não faz nada. Se o
+// Civil 3D daquela versão estiver aberto, o write da DLL dá EBUSY e a versão
+// fica pendente (retry no próximo start). Cada versão tem seu blob próprio.
 function c3dInstallBundleSync() {
   try {
-    const blobPath = c3dGetBlobPath();
-    if (!fs.existsSync(blobPath)) {
-      return { ok: false, error: 'Blob da DLL não encontrado.' };
-    }
-
-    const blob = fs.readFileSync(blobPath);
-    const dll  = c3dDecryptBlob(blob);
     const version = (require('../package.json').version || '0.0.0');
-
-    // Skip se já instalado com mesma versão E DLL idêntica
     const installedVersion = c3dGetBundleInstalledVersion();
-    if (installedVersion === version && fs.existsSync(C3D_BUNDLE_DLL)) {
+
+    // DLLs descriptografadas por versão disponível (blob existe nos assets).
+    const pending = [];
+    for (const t of C3D_TARGETS) {
+      const blobPath = c3dGetBlobPath(t.blob);
+      if (!fs.existsSync(blobPath)) continue;
+      pending.push({ t, dll: c3dDecryptBlob(fs.readFileSync(blobPath)) });
+    }
+    if (pending.length === 0) {
+      return { ok: false, error: 'Nenhum blob de DLL encontrado.' };
+    }
+
+    // Skip total: mesma versão E todas as DLLs disponíveis já idênticas no bundle.
+    if (installedVersion === version && fs.existsSync(C3D_BUNDLE_XML)) {
+      const allSame = pending.every(({ t, dll }) => {
+        try {
+          const cur = fs.readFileSync(c3dBundleDllPath(t.ver));
+          return cur.length === dll.length && cur.compare(dll) === 0;
+        } catch { return false; }
+      });
+      if (allSame) return { ok: true, alreadyInstalled: true, version };
+    }
+
+    const installedVers = [];
+    let busy = false;
+    for (const { t, dll } of pending) {
+      const dir = c3dBundleDllDir(t.ver);
+      fs.mkdirSync(dir, { recursive: true });
       try {
-        const existing = fs.readFileSync(C3D_BUNDLE_DLL);
-        if (existing.length === dll.length && existing.compare(dll) === 0) {
-          return { ok: true, alreadyInstalled: true, version };
-        }
-      } catch {}
-    }
-
-    fs.mkdirSync(C3D_BUNDLE_DLL_DIR, { recursive: true });
-
-    // Tenta escrever a DLL — se Civil 3D estiver aberto, vai dar EBUSY
-    try {
-      fs.writeFileSync(C3D_BUNDLE_DLL, dll);
-    } catch (e) {
-      if (e.code === 'EBUSY' || e.code === 'EPERM') {
-        return { ok: false, restartCad: true,
-          error: 'Civil 3D está aberto. Feche-o pra atualizar a DLL.' };
+        fs.writeFileSync(c3dBundleDllPath(t.ver), dll);
+      } catch (e) {
+        if (e.code === 'EBUSY' || e.code === 'EPERM') { busy = true; continue; }
+        throw e;
       }
-      throw e;
+      c3dCopyDepsSync(c3dGetDepsSrcDir(t.ver), dir);
+      installedVers.push(t.ver);
     }
 
-    fs.writeFileSync(C3D_BUNDLE_XML, c3dBuildPackageContents(version));
-    fs.writeFileSync(C3D_BUNDLE_VERSION_FILE, version + '\n');
+    if (installedVers.length === 0) {
+      // Todas as versões disponíveis estavam travadas (CAD aberto).
+      return { ok: false, restartCad: true,
+        error: 'Civil 3D está aberto. Feche-o pra atualizar a DLL.' };
+    }
 
-    c3dCopyDepsSync(C3D_BUNDLE_DLL_DIR);
+    fs.writeFileSync(C3D_BUNDLE_XML, c3dBuildPackageContents(version, installedVers));
+    // Só carimba a versão se TODAS as disponíveis entraram — senão deixa pendente
+    // pro próximo start reescrever as que faltaram.
+    if (!busy) fs.writeFileSync(C3D_BUNDLE_VERSION_FILE, version + '\n');
 
-    logUpdate(`civil3d:bundle: instalado v${version} em ${C3D_BUNDLE_ROOT}`);
-    return { ok: true, version, path: C3D_BUNDLE_ROOT };
+    logUpdate(`civil3d:bundle: instalado v${version} [${installedVers.join(',')}]${busy ? ' (parcial — CAD aberto)' : ''}`);
+    return { ok: true, version, path: C3D_BUNDLE_ROOT, versions: installedVers, restartCad: busy };
   } catch (e) {
     logUpdate('civil3d:bundle install error: ' + e.message);
     return { ok: false, error: e.message };
@@ -2035,6 +2112,14 @@ ipcMain.handle('abas-pdf:abrir', async (_e, p) => {
 // 3D aberto, etc) ficam no log e podem ser tentadas de novo via UI.
 function c3dAutoInstallBundleOnStartup() {
   try {
+    // SEMPRE garante o TrustedPaths ANTES de qualquer coisa — é o que evita o
+    // diálogo SECURELOAD ("Unsigned Executable") do AutoCAD travar o CAD na
+    // primeira carga. Roda sempre (idempotente), independente do install dar
+    // skip/erro, porque um profile de CAD novo pode ter surgido desde a última
+    // vez. O bundle fica em pasta gravável (%APPDATA%) → o AutoCAD não confia
+    // sozinho; só carrega sem prompt se o caminho estiver no TrustedPaths.
+    try { c3dEnsureTrustedPath(); } catch {}
+
     // Sempre chama c3dInstallBundleSync — ele compara byte-a-byte e faz skip se
     // a DLL no bundle já é idêntica. Comparar só pela versão deixa passar
     // updates onde a versão "bate" mas a DLL embedded mudou (ex: hot-fix).
@@ -2069,21 +2154,25 @@ app.on('browser-window-created', (_e, win) => {
   } catch {}
 });
 
-// Adiciona o path do bundle ao TRUSTEDPATHS do Civil 3D 2026 via registro,
-// pra DLL carregar sem o prompt SECURELOAD ("DLL não confiável, deseja carregar?").
-// O TRUSTEDPATHS fica em:
-//   HKCU\Software\Autodesk\AutoCAD\R25.1\<ProductKey>\Profiles\<Profile>\General
+// Adiciona o path do bundle ao TRUSTEDPATHS do Civil 3D (2026 E 2027) via
+// registro, pra DLL carregar sem o prompt SECURELOAD ("DLL não confiável...").
+// O TRUSTEDPATHS fica em (a chave de versão muda por release):
+//   HKCU\Software\Autodesk\AutoCAD\<R25.1|R26.0>\<ProductKey>\Profiles\<Profile>\General
 //   ValueName: TrustedPaths (REG_SZ, paths separados por ;)
+// Cada versão registra a SUA pasta no seu próprio ramo do registro.
 function c3dEnsureTrustedPath() {
-  try {
-    const { execSync } = require('child_process');
-    const trustedDir = C3D_BUNDLE_DLL_DIR;  // …\Nexus.bundle\Contents\Civil3D\2026
-    // PowerShell que percorre todos os profiles do Civil 3D 2026 e garante o path.
-    // Idempotente: se path já está presente, não duplica.
-    const ps = `
+  for (const t of C3D_TARGETS) {
+    const trustedDir = c3dBundleDllDir(t.ver);
+    if (!fs.existsSync(trustedDir)) continue;          // só registra versão instalada
+    const regVer = t.seriesMin;                        // 'R25.1' / 'R26.0' = chave do registro
+    try {
+      const { execSync } = require('child_process');
+      // PowerShell que percorre todos os profiles daquela versão e garante o path.
+      // Idempotente: se path já está presente, não duplica.
+      const ps = `
 $ErrorActionPreference = 'SilentlyContinue';
 $bundlePath = '${trustedDir.replace(/'/g, "''")}';
-$baseRegPath = 'HKCU:\\Software\\Autodesk\\AutoCAD\\R25.1';
+$baseRegPath = 'HKCU:\\Software\\Autodesk\\AutoCAD\\${regVer}';
 if (-not (Test-Path $baseRegPath)) { exit 0; }
 
 Get-ChildItem $baseRegPath -ErrorAction SilentlyContinue | ForEach-Object {
@@ -2109,14 +2198,15 @@ Get-ChildItem $baseRegPath -ErrorAction SilentlyContinue | ForEach-Object {
 exit 0;
 `.trim();
 
-    execSync(`powershell.exe -NoProfile -NonInteractive -Command "${ps.replace(/"/g, '\\"')}"`, {
-      windowsHide: true,
-      timeout: 8000,
-      stdio: 'ignore',
-    });
-    logUpdate(`civil3d:bundle: TrustedPaths atualizado pra incluir ${trustedDir}`);
-  } catch (e) {
-    logUpdate('civil3d:bundle: TrustedPaths falhou: ' + e.message);
+      execSync(`powershell.exe -NoProfile -NonInteractive -Command "${ps.replace(/"/g, '\\"')}"`, {
+        windowsHide: true,
+        timeout: 8000,
+        stdio: 'ignore',
+      });
+      logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}/${regVer}) inclui ${trustedDir}`);
+    } catch (e) {
+      logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}) falhou: ` + e.message);
+    }
   }
 }
 
