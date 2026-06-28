@@ -1,3 +1,8 @@
+// ── SENTRY (renderer) — inicia ANTES dos requires abaixo pra capturar erro de
+// carga. Herda DSN/release do processo main (init em main.js). No-op se o main
+// não estiver com Sentry configurado. ──
+try { require('@sentry/electron/renderer').init({}); } catch (e) { /* sem sentry = segue normal */ }
+
 const { ipcRenderer } = require('electron');
 const path = require('path');
 const fs = require('fs');

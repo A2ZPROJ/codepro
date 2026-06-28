@@ -6,6 +6,38 @@ const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const isDev = process.argv.includes('--dev');
 
+// ── SENTRY — monitoramento de erros em produção ──
+// Captura automaticamente crashes/exceções do processo MAIN de TODOS os
+// usuários e manda pro painel do Sentry (stack + versão + contexto). Agrupa
+// por release (nexus@X.Y.Z). O renderer é inicializado em preload.js.
+//
+// O DSN é a chave PÚBLICA do projeto Sentry (seguro embutir no build — só
+// permite ENVIAR evento, não ler). Defina de um destes jeitos:
+//   1) env var NEXUS_SENTRY_DSN
+//   2) constante SENTRY_DSN abaixo (cole o DSN entre as aspas)
+// Sem DSN válido = no-op total (não quebra nada).
+const SENTRY_DSN = process.env.NEXUS_SENTRY_DSN || 'https://bea96e28b18dc9957ebf23cb8b11b67a@o4511641173229568.ingest.us.sentry.io/4511641179717632';
+(function setupSentry() {
+  if (!/^https:\/\/[^@]+@[^/]+\/\d+/.test(SENTRY_DSN)) {
+    console.log('[main] Sentry desativado (sem DSN configurado)');
+    return;
+  }
+  try {
+    const Sentry = require('@sentry/electron/main');
+    const ver = (require('../package.json').version || '0.0.0');
+    Sentry.init({
+      dsn: SENTRY_DSN,
+      release: 'nexus@' + ver,
+      environment: isDev ? 'development' : 'production',
+      tracesSampleRate: 0,        // só erros (sem performance) — econômico no tier free
+      autoSessionTracking: true,  // contagem de sessões/usuários afetados
+    });
+    console.log('[main] Sentry ATIVO — release nexus@' + ver);
+  } catch (e) {
+    console.log('[main] Sentry falhou ao iniciar: ' + (e && e.message));
+  }
+})();
+
 // ── GOOGLE GEOLOCATION API KEY ──
 // Sem essa key, navigator.geolocation no Electron falha silenciosamente
 // (Chromium delegou pro Google location service que exige authentication).

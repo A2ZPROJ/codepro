@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "2.84.26",
+  "version": "2.84.27",
   "description": "Nexus â€” GestÃ£o Integrada A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
@@ -89,6 +89,7 @@
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.100",
+    "@sentry/electron": "^7.14.0",
     "@supabase/supabase-js": "^2.102.1",
     "adm-zip": "^0.5.17",
     "bytenode": "^1.5.7",
