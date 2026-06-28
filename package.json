@@ -9,8 +9,8 @@
     "embed-civil3d": "node scripts/embed-civil3d.js",
     "precompile": "node scripts/embed-civil3d.js && node scripts/compile-obfuscate.js && node scripts/obfuscate-html.js",
     "postrestore": "node scripts/restore-source.js",
-    "build": "npm run precompile && electron-builder --win && npm run postrestore",
-    "build:publish": "npm run precompile && electron-builder --win --publish always && node scripts/sentry-upload-sourcemaps.js && npm run postrestore && node scripts/commit-release.js",
+    "build": "node scripts/build.js",
+    "build:publish": "node scripts/build.js --publish",
     "postbuild:publish": "node scripts/nexus-office-push.js",
     "test": "vitest run"
   },

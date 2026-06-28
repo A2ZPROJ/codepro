@@ -77,6 +77,19 @@ console.log('║  JS Obfuscator — Nexus                ║');
 console.log('╚═══════════════════════════════════════╝');
 console.log('');
 
+// Guarda anti-perda-de-fonte: se já existe um .src, é backup VELHO de um build
+// que não terminou o restore. Continuar obfuscaria por cima e o restore depois
+// sobrescreveria edições novas com o backup velho. Aborta pra forçar estado limpo.
+const stale = targets
+  .map(f => path.join(SRC, f) + '.src')
+  .filter(p => fs.existsSync(p));
+if (stale.length) {
+  console.error('✗ Backups .src de um build anterior ainda existem em src/:');
+  for (const p of stale) console.error('    ' + path.basename(p));
+  console.error('  Rode `node scripts/restore-source.js` (e confira git status) antes de obfuscar de novo.');
+  process.exit(1);
+}
+
 let done = 0, skipped = 0;
 
 for (const file of targets) {

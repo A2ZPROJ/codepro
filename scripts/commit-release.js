@@ -35,6 +35,32 @@ if (!gitTry('rev-parse --is-inside-work-tree').ok) {
 
 console.log(`[commit-release] preparando commit da release ${tag}...`);
 
+// 0.5) GUARDA anti-perda-de-fonte: o restore PRECISA ter rodado antes daqui.
+// Se sobrou .src/.jsc/.map em src/, ou o src/main.js está ofuscado, ABORTA —
+// commitar agora gravaria fonte ofuscado/quebrado como se fosse o código.
+(function assertSourceRestored() {
+  const SRC = path.join(root, 'src');
+  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => {
+    const full = path.join(d, e.name);
+    return e.isDirectory() ? walk(full) : [full];
+  });
+  const temp = walk(SRC).filter(f => /\.(src|jsc|map)$/.test(f));
+  if (temp.length) {
+    console.error('[commit-release] ABORTADO: sobraram arquivos de build em src/ (restore não rodou):');
+    for (const f of temp) console.error('    ' + path.relative(root, f));
+    process.exit(1);
+  }
+  // sanity: o main.js não pode estar ofuscado (heurística: começa com token hex do obfuscator)
+  const mainJs = path.join(SRC, 'main.js');
+  if (fs.existsSync(mainJs)) {
+    const head = fs.readFileSync(mainJs, 'utf8').slice(0, 200);
+    if (/^\s*(?:const|var)\s+_0x[0-9a-f]{4,}/.test(head)) {
+      console.error('[commit-release] ABORTADO: src/main.js parece OFUSCADO — restore não restaurou o fonte. Não vou commitar.');
+      process.exit(1);
+    }
+  }
+})();
+
 // 1) stage tudo (o fonte já foi restaurado pelo postrestore)
 git('add -A');
 
