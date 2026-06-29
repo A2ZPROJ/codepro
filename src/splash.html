@@ -1080,7 +1080,8 @@ init();
       img.src=L2S; img.style.objectFit='contain';
       img.style.background='transparent'; img.style.padding='0'; img.style.borderRadius='0';
     });
-    document.querySelectorAll('.lv-by').forEach(function(e){e.style.display='none';});
+    // Oculta "by" e a tagline "Engenharia & Projetos" (só da A2Z) quando for 2S.
+    document.querySelectorAll('.lv-by,.brand-tag').forEach(function(e){e.style.display='none';});
     document.querySelectorAll('*').forEach(function(e){
       if(e.children.length===0 && e.textContent.trim()==='A2Z Projetos') e.style.display='none';
     });
