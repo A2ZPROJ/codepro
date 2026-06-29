@@ -12,6 +12,8 @@
     "build": "node scripts/build.js",
     "build:publish": "node scripts/build.js --publish",
     "postbuild:publish": "node scripts/nexus-office-push.js",
+    "atualizar": "node scripts/atualizar-nexus.js",
+    "publicar:testar": "node scripts/build.js --publish && node scripts/nexus-office-push.js && node scripts/atualizar-nexus.js",
     "test": "vitest run"
   },
   "build": {
