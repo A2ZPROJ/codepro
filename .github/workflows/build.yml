@@ -1,9 +1,11 @@
 name: Build and Release
 
+# Só execução MANUAL. O release oficial é publicado do notebook (ACER) via
+# `npm run build:publish`, que embute a DLL do Civil compilada localmente —
+# isso NÃO é reproduzível num runner limpo do GitHub. O gatilho automático em
+# tag `v*` falhava em todo release; por isso virou workflow_dispatch-only.
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build:
