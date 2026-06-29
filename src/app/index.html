@@ -6580,6 +6580,61 @@ body::after {
 }
 [data-theme-pattern="estrelas"][data-theme="dark"] body::after { opacity: .26; }
 
+/* -- Rede de saneamento (PV + tubulacao) -- */
+[data-theme-pattern="rede"] body::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><g fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round'><path d='M0 32 H64'/><path d='M32 0 V64'/><circle cx='32' cy='32' r='5'/><circle cx='0' cy='32' r='3'/><circle cx='64' cy='32' r='3'/><circle cx='32' cy='0' r='3'/><circle cx='32' cy='64' r='3'/></g></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><g fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round'><path d='M0 32 H64'/><path d='M32 0 V64'/><circle cx='32' cy='32' r='5'/><circle cx='0' cy='32' r='3'/><circle cx='64' cy='32' r='3'/><circle cx='32' cy='0' r='3'/><circle cx='32' cy='64' r='3'/></g></svg>");
+  -webkit-mask-size: 64px 64px; mask-size: 64px 64px;
+  opacity: 0.17;
+}
+[data-theme-pattern="rede"][data-theme="dark"] body::after { opacity: 0.26; }
+
+/* -- Gotas d agua -- */
+[data-theme-pattern="gotas"] body::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><g fill='black'><path d='M14 8 C20 16 20 22 14 25 C8 22 8 16 14 8 Z' opacity='.85'/><path d='M34 26 C39 33 39 38 34 41 C29 38 29 33 34 26 Z' opacity='.7'/></g></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><g fill='black'><path d='M14 8 C20 16 20 22 14 25 C8 22 8 16 14 8 Z' opacity='.85'/><path d='M34 26 C39 33 39 38 34 41 C29 38 29 33 34 26 Z' opacity='.7'/></g></svg>");
+  -webkit-mask-size: 48px 48px; mask-size: 48px 48px;
+  opacity: 0.16;
+}
+[data-theme-pattern="gotas"][data-theme="dark"] body::after { opacity: 0.24; }
+
+/* -- Tijolos / alvenaria (obra) -- */
+[data-theme-pattern="tijolos"] body::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='32' viewBox='0 0 48 32'><g fill='none' stroke='black' stroke-width='1'><line x1='0' y1='8' x2='48' y2='8'/><line x1='0' y1='24' x2='48' y2='24'/><line x1='16' y1='0' x2='16' y2='8'/><line x1='32' y1='0' x2='32' y2='8'/><line x1='8' y1='8' x2='8' y2='24'/><line x1='24' y1='8' x2='24' y2='24'/><line x1='40' y1='8' x2='40' y2='24'/><line x1='16' y1='24' x2='16' y2='32'/><line x1='32' y1='24' x2='32' y2='32'/></g></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='32' viewBox='0 0 48 32'><g fill='none' stroke='black' stroke-width='1'><line x1='0' y1='8' x2='48' y2='8'/><line x1='0' y1='24' x2='48' y2='24'/><line x1='16' y1='0' x2='16' y2='8'/><line x1='32' y1='0' x2='32' y2='8'/><line x1='8' y1='8' x2='8' y2='24'/><line x1='24' y1='8' x2='24' y2='24'/><line x1='40' y1='8' x2='40' y2='24'/><line x1='16' y1='24' x2='16' y2='32'/><line x1='32' y1='24' x2='32' y2='32'/></g></svg>");
+  -webkit-mask-size: 48px 32px; mask-size: 48px 32px;
+  opacity: 0.15;
+}
+[data-theme-pattern="tijolos"][data-theme="dark"] body::after { opacity: 0.22; }
+
+/* -- Planta baixa (arquitetura) -- */
+[data-theme-pattern="planta"] body::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'><g fill='none' stroke='black' stroke-width='1.3'><rect x='6' y='6' width='68' height='68'/><path d='M40 6 V40 M40 58 V74'/><path d='M40 40 A18 18 0 0 1 58 58'/><rect x='14' y='14' width='14' height='9'/></g></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'><g fill='none' stroke='black' stroke-width='1.3'><rect x='6' y='6' width='68' height='68'/><path d='M40 6 V40 M40 58 V74'/><path d='M40 40 A18 18 0 0 1 58 58'/><rect x='14' y='14' width='14' height='9'/></g></svg>");
+  -webkit-mask-size: 80px 80px; mask-size: 80px 80px;
+  opacity: 0.14;
+}
+[data-theme-pattern="planta"][data-theme="dark"] body::after { opacity: 0.22; }
+
+/* -- Trelica estrutural (obra) -- */
+[data-theme-pattern="trelica"] body::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='40' viewBox='0 0 60 40'><g fill='none' stroke='black' stroke-width='1.3' stroke-linejoin='round' stroke-linecap='round'><line x1='0' y1='6' x2='60' y2='6'/><line x1='0' y1='34' x2='60' y2='34'/><path d='M0 34 L15 6 L30 34 L45 6 L60 34'/><line x1='0' y1='6' x2='0' y2='34'/><line x1='30' y1='6' x2='30' y2='34'/><line x1='60' y1='6' x2='60' y2='34'/></g></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='40' viewBox='0 0 60 40'><g fill='none' stroke='black' stroke-width='1.3' stroke-linejoin='round' stroke-linecap='round'><line x1='0' y1='6' x2='60' y2='6'/><line x1='0' y1='34' x2='60' y2='34'/><path d='M0 34 L15 6 L30 34 L45 6 L60 34'/><line x1='0' y1='6' x2='0' y2='34'/><line x1='30' y1='6' x2='30' y2='34'/><line x1='60' y1='6' x2='60' y2='34'/></g></svg>");
+  -webkit-mask-size: 60px 40px; mask-size: 60px 40px;
+  opacity: 0.16;
+}
+[data-theme-pattern="trelica"][data-theme="dark"] body::after { opacity: 0.24; }
+
+/* -- Linhas de cota (projeto) -- */
+[data-theme-pattern="cotas"] body::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='40' viewBox='0 0 80 40'><g fill='none' stroke='black' stroke-width='1' stroke-linecap='round'><line x1='8' y1='20' x2='72' y2='20'/><line x1='8' y1='13' x2='8' y2='27'/><line x1='40' y1='13' x2='40' y2='27'/><line x1='72' y1='13' x2='72' y2='27'/><path d='M8 20 l6 -3 M8 20 l6 3 M72 20 l-6 -3 M72 20 l-6 3'/></g></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='40' viewBox='0 0 80 40'><g fill='none' stroke='black' stroke-width='1' stroke-linecap='round'><line x1='8' y1='20' x2='72' y2='20'/><line x1='8' y1='13' x2='8' y2='27'/><line x1='40' y1='13' x2='40' y2='27'/><line x1='72' y1='13' x2='72' y2='27'/><path d='M8 20 l6 -3 M8 20 l6 3 M72 20 l-6 -3 M72 20 l-6 3'/></g></svg>");
+  -webkit-mask-size: 80px 40px; mask-size: 80px 40px;
+  opacity: 0.16;
+}
+[data-theme-pattern="cotas"][data-theme="dark"] body::after { opacity: 0.24; }
+
+
 /* ═══════════════════════════════════════════════════════════════
    MODO APRESENTAÇÃO — esconde sidebar/topbar pra foco em conteúdo
    Atalho: Ctrl+Shift+P  |  Sai: Esc
@@ -6911,6 +6966,42 @@ body.presenting #presentingBadge { display: flex; }
   -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='28'><g fill='black'><polygon points='12,5 13,10 18,10 14,13 15,18 12,15 9,18 10,13 6,10 11,10'/><polygon points='34,14 35,18 39,18 36,20 37,24 34,22 31,24 32,20 29,18 33,18'/></g></svg>");
           mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='28'><g fill='black'><polygon points='12,5 13,10 18,10 14,13 15,18 12,15 9,18 10,13 6,10 11,10'/><polygon points='34,14 35,18 39,18 36,20 37,24 34,22 31,24 32,20 29,18 33,18'/></g></svg>");
   -webkit-mask-size: 48px 28px; mask-size: 48px 28px;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+}
+.pat-preview.pat-rede::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><g fill='none' stroke='black' stroke-width='1' stroke-linecap='round'><path d='M0 12 H24'/><path d='M12 0 V24'/><circle cx='12' cy='12' r='2.4'/></g></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><g fill='none' stroke='black' stroke-width='1' stroke-linecap='round'><path d='M0 12 H24'/><path d='M12 0 V24'/><circle cx='12' cy='12' r='2.4'/></g></svg>");
+  -webkit-mask-size: 24px 24px; mask-size: 24px 24px;
+}
+.pat-preview.pat-gotas::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><g fill='black'><path d='M8 4 C12 9 12 12 8 14 C4 12 4 9 8 4 Z'/><path d='M17 13 C20 17 20 20 17 21 C14 20 14 17 17 13 Z' opacity='.7'/></g></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><g fill='black'><path d='M8 4 C12 9 12 12 8 14 C4 12 4 9 8 4 Z'/><path d='M17 13 C20 17 20 20 17 21 C14 20 14 17 17 13 Z' opacity='.7'/></g></svg>");
+  -webkit-mask-size: 24px 24px; mask-size: 24px 24px;
+}
+.pat-preview.pat-tijolos::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='16'><g fill='none' stroke='black' stroke-width='.7'><line x1='0' y1='4' x2='24' y2='4'/><line x1='0' y1='12' x2='24' y2='12'/><line x1='8' y1='0' x2='8' y2='4'/><line x1='16' y1='0' x2='16' y2='4'/><line x1='4' y1='4' x2='4' y2='12'/><line x1='12' y1='4' x2='12' y2='12'/><line x1='20' y1='4' x2='20' y2='12'/><line x1='8' y1='12' x2='8' y2='16'/><line x1='16' y1='12' x2='16' y2='16'/></g></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='16'><g fill='none' stroke='black' stroke-width='.7'><line x1='0' y1='4' x2='24' y2='4'/><line x1='0' y1='12' x2='24' y2='12'/><line x1='8' y1='0' x2='8' y2='4'/><line x1='16' y1='0' x2='16' y2='4'/><line x1='4' y1='4' x2='4' y2='12'/><line x1='12' y1='4' x2='12' y2='12'/><line x1='20' y1='4' x2='20' y2='12'/><line x1='8' y1='12' x2='8' y2='16'/><line x1='16' y1='12' x2='16' y2='16'/></g></svg>");
+  -webkit-mask-size: 24px 16px; mask-size: 24px 16px;
+}
+.pat-preview.pat-planta::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='26'><g fill='none' stroke='black' stroke-width='.9'><rect x='3' y='3' width='34' height='20'/><path d='M20 3 V12 M20 19 V23'/><path d='M20 12 A7 7 0 0 1 27 19'/></g></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='26'><g fill='none' stroke='black' stroke-width='.9'><rect x='3' y='3' width='34' height='20'/><path d='M20 3 V12 M20 19 V23'/><path d='M20 12 A7 7 0 0 1 27 19'/></g></svg>");
+  -webkit-mask-size: 40px 26px; mask-size: 40px 26px;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+}
+.pat-preview.pat-trelica::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='26'><g fill='none' stroke='black' stroke-width='.9' stroke-linejoin='round'><line x1='2' y1='5' x2='38' y2='5'/><line x1='2' y1='21' x2='38' y2='21'/><path d='M2 21 L11 5 L20 21 L29 5 L38 21'/></g></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='26'><g fill='none' stroke='black' stroke-width='.9' stroke-linejoin='round'><line x1='2' y1='5' x2='38' y2='5'/><line x1='2' y1='21' x2='38' y2='21'/><path d='M2 21 L11 5 L20 21 L29 5 L38 21'/></g></svg>");
+  -webkit-mask-size: 40px 26px; mask-size: 40px 26px;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+}
+.pat-preview.pat-cotas::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='20'><g fill='none' stroke='black' stroke-width='.8' stroke-linecap='round'><line x1='5' y1='10' x2='39' y2='10'/><line x1='5' y1='5' x2='5' y2='15'/><line x1='39' y1='5' x2='39' y2='15'/><path d='M5 10 l4 -2 M5 10 l4 2 M39 10 l-4 -2 M39 10 l-4 2'/></g></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='20'><g fill='none' stroke='black' stroke-width='.8' stroke-linecap='round'><line x1='5' y1='10' x2='39' y2='10'/><line x1='5' y1='5' x2='5' y2='15'/><line x1='39' y1='5' x2='39' y2='15'/><path d='M5 10 l4 -2 M5 10 l4 2 M39 10 l-4 -2 M39 10 l-4 2'/></g></svg>");
+  -webkit-mask-size: 44px 20px; mask-size: 44px 20px;
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
   -webkit-mask-position: center; mask-position: center;
 }
@@ -7964,6 +8055,12 @@ body.presenting #presentingBadge { display: flex; }
                 <button data-pattern="diagonais"  class="theme-pattern" onclick="setThemePattern('diagonais')"  data-tooltip="Diagonais"><span class="pat-preview pat-diagonais"></span><span class="pat-label">Diag.</span></button>
                 <button data-pattern="ondas"      class="theme-pattern" onclick="setThemePattern('ondas')"      data-tooltip="Ondas"><span class="pat-preview pat-ondas"></span><span class="pat-label">Ondas</span></button>
                 <button data-pattern="estrelas"   class="theme-pattern" onclick="setThemePattern('estrelas')"   data-tooltip="Estrelas"><span class="pat-preview pat-estrelas"></span><span class="pat-label">Estrelas</span></button>
+                <button data-pattern="rede" class="theme-pattern" onclick="setThemePattern('rede')" data-tooltip="Rede de saneamento (PV + tubulacao)"><span class="pat-preview pat-rede"></span><span class="pat-label">Rede</span></button>
+                <button data-pattern="gotas" class="theme-pattern" onclick="setThemePattern('gotas')" data-tooltip="Gotas d agua"><span class="pat-preview pat-gotas"></span><span class="pat-label">Agua</span></button>
+                <button data-pattern="tijolos" class="theme-pattern" onclick="setThemePattern('tijolos')" data-tooltip="Tijolos / alvenaria (obra)"><span class="pat-preview pat-tijolos"></span><span class="pat-label">Tijolos</span></button>
+                <button data-pattern="planta" class="theme-pattern" onclick="setThemePattern('planta')" data-tooltip="Planta baixa (arquitetura)"><span class="pat-preview pat-planta"></span><span class="pat-label">Planta</span></button>
+                <button data-pattern="trelica" class="theme-pattern" onclick="setThemePattern('trelica')" data-tooltip="Trelica estrutural (obra)"><span class="pat-preview pat-trelica"></span><span class="pat-label">Trelica</span></button>
+                <button data-pattern="cotas" class="theme-pattern" onclick="setThemePattern('cotas')" data-tooltip="Linhas de cota (projeto)"><span class="pat-preview pat-cotas"></span><span class="pat-label">Cotas</span></button>
               </div>
               <div class="theme-menu-divider"></div>
               <button class="theme-menu-item" onclick="toggleTheme()">
@@ -32544,7 +32641,7 @@ const THEME_COLOR_NAMES = {
   esmeralda:'Esmeralda', petroleo:'Petróleo', bordo:'Bordô', carvao:'Carvão',
   platina:'Platina', safira:'Safira',
 };
-const THEME_PATTERNS = ['none','dots','grade','topografia','hexagonos','linhas','circulos','triangulos','diagonais','ondas','estrelas'];
+const THEME_PATTERNS = ['none','dots','grade','topografia','hexagonos','linhas','circulos','triangulos','diagonais','ondas','estrelas','rede','gotas','tijolos','planta','trelica','cotas'];
 
 function initTheme(){
   const savedMode    = localStorage.getItem('codepro_theme') || 'light';
