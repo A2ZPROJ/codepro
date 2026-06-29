@@ -6,7 +6,7 @@
 //
 // Tolerâncias canônicas (alinhadas com o padrão do Excel/relatório):
 //   CT_TOL = 0.05 m
-//   CF_TOL = 0.05 m
+//   CF_TOL = 0.01 m (1 cm — alinhado com oseDeepCheck; cota de fundo é exata)
 //   H_TOL  = 0.05 m
 //   L_TOL  = 0.01 m (1 cm — tolerância na segunda casa decimal)
 //   I_TOL  = 0.005 (m/m)
@@ -25,7 +25,7 @@
 
 const TOL = {
   CT: 0.05,
-  CF: 0.05,
+  CF: 0.01,
   H:  0.05,
   L:  0.01,
   I:  0.005,
