@@ -329,6 +329,11 @@ def extrair_ose(xlsx_path):
     ose_meta = []
     tq_list = []
     deg_list = []
+    # VCA pela regra do projeto: extensao (comprimento da aba OSE) cujo MAIOR
+    # prof do trecho > 3,00 m. Calculado DIRETO das abas OSE-NNN (independe do
+    # RESUMO), portanto cobre TODAS as bacias mescladas.
+    ext_vca_sheets = 0.0
+    ext_total_sheets = 0.0
     ose_sheets = [s for s in wb.sheetnames if s.startswith("OSE-")]
     for sn in ose_sheets:
         s = wb[sn]
@@ -358,6 +363,7 @@ def extrair_ose(xlsx_path):
 
         # geometria (sequencia de PVs/TLs a partir da linha 11)
         seq = []
+        sheet_max_prof = 0.0
         for rr in range(11, s.max_row + 1):
             nome = s.cell(rr, 1).value
             x = s.cell(rr, 2).value
@@ -371,6 +377,8 @@ def extrair_ose(xlsx_path):
                 continue
             z = s.cell(rr, 4).value
             prof = s.cell(rr, 19).value
+            if isinstance(prof, (int, float)) and prof > sheet_max_prof:
+                sheet_max_prof = prof
             tipo = ("PV" if nome.startswith("PV") else
                     ("TL" if nome.startswith("TL") else
                      ("PIT" if nome.startswith("PIT") else "OUT")))
@@ -378,6 +386,11 @@ def extrair_ose(xlsx_path):
                 points[nome] = dict(name=nome, x=x, y=y, z=z, prof=prof, tipo=tipo, ose=sn)
             if not seq or seq[-1]["name"] != nome:
                 seq.append(dict(name=nome, x=x, y=y))
+        # acumula VCA (prof > 3 m) pela extensao da propria aba
+        if isinstance(comp, (int, float)):
+            ext_total_sheets += comp
+            if sheet_max_prof > 3.00:
+                ext_vca_sheets += comp
         if len(seq) >= 2:
             trechos.append(dict(ose=sn, dn=str(dn_b9).strip() if dn_b9 else None,
                                 comprimento=comp,
@@ -431,8 +444,64 @@ def extrair_ose(xlsx_path):
         points=points, trechos=trechos, ose_meta=ose_meta,
         tq_list=tq_list, deg_list=deg_list,
         faixas=faixas, ext_mnd=ext_mnd, ext_vca=ext_vca, n_ose_vca=n_ose_vca,
+        ext_vca_sheets=round(ext_vca_sheets, 2),
+        ext_total_sheets=round(ext_total_sheets, 2),
         ext_by_dn=dict(ext_by_dn),
         arquivo_fonte=os.path.basename(xlsx_path))
+
+
+def extrair_ose_multi(xlsx_paths):
+    """Extrai e MESCLA varias planilhas de OSE num unico bloco cru, no mesmo
+    formato de extrair_ose(). Concatena listas, soma contadores/quantitativos e
+    deduplica PVs/TLs por nome (mantem o 1o). Aceita um caminho str ou lista."""
+    if isinstance(xlsx_paths, str):
+        xlsx_paths = [xlsx_paths]
+    parts = [extrair_ose(p) for p in xlsx_paths]
+    if len(parts) == 1:
+        return parts[0]
+
+    merged = dict(
+        ose_list=[], total_row=None, detalhamento=[],
+        DN_set=Counter(), method_set=Counter(), pav_set=Counter(),
+        points={}, trechos=[], ose_meta=[], tq_list=[], deg_list=[],
+        faixas={"ate_1_25": 0, "1_25_a_2_00": 0, "2_00_a_3_00": 0,
+                "3_00_a_4_00": 0, "acima_4_00": 0},
+        ext_mnd=0.0, ext_vca=0.0, n_ose_vca=0, ext_by_dn=defaultdict(float),
+        ext_vca_sheets=0.0, ext_total_sheets=0.0,
+        arquivo_fonte=" + ".join(os.path.basename(p) for p in xlsx_paths))
+
+    tr_sum = {"ext": 0, "pv": 0, "tl": 0, "pit": 0}
+    tem_total = False
+    for O in parts:
+        merged["ose_list"].extend(O["ose_list"])
+        merged["detalhamento"].extend(O["detalhamento"])
+        merged["trechos"].extend(O["trechos"])
+        merged["ose_meta"].extend(O["ose_meta"])
+        merged["tq_list"].extend(O["tq_list"])
+        merged["deg_list"].extend(O["deg_list"])
+        merged["DN_set"].update(O["DN_set"])
+        merged["method_set"].update(O["method_set"])
+        merged["pav_set"].update(O["pav_set"])
+        for nome, p in O["points"].items():
+            merged["points"].setdefault(nome, p)
+        for k in merged["faixas"]:
+            merged["faixas"][k] += O["faixas"].get(k, 0)
+        merged["ext_mnd"] += O["ext_mnd"]
+        merged["ext_vca"] += O["ext_vca"]
+        merged["n_ose_vca"] += O["n_ose_vca"]
+        merged["ext_vca_sheets"] += O.get("ext_vca_sheets", 0.0)
+        merged["ext_total_sheets"] += O.get("ext_total_sheets", 0.0)
+        for dn, v in O["ext_by_dn"].items():
+            merged["ext_by_dn"][dn] += v
+        if O.get("total_row"):
+            tem_total = True
+            for k in tr_sum:
+                v = O["total_row"].get(k)
+                if isinstance(v, (int, float)):
+                    tr_sum[k] += v
+    merged["ext_by_dn"] = dict(merged["ext_by_dn"])
+    merged["total_row"] = tr_sum if tem_total else None
+    return merged
 
 
 # ============================================================================
@@ -506,11 +575,20 @@ def extrair_soleiras(soleiras_path, rede_segs, pv_xy, tmp_root, serve_buf=90.0):
 #  3) Topografia (TXT GNSS) -> contagem, cotas, bbox, precisoes
 # ============================================================================
 def extrair_topografia(txt_dir, txt_glob="*.txt"):
-    """Le os TXT GNSS. Colunas (0-idx): 0 PONTO,1 DESC,2 N(Y),3 E(X),4 Z,
-    5 PDOP,6 HDOP,7 VDOP,8 HRMS,9 VRMS,14 status(Fixo/Autonomo).
-    Aplica filtro de outliers (raio 5000 m do centroide + |z-med|<=4*std)."""
+    """Le os TXT GNSS. Colunas fixas: 0 PONTO,1 DESC,2 N(Y),3 E(X),4 Z.
+    Os campos GNSS aceitam DOIS formatos:
+      (a) CHAVE:VALOR a partir da col 5 (ex.: HRMS:0.005,...,PDOP:1.085,STATUS:FIXED)
+      (b) posicional legado (5 PDOP,6 HDOP,7 VDOP,8 HRMS,9 VRMS,14 status).
+    Busca RECURSIVA (varre subpastas). Filtro de outliers (raio 5000 m do
+    centroide + |z-med|<=4*std)."""
     import numpy as np
-    files = sorted(glob.glob(os.path.join(txt_dir, txt_glob)))
+    # busca recursiva: pega TXT na pasta e em todas as subpastas
+    files = []
+    for root, _dirs, fnames in os.walk(txt_dir):
+        for fn in fnames:
+            if fn.lower().endswith(".txt"):
+                files.append(os.path.join(root, fn))
+    files = sorted(files)
     rows = []
     per_file = []
     for fp in files:
@@ -526,18 +604,34 @@ def extrair_topografia(txt_dir, txt_glob="*.txt"):
                 except Exception:
                     continue
                 rec = dict(x=x, y=y, z=z, file=os.path.basename(fp))
-                # campos GNSS (defensivo)
+
+                # CHAVE:VALOR (formato CHC/LandStar atual)
+                kv = {}
+                for tok in p[5:]:
+                    if ":" in tok:
+                        k, v = tok.split(":", 1)
+                        kv[k.strip().upper()] = v.strip()
+
                 def fcol(i):
                     try:
                         return float(p[i])
                     except Exception:
                         return None
-                rec["pdop"] = fcol(5)
-                rec["hdop"] = fcol(6)
-                rec["vdop"] = fcol(7)
-                rec["hrms"] = fcol(8)
-                rec["vrms"] = fcol(9)
-                rec["status"] = p[14].strip() if len(p) > 14 else ""
+
+                def fkv(key, posidx):
+                    if key in kv:
+                        try:
+                            return float(kv[key])
+                        except Exception:
+                            return None
+                    return fcol(posidx)  # fallback posicional legado
+
+                rec["pdop"] = fkv("PDOP", 5)
+                rec["hdop"] = fkv("HDOP", 6)
+                rec["vdop"] = fkv("VDOP", 7)
+                rec["hrms"] = fkv("HRMS", 8)
+                rec["vrms"] = fkv("VRMS", 9)
+                rec["status"] = kv.get("STATUS") or (p[14].strip() if len(p) > 14 else "")
                 rows.append(rec)
                 nf += 1
                 zf.append(z)
@@ -766,6 +860,117 @@ def _copiar_interferencias(geo_dir, interf_paths):
 
 
 # ============================================================================
+#  5) Modelo hidraulico SewerGEMS (.sqlite/.stsw) -> parametros de projeto
+# ============================================================================
+def extrair_modelo_sqlite(db_path, scenario_id=None):
+    """Le a rede do modelo SewerGEMS (banco SQLite, schema Bentley/Haestad) SEM
+    OpenFlows/licenca. Unidades internas em PES (x0,3048 -> m). Resolve a
+    alternativa do cenario ativo (raiz por padrao). Retorna um dict com os
+    parametros de projeto (Manning/material/Dmin/recobrimento/declividade min)
+    + extensao e contagens, ou None se nao conseguir ler. NUNCA levanta excecao
+    (a geracao do memorial continua com [A PREENCHER] em caso de falha)."""
+    import sqlite3
+    FT = 0.3048
+    try:
+        con = sqlite3.connect(db_path)
+        con.text_factory = lambda b: b.decode("utf-8", "replace")
+        cur = con.cursor()
+
+        def _has(t):
+            return bool(cur.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (t,)).fetchone())
+
+        def _cols(t):
+            return [c[1] for c in cur.execute('PRAGMA table_info("%s")' % t)]
+
+        if scenario_id:
+            scen = scenario_id
+        else:
+            row = cur.execute("SELECT ScenarioID FROM HMIScenario WHERE IsDeleted=0 "
+                              "AND ParentID IS NULL ORDER BY ScenarioID LIMIT 1").fetchone()
+            scen = row[0] if row else None
+        active_alts = set(r[0] for r in cur.execute(
+            "SELECT AlternativeID FROM HMIScenarioAlternative WHERE ScenarioID=?", (scen,)))
+
+        def load(table, fields, key="DomainElementID"):
+            out = {}
+            if not _has(table):
+                return out
+            c = _cols(table)
+            sel = [f for f in fields if f in c]
+            if key not in c or not sel:
+                return out
+            has_alt = "AlternativeID" in c
+            q = 'SELECT %s,%s%s FROM "%s"' % (
+                key, ",".join(sel), ",AlternativeID" if has_alt else "", table)
+            for row in cur.execute(q):
+                if has_alt and row[-1] not in active_alts:
+                    continue
+                out[row[0]] = dict(zip(sel, row[1:1 + len(sel)]))
+            return out
+
+        plink = load("PhysicalLink_Physical_Data",
+                     ["Physical_UpstreamInvert", "Physical_DownstreamInvert"])
+        cond = load("Conduit_Physical_Data", ["ConduitDiameter"])
+        geom = load("BaseLink_HmiDataSetGeometry_Data", ["HMIGeometryScaledLength"])
+        glink = load("GravityLinkBase_Physical_Data", ["Physical_ManningsN", "Physical_Material"])
+        ext = load("Conduit_HMIUserDefinedExtensions_Data", ["RECOBRIMNTO"])
+        invert = load("GravityNode_Physical_Data", ["Physical_InvertElevation"])
+
+        slopes, recobr, mannings, materiais, diams = [], [], [], [], []
+        ext_total = 0.0
+        n_trechos = 0
+        for did, t in geom.items():
+            L = t.get("HMIGeometryScaledLength")
+            if L:
+                ext_total += L * FT
+            n_trechos += 1
+            up = plink.get(did, {}).get("Physical_UpstreamInvert")
+            dn = plink.get(did, {}).get("Physical_DownstreamInvert")
+            if up is not None and dn is not None and L:
+                s = abs(up - dn) / L
+                if s > 0:
+                    slopes.append(round(s, 5))
+            r = ext.get(did, {}).get("RECOBRIMNTO")
+            if isinstance(r, (int, float)) and r > 0:
+                recobr.append(round(r, 3))
+            mn = glink.get(did, {}).get("Physical_ManningsN")
+            if isinstance(mn, (int, float)) and mn > 0:
+                mannings.append(round(mn, 4))
+            mat = glink.get(did, {}).get("Physical_Material")
+            if mat:
+                materiais.append(str(mat).strip())
+            dia = cond.get(did, {}).get("ConduitDiameter")
+            if dia:
+                diams.append(round(dia * FT * 1000))
+        con.close()
+
+        if n_trechos == 0:
+            return None
+
+        def _mode(lst):
+            if not lst:
+                return None
+            return Counter(lst).most_common(1)[0][0]
+
+        return dict(
+            fonte=os.path.basename(db_path), scenario=scen,
+            n_trechos=n_trechos, n_nos=len(invert),
+            extensao_total_m=round(ext_total, 2) if ext_total else None,
+            declividade_min_m_m=min(slopes) if slopes else None,
+            declividade_max_m_m=max(slopes) if slopes else None,
+            recobrimento_min_m=min(recobr) if recobr else None,
+            manning=_mode(mannings),
+            material=_mode(materiais),
+            dn_min_mm=min(diams) if diams else None,
+            dn_max_mm=max(diams) if diams else None,
+            dn_lista=sorted(set(diams)))
+    except Exception as e:
+        sys.stderr.write("[modelo] falha ao ler SQLite (%s): %s\n" % (db_path, e))
+        return None
+
+
+# ============================================================================
 #  ORQUESTRADOR
 # ============================================================================
 def extrair(cfg):
@@ -789,16 +994,21 @@ def extrair(cfg):
     codigo_ibge = _get(cfg, "codigo_ibge", "ibge") or proj.get("codigo_ibge") or ""
     datum_txt = _get(cfg, "datum", default="SIRGAS 2000 / UTM Zone 22S (EPSG:%s)" % epsg)
 
-    if not ose_xlsx or not os.path.exists(ose_xlsx):
-        raise FileNotFoundError("OSE.xlsx nao encontrado: %s" % ose_xlsx)
+    # ose pode ser um caminho unico (str) ou uma lista de planilhas a mesclar.
+    ose_paths = [ose_xlsx] if isinstance(ose_xlsx, str) else list(ose_xlsx or [])
+    if not ose_paths:
+        raise FileNotFoundError("OSE.xlsx nao informado.")
+    faltando = [p for p in ose_paths if not (p and os.path.exists(p))]
+    if faltando:
+        raise FileNotFoundError("OSE.xlsx nao encontrado: %s" % ", ".join(faltando))
 
     _ensure_dir(out_dir)
     geo_dir = _ensure_dir(os.path.join(out_dir, "geo"))
     tmp_root = _ensure_dir(os.path.join(out_dir, "_tmp_extracao"))
 
     # ---- 1) OSE ----
-    print("[extrair] OSE:", ose_xlsx)
-    O = extrair_ose(ose_xlsx)
+    print("[extrair] OSE:", " + ".join(ose_paths))
+    O = extrair_ose_multi(ose_paths)
     rede_segs = [t["vertices"] for t in O["trechos"]]
     pv_xy = [(p["x"], p["y"]) for p in O["points"].values()]
     n_pv_pts = sum(1 for p in O["points"].values() if p["tipo"] == "PV")
@@ -844,6 +1054,19 @@ def extrair(cfg):
         print("[extrair] Interferencias: agua=%d drenagem=%d" %
               (interf_block["agua_trechos"], interf_block["drenagem_trechos"]))
 
+    # ---- 5) Modelo hidraulico SewerGEMS (.sqlite/.stsw) ----
+    modelo_block = None
+    modelo_path = _get(cfg, "modelo", "modelo_sqlite", "modelo_hidraulico", "sqlite")
+    if modelo_path and os.path.exists(modelo_path):
+        print("[extrair] Modelo hidraulico:", modelo_path)
+        modelo_block = extrair_modelo_sqlite(
+            modelo_path, _get(cfg, "modelo_cenario", "scenario_id"))
+        if modelo_block:
+            print("[extrair] Modelo: %d trechos, %s m, DN %s, recobr min %s, decl min %s" % (
+                modelo_block["n_trechos"], modelo_block["extensao_total_m"],
+                modelo_block["dn_lista"], modelo_block["recobrimento_min_m"],
+                modelo_block["declividade_min_m_m"]))
+
     # ---- escreve geo ----
     _escrever_geo(geo_dir, O["points"], O["trechos"], sol_rows, sol_shp_base, epsg)
     # copia os shapes de interferencia classificados p/ nome canonico (estavel)
@@ -860,9 +1083,9 @@ def extrair(cfg):
         extensao_total_m=round(total_row.get("ext"), 2) if total_row.get("ext") else
         round(sum([o["ext"] for o in O["ose_list"] if o["ext"]]), 2),
         extensao_total_conferencia_somatorio=round(sum([o["ext"] for o in O["ose_list"] if o["ext"]]), 2),
-        n_PV=total_row.get("pv"),
-        n_TL=total_row.get("tl"),
-        n_PIT=total_row.get("pit"),
+        n_PV=total_row.get("pv") if total_row.get("pv") is not None else n_pv_pts,
+        n_TL=total_row.get("tl") if total_row.get("tl") is not None else n_tl_pts,
+        n_PIT=total_row.get("pit") if total_row.get("pit") is not None else 0,
         n_TQ=len(O["tq_list"]),
         n_DEGRAU=len(O["deg_list"]),
         extensao_por_DN_m={k: round(v, 2) for k, v in O["ext_by_dn"].items()},
@@ -870,7 +1093,9 @@ def extrair(cfg):
         metodo_extensao=dict(
             regra="OSE/trecho com profundidade max > 3,00 m classificado como VCA",
             MND_m=round(O["ext_mnd"], 2), VCA_m=round(O["ext_vca"], 2),
-            n_OSE_VCA=O["n_ose_vca"]))
+            n_OSE_VCA=O["n_ose_vca"],
+            VCA_planilhas_m=round(O.get("ext_vca_sheets", 0.0), 2),
+            ext_total_sheets_m=round(O.get("ext_total_sheets", 0.0), 2)))
 
     sub_bacias = sorted(set([str(m["bacia"]).strip() for m in O["ose_meta"] if m["bacia"]]))
     data = dict(
@@ -966,6 +1191,8 @@ def extrair(cfg):
         observacao=("Tabela de quantitativo de rede com %d linha(s) de DN." % len(dn_extensao)))
     if gnss_block is not None:
         extra["3_precisoes_gnss"] = gnss_block
+    if modelo_block is not None:
+        extra["4_modelo_hidraulico"] = modelo_block
 
     dados_extra_path = os.path.join(out_dir, "dados_extra.json")
     with open(dados_extra_path, "w", encoding="utf-8") as f:

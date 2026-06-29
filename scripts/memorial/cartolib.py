@@ -641,9 +641,14 @@ def ensure_topo_cache(npy_name="topo_amapora.npy"):
     if not TXT_DIR or not os.path.isdir(TXT_DIR):
         raise FileNotFoundError(
             "Cache topografico ausente (%s) e MEMORIAL_TXT_DIR nao definido." % path)
-    import glob as _glob
+    # busca RECURSIVA: os TXT podem estar em subpastas (ex.: por mes/equipe)
+    files = []
+    for root, _dirs, fnames in os.walk(TXT_DIR):
+        for fn in fnames:
+            if fn.lower().endswith(".txt"):
+                files.append(os.path.join(root, fn))
     pts = []
-    for fp in sorted(_glob.glob(os.path.join(TXT_DIR, "*.txt"))):
+    for fp in sorted(files):
         with open(fp, encoding="latin-1") as fh:
             for line in fh:
                 p = line.split(",")
@@ -655,6 +660,9 @@ def ensure_topo_cache(npy_name="topo_amapora.npy"):
                     continue
                 pts.append((x, y, z))
     arr = np.array(pts, dtype=float)
+    if arr.ndim != 2 or arr.shape[0] == 0:
+        raise FileNotFoundError(
+            "Nenhum ponto topografico lido de %s (TXT vazios ou formato inesperado)." % TXT_DIR)
     np.save(path, arr)
     print("  [cartolib] cache topografico gerado:", path, "->", len(arr), "pts")
     return path

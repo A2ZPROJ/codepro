@@ -1891,17 +1891,21 @@ ipcMain.handle('memorial:pick-file', async (_e, kind) => {
   if (!mainWindow) return null;
   const filtros = {
     ose:           [{ name: 'Excel', extensions: ['xlsx'] }],
+    modelo:        [{ name: 'Modelo SewerGEMS', extensions: ['sqlite', 'stsw', 'db'] }],
     interferencias:[{ name: 'Shapefile', extensions: ['shp'] }],
     soleiras:      [{ name: 'Shapefile / ZIP', extensions: ['shp', 'zip'] }],
     template:      [{ name: 'Word', extensions: ['docx'] }],
     dados_json:    [{ name: 'JSON', extensions: ['json'] }],
   };
+  // OSE aceita varias planilhas (mescladas no memorial); demais sao 1 arquivo.
+  const multi = (kind === 'ose');
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Selecionar arquivo',
-    properties: ['openFile'],
+    title: multi ? 'Selecionar arquivo(s)' : 'Selecionar arquivo',
+    properties: multi ? ['openFile', 'multiSelections'] : ['openFile'],
     filters: (filtros[kind] || []).concat([{ name: 'Todos os arquivos', extensions: ['*'] }]),
   });
-  return result.canceled ? null : result.filePaths[0];
+  if (result.canceled) return null;
+  return multi ? result.filePaths : result.filePaths[0];
 });
 
 ipcMain.handle('memorial:pick-dir', async (_e, _kind) => {

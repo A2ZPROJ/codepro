@@ -14518,7 +14518,7 @@ body.presenting #presentingBadge { display: flex; }
     // Python via window.electronAPI.memorial (IPC memorial:*). Mesma estratégia
     // do "Gerar RCE": grava um config.json tmp e spawna o python empacotado.
     const $ = (id) => document.getElementById(id);
-    const memPaths = { ose:null, txt:null, soleiras:null, interferencias:null, mapas:null };
+    const memPaths = { ose:null, modelo:null, txt:null, soleiras:null, interferencias:null, mapas:null };
     let _memBusy = false;
 
     const FLUX_TIPOS = ['Rede Projetada','Rede Existente','Coletor','Emissário',
@@ -14566,7 +14566,16 @@ body.presenting #presentingBadge { display: flex; }
       const p = await window.electronAPI.memorial.pickFile(kind);
       if (p) {
         memPaths[kind] = p;
-        const el = $(targetId); if (el) el.value = p;
+        const el = $(targetId);
+        if (el) {
+          if (Array.isArray(p)) {
+            el.value = p.length === 1
+              ? p[0]
+              : p.length + ' planilhas: ' + p.map(x => x.split(/[\\/]/).pop()).join(', ');
+          } else {
+            el.value = p;
+          }
+        }
         memStatus('');
       }
     }
@@ -14601,6 +14610,7 @@ body.presenting #presentingBadge { display: flex; }
       const cfg = {
         saida: saida,
         ose:            memPaths.ose || null,
+        modelo:         memPaths.modelo || null,
         txt_dir:        memPaths.txt || null,
         soleiras:       memPaths.soleiras || null,
         interferencias: memPaths.interferencias || null,
@@ -17013,7 +17023,11 @@ body.presenting #presentingBadge { display: flex; }
             <div style="display:flex;flex-direction:column;gap:8px">
               <div style="display:flex;gap:8px;align-items:center">
                 <button class="mem-pick" data-kind="ose" data-target="mem-ose-path" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:8px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;min-width:180px;text-align:left">OSE (.xlsx)</button>
-                <input id="mem-ose-path" readonly placeholder="opcional — planilha de OSEs" style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
+                <input id="mem-ose-path" readonly placeholder="opcional — planilha(s) de OSEs (pode selecionar várias)" style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button class="mem-pick" data-kind="modelo" data-target="mem-modelo-path" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:8px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;min-width:180px;text-align:left">Modelo hidráulico (.sqlite)</button>
+                <input id="mem-modelo-path" readonly placeholder="opcional — modelo SewerGEMS (.sqlite/.stsw): preenche os parâmetros do dimensionamento" style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
               </div>
               <div style="display:flex;gap:8px;align-items:center">
                 <button class="mem-pickdir" data-target="mem-txt-path" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:8px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;min-width:180px;text-align:left">Pasta de TXT (topografia)</button>

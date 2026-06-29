@@ -85,6 +85,13 @@ DET_LIG3  = _det("image21.png", "image21.png")  # Ligacao Domiciliar tipo 03
 
 # Configuracao do projeto carregada de --config (vazio = modo legado Amapora).
 CFG = {}
+# Secao 9.5 (soleiras negativas / interferencias) so e emitida quando o config
+# aponta esses brutos. Default True = modo legado Amapora (mantem a secao).
+TEM_SOLEIRAS = True
+TEM_INTERF = True
+# Sintese topografica (numero de pontos / cotas) so sai com dados reais de TXT.
+# Definido em build_subst_map() pela presenca do bloco 'topografia' nos dados.
+TEM_TOPO = True
 # GeoJSON da rede projetada (footprint da bacia). Resolvido em apply_config().
 REDE_GEOJSON = os.path.join(BASE, "geo_amapora", "rede_trechos.geojson")
 # Diretorio de trabalho (escrita do _template_work.docx temporario).
@@ -224,8 +231,14 @@ def build_subst_map():
         "nao_atendidas_negativa": sol.get("nao_atendidas_negativa", 0),
         "total_imoveis": sol.get("total_imoveis", 0),
     }
-    topo = d["topografia"]
+    topo = d.get("topografia") or {}
     ident = d["identificacao"]
+    global TEM_TOPO, TEM_SOLEIRAS, TEM_INTERF
+    TEM_TOPO = bool(topo.get("total_pontos"))
+    # Secao 9.5 e orientada PELOS DADOS (presenca no JSON), nao pelo config —
+    # assim o corte vale tambem ao reaproveitar dados.json ja extraido.
+    TEM_SOLEIRAS = bool(d.get("soleiras"))
+    TEM_INTERF = bool(d.get("interferencias"))
 
     ext_total = _fmt_m(q["extensao_total_m"])
     prof = q["profundidade_por_faixa_estruturas"]
@@ -330,6 +343,21 @@ def build_subst_map():
     # pontos de apoio / RRNN: nao temos a quantidade -> vermelho
     m["QTD_APOIO"] = FALTA_PREENCHER
 
+    # --- Sintese do levantamento topografico (dados REAIS do TXT) ---
+    if TEM_TOPO:
+        _zmin = topo.get("z_min"); _zmax = topo.get("z_max"); _zmed = topo.get("z_media")
+        m["TOPO_N_PONTOS"] = _fmt_int(topo.get("total_pontos", 0))
+        m["TOPO_Z_MIN"] = (_fmt_m(_zmin) if _zmin is not None else FALTA_PREENCHER)
+        m["TOPO_Z_MAX"] = (_fmt_m(_zmax) if _zmax is not None else FALTA_PREENCHER)
+        m["TOPO_Z_MED"] = (_fmt_m(_zmed) if _zmed is not None else FALTA_PREENCHER)
+        if _zmin is not None and _zmax is not None:
+            m["TOPO_DESNIVEL"] = _fmt_m(_zmax - _zmin)
+        else:
+            m["TOPO_DESNIVEL"] = FALTA_PREENCHER
+    else:
+        for _k in ("TOPO_N_PONTOS", "TOPO_Z_MIN", "TOPO_Z_MAX", "TOPO_Z_MED", "TOPO_DESNIVEL"):
+            m[_k] = FALTA_PREENCHER
+
     # --- Criterios / parametros (vazoes e coeficientes: NAO existem) -> vermelho ---
     m["QPERC"] = FALTA_PREENCHER
     m["K1"] = FALTA_PREENCHER
@@ -341,6 +369,28 @@ def build_subst_map():
     m["DECL_MIN_PARAM"] = FALTA_PREENCHER
     m["RECOB_MIN"] = "0,95"
     m["TAXA_LINEAR"] = FALTA_PREENCHER
+    # defaults dos parametros de rede (sobrescritos pelo modelo, se apontado)
+    m["MANNING"] = "0,010"
+    m["MATERIAL_REDE"] = "PVC"
+    m["DN_MIN"] = "150"
+
+    # --- Modelo hidraulico SewerGEMS (.sqlite): preenche os parametros reais ---
+    # da secao 9.6 quando o usuario aponta o modelo. Sem modelo, mantem os
+    # defaults/[A PREENCHER] acima.
+    mod = DADOS_EXTRA.get("4_modelo_hidraulico") if DADOS_EXTRA else None
+    if mod:
+        _decl = mod.get("declividade_min_m_m")
+        if _decl is not None:
+            m["DECL_MIN_PARAM"] = ("{:.4f}".format(_decl).replace(".", ","))
+            m["DECL_MIN"] = m["DECL_MIN_PARAM"]
+        if mod.get("recobrimento_min_m") is not None:
+            m["RECOB_MIN"] = "{:.2f}".format(mod["recobrimento_min_m"]).replace(".", ",")
+        if mod.get("manning"):
+            m["MANNING"] = "{:.3f}".format(mod["manning"]).replace(".", ",")
+        if mod.get("material"):
+            m["MATERIAL_REDE"] = str(mod["material"])
+        if mod.get("dn_min_mm"):
+            m["DN_MIN"] = str(mod["dn_min_mm"])
 
     # --- Horizonte de projeto / populacao / vazoes (NAO existem) -> vermelho ---
     m["HORIZONTE_ANOS"] = FALTA_PREENCHER
@@ -380,6 +430,10 @@ def build_subst_map():
         pct_at = (sol["atendidas_positiva"] / _tot * 100.0) if _tot else 0.0
         m["PCT_ATEND"] = "{:.1f}%".format(pct_at).replace(".", ",")
         m["PCT_NAO_ATEND"] = "{:.1f}%".format(100 - pct_at).replace(".", ",")
+    # Total de soleiras (campo unico p/ a tabela de dispositivos): real quando ha
+    # cadastro, senao [A PREENCHER] (preenchimento manual pelas pranchas).
+    m["QTD_SOLEIRAS"] = (FALTA_PREENCHER if SOL_AUSENTE
+                         else _fmt_int(sol.get("total_imoveis") or 0))
 
     # --- Interferencias com redes existentes (dados reais) ---
     interf = d.get("interferencias", {})
@@ -454,6 +508,53 @@ def build_subst_map():
     m["EXT_VCA"] = _fmt_m(vca)
     m["PCT_MND"] = "{:.2f}%".format(mnd / tot * 100).replace(".", ",")
     m["PCT_VCA"] = "{:.2f}%".format(vca / tot * 100).replace(".", ",")
+
+    # --- OVERRIDE de quantitativo de rede (config: quantitativos_rede) ---------
+    # Fonte autoritativa da extensao/DN (ex.: tabela consolidada do projeto),
+    # usada quando o somatorio das OSE nao bate (multi-bacia sem RESUMO unico).
+    # Estrutura: {"extensao_total_m": 35215.99,
+    #             "dn": [{"dn":"150","material":"PVC","ext":34916.39}, ...]}
+    qr = (CFG.get("quantitativos_rede") if isinstance(CFG, dict) else None)
+    if qr:
+        tot_ov = qr.get("extensao_total_m")
+        dn_ov = qr.get("dn") or []
+        if dn_ov:
+            DN_ROWS.clear()
+            soma_ov = 0.0
+            for r in dn_ov:
+                dn = str(r.get("dn", "")).replace("DN", "").replace("mm", "").strip()
+                mat = r.get("material", "PVC")
+                ext = float(r.get("ext", r.get("extensao_m", 0)) or 0)
+                soma_ov += ext
+                DN_ROWS.append(("DN %s mm" % dn, mat, _fmt_m(ext)))
+            if tot_ov is None:
+                tot_ov = soma_ov
+            m["EXT_TOTAL_REDE"] = _fmt_m(soma_ov)
+        if tot_ov is not None:
+            m["EXT_TOTAL"] = _fmt_m(tot_ov)
+        # Metodo executivo: VCA = extensao das planilhas onde prof > 3,00 m
+        # (somada de TODAS as abas OSE); MND = TOTAL(imagem) - VCA. Assim o
+        # metodo fecha exatamente no quantitativo informado.
+        vca_pl = q.get("metodo_extensao", {}).get("VCA_planilhas_m")
+        if tot_ov is not None and vca_pl is not None:
+            vca_pl = float(vca_pl)
+            mnd_pl = max(tot_ov - vca_pl, 0.0)
+            m["EXT_VCA"] = _fmt_m(vca_pl)
+            m["EXT_MND"] = _fmt_m(mnd_pl)
+            m["PCT_VCA"] = "{:.2f}%".format(vca_pl / tot_ov * 100).replace(".", ",")
+            m["PCT_MND"] = "{:.2f}%".format(mnd_pl / tot_ov * 100).replace(".", ",")
+        # PV/TL e faixas de profundidade: com override multi-bacia o RESUMO nao
+        # cobre todas as bacias (metodo antigo) -> marca [A PREENCHER] p/ contagem
+        # manual pelas pranchas do CAD. TQ/degrau (lidos de cada aba) seguem reais.
+        m["QTD_PV"] = FALTA_PREENCHER
+        m["QTD_TL"] = FALTA_PREENCHER
+        m["QTD_TIL"] = FALTA_PREENCHER
+        m["QTD_DISP_TOTAL"] = FALTA_PREENCHER
+        m["EXT_PROF_125"] = FALTA_PREENCHER
+        m["EXT_PROF_200"] = FALTA_PREENCHER
+        m["EXT_PROF_300"] = FALTA_PREENCHER
+        m["EXT_PROF_400"] = FALTA_PREENCHER
+        m["EXT_PROF_500"] = FALTA_PREENCHER
 
     # registra marcadores vermelhos
     for k, v in m.items():
@@ -1430,7 +1531,12 @@ def build():
     add_bullet(doc, "os critérios e parâmetros adotados (vazões, coeficientes, material e diâmetro da tubulação, declividade e lâmina d'água);")
     add_bullet(doc, "as soluções construtivas previstas (traçado, recobrimento, tubos de queda, mudanças de diâmetro e acessórios);")
     add_bullet(doc, "a metodologia de dimensionamento hidráulico e o programa computacional utilizado;")
-    add_bullet(doc, "o tratamento das soleiras negativas e a verificação de interferências com redes existentes;")
+    if TEM_SOLEIRAS and TEM_INTERF:
+        add_bullet(doc, "o tratamento das soleiras negativas e a verificação de interferências com redes existentes;")
+    elif TEM_SOLEIRAS:
+        add_bullet(doc, "o tratamento das soleiras negativas;")
+    elif TEM_INTERF:
+        add_bullet(doc, "a verificação de interferências com redes existentes;")
     add_bullet(doc, "a consolidação dos quantitativos da rede projetada, por diâmetro, por dispositivo e por faixa de profundidade.")
     add_para(doc,
              "O cálculo hidráulico trecho a trecho não é reproduzido neste texto: ele consta de "
@@ -1547,33 +1653,35 @@ def build():
              "dos imóveis (com as respectivas cotas de soleira e de edificação), das interferências "
              "aparentes e das redes de infraestrutura existentes informadas pelos órgãos "
              "competentes.")
-    add_para(doc,
-             "O levantamento da área da {{SUBBACIA}} totalizou 10.035 pontos topográficos "
-             "cadastrais, com cotas de terreno variando entre 369,83 m e 406,33 m (cota média de "
-             "391,09 m), o que resulta em um desnível total da ordem de 36,5 m na área de estudo. A "
-             "figura a seguir apresenta o mapa hipsométrico (mapa de calor da topografia) elaborado "
-             "a partir desses pontos, evidenciando a conformação do relevo que condicionou o traçado "
-             "e as declividades da rede coletora.")
-    add_figure(doc, MAPA4, "Mapa hipsométrico da {{SUBBACIA}} (modelo de calor da topografia)")
-    add_figure(doc, MAPA6,
-               "Modelo digital do terreno em vista isométrica (exagero vertical 4×)")
-    add_table_caption(doc, "Síntese do levantamento topográfico da {{SUBBACIA}}")
-    make_table(
-        doc,
-        ["Parâmetro", "Valor"],
-        [
-            ["Pontos topográficos levantados", "10.035"],
-            ["Cota mínima do terreno", "369,83 m"],
-            ["Cota máxima do terreno", "406,33 m"],
-            ["Cota média do terreno", "391,09 m"],
-            ["Desnível total", "36,50 m"],
-            ["Datum / Sistema de projeção", "SIRGAS 2000 / UTM 22S (EPSG:31982)"],
-            ["Executor do levantamento", "2S Engenharia e Geotecnologia"],
-        ],
-        col_widths=[8.0, 7.0],
-        first_col_left=True,
-    )
-    add_table_source(doc)
+    # Sintese numerica do levantamento: so com dados reais de TXT (TEM_TOPO).
+    if TEM_TOPO:
+        add_para(doc,
+                 "O levantamento da área da {{SUBBACIA}} totalizou {{TOPO_N_PONTOS}} pontos topográficos "
+                 "cadastrais, com cotas de terreno variando entre {{TOPO_Z_MIN}} m e {{TOPO_Z_MAX}} m (cota média de "
+                 "{{TOPO_Z_MED}} m), o que resulta em um desnível total da ordem de {{TOPO_DESNIVEL}} m na área de estudo. A "
+                 "figura a seguir apresenta o mapa hipsométrico (mapa de calor da topografia) elaborado "
+                 "a partir desses pontos, evidenciando a conformação do relevo que condicionou o traçado "
+                 "e as declividades da rede coletora.")
+        add_figure(doc, MAPA4, "Mapa hipsométrico da {{SUBBACIA}} (modelo de calor da topografia)")
+        add_figure(doc, MAPA6,
+                   "Modelo digital do terreno em vista isométrica (exagero vertical 4×)")
+        add_table_caption(doc, "Síntese do levantamento topográfico da {{SUBBACIA}}")
+        make_table(
+            doc,
+            ["Parâmetro", "Valor"],
+            [
+                ["Pontos topográficos levantados", "{{TOPO_N_PONTOS}}"],
+                ["Cota mínima do terreno", "{{TOPO_Z_MIN}} m"],
+                ["Cota máxima do terreno", "{{TOPO_Z_MAX}} m"],
+                ["Cota média do terreno", "{{TOPO_Z_MED}} m"],
+                ["Desnível total", "{{TOPO_DESNIVEL}} m"],
+                ["Datum / Sistema de projeção", "SIRGAS 2000 / UTM 22S (EPSG:31982)"],
+                ["Executor do levantamento", "2S Engenharia e Geotecnologia"],
+            ],
+            col_widths=[8.0, 7.0],
+            first_col_left=True,
+        )
+        add_table_source(doc)
     h2(doc, "5.1. Sistema de Referência")
     add_bullet(doc, "Sistema Geodésico de Referência: SIRGAS 2000;")
     add_bullet(doc, "Sistema de projeção: UTM – Universal Transversa de Mercator;")
@@ -2083,51 +2191,66 @@ def build():
              "grandes consumidores e do acompanhamento de viabilidade de projetos hidrossanitários "
              "(PHS) repassado pela concessionária. {{OBS_VAZOES_CONCENTRADAS}}")
 
-    h2(doc, "9.5. Atendimento de Soleiras Negativas e Análise de Interferências")
-    add_para(doc,
-             "Diz-se que uma soleira é negativa quando a cota de fundo do imóvel fica abaixo da cota "
-             "da rede coletora pública, situação em que o esgoto não escoa por gravidade pela ligação "
-             "convencional. Para ampliar ao máximo o atendimento, e a partir dos dados do "
-             "levantamento topográfico, empregou-se o critério de identificação de soleiras proposto "
-             "pela 2S Engenharia e Geotecnologia.")
-    add_para(doc,
-             "Esse critério parte da cota de edificação (altitude do alicerce do imóvel). Desse "
-             "valor subtrai-se uma parcela fixa de 0,65 m, equivalente à profundidade típica da "
-             "ligação predial, obtendo-se a cota de fundo da ligação. Os imóveis foram inseridos no "
-             "modelo hidráulico como Property Connections, adotando-se a cota de edificação como cota "
-             "de terreno e a cota de fundo do imóvel como cota de fundo. Confrontando esses valores "
-             "com a profundidade máxima admitida para as redes, apurou-se o índice de atendimento da "
-             "bacia. A figura a seguir mostra a distribuição espacial das soleiras na {{SUBBACIA}}.")
-    add_figure(doc, MAPA3, "Distribuição das soleiras na {{SUBBACIA}} (atendidas e não atendidas)")
-    add_table_caption(doc, "Imóveis passíveis de atendimento na {{SUBBACIA}}")
-    make_table(
-        doc,
-        ["Soleiras", "Número de Imóveis", "Percentual de Atendimento"],
-        [
-            ["Atendidas", "{{IMOVEIS_ATEND}}", "{{PCT_ATEND}}"],
-            ["Não atendidas", "{{IMOVEIS_NAO_ATEND}}", "{{PCT_NAO_ATEND}}"],
-            ["TOTAL DE IMÓVEIS", "{{IMOVEIS_TOTAL}}", "100,00%"],
-        ],
-        col_widths=[6.0, 4.5, 5.5],
-        first_col_left=True,
-    )
-    add_table_source(doc)
-    add_para(doc,
-             "Em paralelo, verificaram-se as possíveis interferências com outras infraestruturas. "
-             "Tomando o cadastro de redes existentes (drenagem, água e demais serviços) levantado "
-             "pela equipe de topografia, sobrepôs-se a ele o traçado da rede coletora projetada e "
-             "localizaram-se os pontos de cruzamento. Em cada um deles, examinaram-se as cotas e "
-             "profundidades relativas, considerando os diâmetros a partir da geratriz inferior dos "
-             "tubos, de modo a confirmar a compatibilidade das soluções adotadas.", space_before=6)
-    add_para(doc,
-             "Da análise resultaram interferências com redes existentes de água ({{INTERF_AGUA}} "
-             "trechos) e de drenagem ({{INTERF_DREN}} trechos) cruzando o traçado projetado, todas "
-             "exigindo verificação de cotas e a definição das travessias correspondentes. A figura a "
-             "seguir localiza essas interferências na {{SUBBACIA}}.")
-    add_figure(doc, MAPA5,
-               "Interferências identificadas (redes de água e drenagem existentes)")
+    # 9.5 - so quando o usuario aponta soleiras e/ou interferencias. Sem nenhum
+    # dos dois, a secao inteira e omitida e o SewerGEMS sobe para 9.5.
+    if TEM_SOLEIRAS and TEM_INTERF:
+        _t95 = "9.5. Atendimento de Soleiras Negativas e Análise de Interferências"
+    elif TEM_SOLEIRAS:
+        _t95 = "9.5. Atendimento de Soleiras Negativas"
+    elif TEM_INTERF:
+        _t95 = "9.5. Análise de Interferências com Redes Existentes"
+    else:
+        _t95 = None
 
-    h2(doc, "9.6. Dados de Entrada no Software SewerGEMS")
+    if _t95:
+        h2(doc, _t95)
+    if TEM_SOLEIRAS:
+        add_para(doc,
+                 "Diz-se que uma soleira é negativa quando a cota de fundo do imóvel fica abaixo da cota "
+                 "da rede coletora pública, situação em que o esgoto não escoa por gravidade pela ligação "
+                 "convencional. Para ampliar ao máximo o atendimento, e a partir dos dados do "
+                 "levantamento topográfico, empregou-se o critério de identificação de soleiras proposto "
+                 "pela 2S Engenharia e Geotecnologia.")
+        add_para(doc,
+                 "Esse critério parte da cota de edificação (altitude do alicerce do imóvel). Desse "
+                 "valor subtrai-se uma parcela fixa de 0,65 m, equivalente à profundidade típica da "
+                 "ligação predial, obtendo-se a cota de fundo da ligação. Os imóveis foram inseridos no "
+                 "modelo hidráulico como Property Connections, adotando-se a cota de edificação como cota "
+                 "de terreno e a cota de fundo do imóvel como cota de fundo. Confrontando esses valores "
+                 "com a profundidade máxima admitida para as redes, apurou-se o índice de atendimento da "
+                 "bacia. A figura a seguir mostra a distribuição espacial das soleiras na {{SUBBACIA}}.")
+        add_figure(doc, MAPA3, "Distribuição das soleiras na {{SUBBACIA}} (atendidas e não atendidas)")
+        add_table_caption(doc, "Imóveis passíveis de atendimento na {{SUBBACIA}}")
+        make_table(
+            doc,
+            ["Soleiras", "Número de Imóveis", "Percentual de Atendimento"],
+            [
+                ["Atendidas", "{{IMOVEIS_ATEND}}", "{{PCT_ATEND}}"],
+                ["Não atendidas", "{{IMOVEIS_NAO_ATEND}}", "{{PCT_NAO_ATEND}}"],
+                ["TOTAL DE IMÓVEIS", "{{IMOVEIS_TOTAL}}", "100,00%"],
+            ],
+            col_widths=[6.0, 4.5, 5.5],
+            first_col_left=True,
+        )
+        add_table_source(doc)
+    if TEM_INTERF:
+        add_para(doc,
+                 "Verificaram-se as possíveis interferências com outras infraestruturas. "
+                 "Tomando o cadastro de redes existentes (drenagem, água e demais serviços) levantado "
+                 "pela equipe de topografia, sobrepôs-se a ele o traçado da rede coletora projetada e "
+                 "localizaram-se os pontos de cruzamento. Em cada um deles, examinaram-se as cotas e "
+                 "profundidades relativas, considerando os diâmetros a partir da geratriz inferior dos "
+                 "tubos, de modo a confirmar a compatibilidade das soluções adotadas.", space_before=6)
+        add_para(doc,
+                 "Da análise resultaram interferências com redes existentes de água ({{INTERF_AGUA}} "
+                 "trechos) e de drenagem ({{INTERF_DREN}} trechos) cruzando o traçado projetado, todas "
+                 "exigindo verificação de cotas e a definição das travessias correspondentes. A figura a "
+                 "seguir localiza essas interferências na {{SUBBACIA}}.")
+        add_figure(doc, MAPA5,
+                   "Interferências identificadas (redes de água e drenagem existentes)")
+
+    _n_sewer = "9.5" if not _t95 else "9.6"
+    h2(doc, _n_sewer + ". Dados de Entrada no Software SewerGEMS")
     add_para(doc,
              "A modelagem hidráulica e o dimensionamento da rede coletora da {{SUBBACIA}} no "
              "SewerGEMS partiram do conjunto de parâmetros de entrada relacionados a seguir:",
@@ -2137,9 +2260,9 @@ def build():
         doc,
         ["Parâmetro", "Valor", "Unidade"],
         [
-            ["Diâmetro mínimo (Dmin)", "150", "mm"],
-            ["Material", "PVC", "–"],
-            ["Coeficiente de Manning", "0,010", "–"],
+            ["Diâmetro mínimo (Dmin)", "{{DN_MIN}}", "mm"],
+            ["Material", "{{MATERIAL_REDE}}", "–"],
+            ["Coeficiente de Manning", "{{MANNING}}", "–"],
             ["Recobrimento mínimo", "{{RECOB_MIN}}", "m"],
             ["Declividade mínima", "{{DECL_MIN_PARAM}}", "m/m"],
             ["Tensão trativa mínima", "1,00", "Pa"],
@@ -2188,6 +2311,7 @@ def build():
             ["Tubo de Queda (T.Q.)", "{{QTD_TQ}}", "{{TQ_SOMA_ALT}}"],
             ["Degrau", "{{QTD_DEGRAU}}", "{{DEGRAU_SOMA_ALT}}"],
             ["Terminal de Inspeção e Limpeza (TIL) {{QTD_TIL_NOTA}}", "{{QTD_TIL}}", "–"],
+            ["Soleiras negativas (total)", "{{QTD_SOLEIRAS}}", "–"],
             ["TOTAL DE DISPOSITIVOS", "{{QTD_DISP_TOTAL}}", "–"],
         ],
         col_widths=[8.0, 3.5, 3.5],
@@ -2256,13 +2380,14 @@ def build():
              "O cálculo hidráulico, processado no SewerGEMS para a vazão máxima horária ao final do "
              "horizonte de projeto, respeitou os limites de tensão trativa mínima, velocidade, "
              "lâmina d'água e recobrimento. As soluções resultantes garantem o bom funcionamento "
-             "hidráulico e a exequibilidade construtiva do sistema, alcançando índice de atendimento "
-             "da bacia de {{PCT_ATEND}}.")
-    add_para(doc,
-             "As soleiras negativas que, por conta da limitação de profundidade das redes, não "
-             "puderam ser atendidas por gravidade foram devidamente identificadas e justificadas; "
-             "seu atendimento deverá valer-se de soluções individuais específicas, de acordo com as "
-             "orientações da concessionária.")
+             "hidráulico e a exequibilidade construtiva do sistema" +
+             (", alcançando índice de atendimento da bacia de {{PCT_ATEND}}." if TEM_SOLEIRAS else "."))
+    if TEM_SOLEIRAS:
+        add_para(doc,
+                 "As soleiras negativas que, por conta da limitação de profundidade das redes, não "
+                 "puderam ser atendidas por gravidade foram devidamente identificadas e justificadas; "
+                 "seu atendimento deverá valer-se de soluções individuais específicas, de acordo com as "
+                 "orientações da concessionária.")
     add_para(doc,
              "Por fim, recomenda-se que a execução das obras siga estritamente os critérios "
              "construtivos aqui descritos, as especificações do MOS/SANEPAR e os detalhes das "
@@ -2361,7 +2486,7 @@ def _gerar_fluxograma_do_config(cfg, out_png):
 def _tem_brutos(cfg):
     """True se o config aponta arquivos brutos (OSE/TXT/soleiras/interferencias)."""
     return any(cfg.get(k) for k in ("ose", "ose_xlsx", "txt_dir", "soleiras",
-                                    "interferencias"))
+                                    "interferencias", "modelo", "modelo_sqlite"))
 
 
 def _gerar_mapas(geo_dir, mapas_dir, cfg):
@@ -2507,8 +2632,14 @@ def apply_config(cfg):
     }
     """
     global CFG, BASE, MAPAS, FLUXOGRAMA, FOTOS, DADOS_JSON, DADOS_EXTRA_JSON
-    global SAIDA, TEMPLATE, REDE_GEOJSON, WORKDIR
+    global SAIDA, TEMPLATE, REDE_GEOJSON, WORKDIR, TEM_SOLEIRAS, TEM_INTERF
     CFG = cfg or {}
+
+    # Modo legado (sem --config / sem brutos): mantem a secao 9.5 como antes.
+    # Com config: a secao so sai se o usuario apontar soleiras / interferencias.
+    if _tem_brutos(cfg):
+        TEM_SOLEIRAS = bool(cfg.get("soleiras"))
+        TEM_INTERF = bool(cfg.get("interferencias"))
 
     if cfg.get("base"):
         BASE = cfg["base"]
