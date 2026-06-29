@@ -271,17 +271,11 @@
     window._isSuperAdmin = !!currentUser.is_super_admin;
     window._tenantId = currentUser.tenant_id || null;
     window._canCreate = ROLES[currentUser.role]?.canCreate ?? false;
-    // Persiste a "marca" do último acesso pro SPLASH da próxima abertura: se for da
-    // 2S Engenharia, o splash mostra a logo da 2S; senão A2Z. Na 1ª vez (antes de
-    // qualquer login) não tem como saber, então fica A2Z. Trocar pra um acesso
-    // não-2S volta pra A2Z. (require disponível — nodeIntegration ligado.)
-    try {
-      const _brand = /2s\s*engenharia/i.test(currentUser?.empresa || '') ? '2s' : 'a2z';
-      const _fs = require('fs'), _os = require('os'), _path = require('path');
-      const _dir = _path.join(_os.homedir(), 'AppData', 'Roaming', 'Nexus');
-      _fs.mkdirSync(_dir, { recursive: true });
-      _fs.writeFileSync(_path.join(_dir, 'brand-pref.json'), JSON.stringify({ brand: _brand, updated: new Date().toISOString() }));
-    } catch {}
+    // Persiste a "marca" do último acesso pro SPLASH da próxima abertura (logo 2S vs
+    // A2Z) — regra centralizada em window._writeBrandPref: 2S se a empresa for 2S
+    // Engenharia OU se o usuário escolheu o tema 2S (claro+vermelho). Aqui no login
+    // cobre o caso da empresa; loadUserThemePreferences reescreve já com o tema salvo.
+    try { window._writeBrandPref?.(); } catch {}
 
     // Fase D: telemetria — init + login event + heartbeat de presence
     try {
@@ -7881,6 +7875,10 @@ body.presenting #presentingBadge { display: flex; }
                 <button class="theme-preset" onclick="applyThemePreset('a2z')" data-tooltip="A2Z — marca oficial preto/cinza/branco">
                   <span class="preset-swatch" style="background:linear-gradient(135deg,#0a0a0a,#000000)"></span>
                   <span>A2Z</span>
+                </button>
+                <button class="theme-preset" onclick="applyThemePreset('2s')" data-tooltip="2S — Vermelho + Claro (também muda o splash pra logo 2S)">
+                  <span class="preset-swatch" style="background:linear-gradient(135deg,#a11312,#5e0b0a)"></span>
+                  <span>2S</span>
                 </button>
                 <button class="theme-preset" onclick="applyThemePreset('sanepar')" data-tooltip="Verde + Grade + Claro">
                   <span class="preset-swatch" style="background:linear-gradient(135deg,#16a34a,#14532d)"></span>
@@ -32572,7 +32570,27 @@ function toggleTheme(){
 // localStorage é por PC; isto sobe pra coluna usuarios.preferencias (jsonb)
 // pra que o tema siga o user em qualquer máquina onde ele logar.
 let _saveThemeTimer = null;
+// Decide a "marca" do splash da PRÓXIMA abertura e grava em brand-pref.json:
+// 2S se a empresa for 2S Engenharia OU se o tema ativo é o 2S (claro + vermelho);
+// senão A2Z. Chamado no login, ao carregar prefs e a cada troca de tema.
+// (nodeIntegration ligado → fs/os/path disponíveis no renderer.)
+window._writeBrandPref = function() {
+  try {
+    const emp = (window._currentUserData?.empresa || window._tenant?.nome || '');
+    const is2Semp = /2s\s*engenharia/i.test(emp);
+    const color = document.documentElement.getAttribute('data-theme-color');
+    const mode  = document.documentElement.getAttribute('data-theme');
+    const is2Stheme = (color === 'vermelho' && mode === 'light');
+    const brand = (is2Semp || is2Stheme) ? '2s' : 'a2z';
+    const _fs = require('fs'), _os = require('os'), _path = require('path');
+    const _dir = _path.join(_os.homedir(), 'AppData', 'Roaming', 'Nexus');
+    _fs.mkdirSync(_dir, { recursive: true });
+    _fs.writeFileSync(_path.join(_dir, 'brand-pref.json'), JSON.stringify({ brand, updated: new Date().toISOString() }));
+  } catch {}
+};
+
 window.saveUserThemePreferences = function() {
+  try { window._writeBrandPref?.(); } catch {}
   clearTimeout(_saveThemeTimer);
   _saveThemeTimer = setTimeout(async () => {
     try {
@@ -32645,6 +32663,8 @@ window.loadUserThemePreferences = async function() {
         if (window.saveUserThemePreferences) window.saveUserThemePreferences();
       }
     } catch {}
+    // Tema já resolvido (prefs salvas + default 2S): atualiza a marca do splash.
+    try { window._writeBrandPref?.(); } catch {}
   } catch(e) { console.warn('loadUserThemePreferences', e); }
 };
 // Helper: renderiza ícones Lucide em runtime.
@@ -32684,6 +32704,7 @@ const THEME_PRESETS = {
   apresentacao: { color: 'dourado',   pattern: 'linhas',     mode: 'light' },
   sanepar:      { color: 'verde',     pattern: 'grade',      mode: 'light' },
   a2z:          { color: 'a2z',       pattern: 'none',       mode: 'light' },
+  '2s':         { color: 'vermelho',  pattern: 'none',       mode: 'light' },
   executivo:    { color: 'platina',   pattern: 'none',       mode: 'light' },
   marsala:      { color: 'bordo',     pattern: 'linhas',     mode: 'light' },
   // ─ Imersivos (escuros) ─
