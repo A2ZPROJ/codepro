@@ -14,6 +14,9 @@ IBGE_AMAPORA = C.IBGE   # parametrico (env MEMORIAL_IBGE); default Amapora 41009
 _neigh_path = os.path.join(C.CACHE, "nomes_vizinhos.json")
 NEIGH = (json.load(open(_neigh_path, encoding="utf-8"))
          if os.path.exists(_neigh_path) else {})
+# nome do municipio (parametrico via env) p/ titulos/legenda/rotulos
+NOME_MUN = os.environ.get("MEMORIAL_MUNICIPIO", "Amaporã")
+SUB_BACIA = os.environ.get("MEMORIAL_SUBBACIA", "Bacia 02")
 
 def load_geom(fn):
     d = json.load(open(os.path.join(C.CACHE, fn)))
@@ -64,7 +67,7 @@ muni_am = munis[IBGE_AMAPORA]
 fig = plt.figure(figsize=(11.69, 8.27), dpi=300)
 fig.patch.set_facecolor(C.PAPER)
 C.title_block(fig, "MAPA DE LOCALIZAÇÃO",
-              "Município de Amaporã e municípios limítrofes — Estado do Paraná")
+              "Município de %s e municípios limítrofes — Estado do Paraná" % NOME_MUN)
 
 # ---- painel principal (coordenadas geograficas SIRGAS 2000 — lon/lat) ----
 import numpy as np
@@ -113,14 +116,14 @@ for code in NEIGH:
 # Amaporã destacado (preenchimento vermelho translucido + contorno forte)
 draw(ax, muni_am, (0.63, 0.075, 0.071, 0.30), C.RED, 2.8, z=5)
 draw(ax, muni_am, "none", C.RED_D, 1.0, z=6)
-ax.text(amc[0], mb[3]+(mb[3]-mb[1])*0.05, "AMAPORÃ", ha="center", va="bottom",
+ax.text(amc[0], mb[3]+(mb[3]-mb[1])*0.05, NOME_MUN.upper(), ha="center", va="bottom",
         fontsize=13, fontweight="bold", color=C.RED, zorder=8,
         path_effects=[pe.withStroke(linewidth=3.2, foreground="white")])
 
 # sede urbana / área de estudo (estrela)
 sx, sy = lon, lat
 ax.plot(sx, sy, marker="*", color="#FFD400", ms=22, mec=C.DARK, mew=1.0, zorder=11)
-ax.annotate("Sede urbana\nÁrea de estudo — Bacia 02", (sx, sy),
+ax.annotate("Sede urbana\nÁrea de estudo — %s" % SUB_BACIA, (sx, sy),
             xytext=(30, 26), textcoords="offset points", fontsize=C.FS_BODY,
             fontweight="bold", color=C.INK, zorder=12,
             bbox=dict(boxstyle="round,pad=0.4", fc="white", ec=C.RED, lw=1.3, alpha=0.97),
@@ -155,11 +158,11 @@ C.north_arrow(ax)                                   # canto superior esquerdo
 # legenda -> vai pro RODAPE horizontal (definido mais abaixo, apos os insets)
 leg_h = [
     Line2D([0], [0], marker="s", color="none", mfc=(0.63,0.075,0.071,0.55),
-           mec=C.RED, ms=10, label="Município de Amaporã"),
+           mec=C.RED, ms=10, label="Município de %s" % NOME_MUN),
     Line2D([0], [0], marker="s", color="none", mfc=(1,1,1,0.5),
            mec="#6E6A60", ms=10, label="Municípios limítrofes"),
     Line2D([0], [0], marker="*", color="none", mfc="#FFD400", mec=C.DARK,
-           ms=13, label="Sede / Área de estudo (Bacia 02)"),
+           ms=13, label="Sede / Área de estudo (%s)" % SUB_BACIA),
 ]
 
 # escala grafica em km (lon->m via cos(lat)) — canto inferior, separada da legenda
@@ -224,7 +227,7 @@ draw(axp, muni_am, C.RED, C.RED_D, 0.9, z=4)
 axp.set_xlim(-54.7, -48.0); axp.set_ylim(-26.8, -22.4)
 # seta apontando Amaporã
 amc_ll = utm_to_ll(*amc)
-axp.annotate("AMAPORÃ", amc_ll, xytext=(amc_ll[0]+1.6, amc_ll[1]+1.4),
+axp.annotate(NOME_MUN.upper(), amc_ll, xytext=(amc_ll[0]+1.6, amc_ll[1]+1.4),
              fontsize=8, fontweight="bold", color=C.RED, zorder=6,
              path_effects=[pe.withStroke(linewidth=2.5, foreground="white")],
              arrowprops=dict(arrowstyle="-|>", color=C.RED, lw=1.6))

@@ -663,6 +663,16 @@ def ensure_topo_cache(npy_name="topo_amapora.npy"):
     if arr.ndim != 2 or arr.shape[0] == 0:
         raise FileNotFoundError(
             "Nenhum ponto topografico lido de %s (TXT vazios ou formato inesperado)." % TXT_DIR)
+    # filtro de outliers: pontos a > 5 km do centroide (mediana) ou cota fora de
+    # 4*desvio sao descartados — evita que 1 ponto solto (coord errada) estoure o
+    # enquadramento dos mapas 4/6. Mesma logica de extrair_dados.extrair_topografia.
+    if arr.shape[0] >= 10:
+        cx, cy = np.median(arr[:, 0]), np.median(arr[:, 1])
+        rad = np.hypot(arr[:, 0] - cx, arr[:, 1] - cy)
+        zmed = np.median(arr[:, 2]); zstd = arr[:, 2].std()
+        keep = (rad < 5000.0) & (np.abs(arr[:, 2] - zmed) <= 4 * zstd)
+        if keep.sum() >= 10:
+            arr = arr[keep]
     np.save(path, arr)
     print("  [cartolib] cache topografico gerado:", path, "->", len(arr), "pts")
     return path

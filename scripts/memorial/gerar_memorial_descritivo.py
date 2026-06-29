@@ -2489,6 +2489,35 @@ def _tem_brutos(cfg):
                                     "interferencias", "modelo", "modelo_sqlite"))
 
 
+def _resolver_ibge(municipio, uf):
+    """Resolve o codigo IBGE (7 digitos) a partir do nome do municipio + UF,
+    via API de localidades do IBGE. Best-effort: retorna None se nao conseguir
+    (sem internet / nome nao casa). Assim o mapa1 nao fica preso em Amapora
+    quando o usuario nao informa o codigo IBGE explicitamente."""
+    if not municipio:
+        return None
+    try:
+        import urllib.request, gzip, unicodedata
+
+        def _norm(s):
+            s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode("ascii")
+            return s.strip().lower()
+
+        uf = (uf or "PR").strip().upper()
+        url = "https://servicodados.ibge.gov.br/api/v1/localidades/estados/%s/municipios" % uf
+        req = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})
+        raw = urllib.request.urlopen(req, timeout=12).read()
+        if raw[:2] == b"\x1f\x8b":
+            raw = gzip.decompress(raw)
+        alvo = _norm(municipio)
+        for m in json.loads(raw.decode("utf-8")):
+            if _norm(m.get("nome")) == alvo:
+                return str(m.get("id"))
+    except Exception as e:
+        sys.stderr.write("[ibge] nao resolveu '%s/%s': %s\n" % (municipio, uf, e))
+    return None
+
+
 def _gerar_mapas(geo_dir, mapas_dir, cfg):
     """Gera os 6 PNGs dos mapas rodando mapa1..6 como subprocessos, com os
     caminhos passados via variaveis de ambiente (MEMORIAL_*). Roda na pasta do
@@ -2523,9 +2552,16 @@ def _gerar_mapas(geo_dir, mapas_dir, cfg):
     if os.path.isdir(_interf_shp):
         env["MEMORIAL_INTERF_SHP"] = _interf_shp
     ibge = cfg.get("codigo_ibge") or proj.get("codigo_ibge")
+    if not ibge:
+        # sem codigo explicito: resolve pelo nome do municipio + UF (best-effort)
+        ibge = _resolver_ibge(proj.get("municipio"), proj.get("uf"))
+        if ibge:
+            sys.stderr.write("[ibge] %s/%s -> %s\n" % (proj.get("municipio"), proj.get("uf"), ibge))
     if ibge:
         env["MEMORIAL_IBGE"] = str(ibge)
     env["MEMORIAL_MUNICIPIO"] = proj.get("municipio") or "Amaporã"
+    if proj.get("subbacia"):
+        env["MEMORIAL_SUBBACIA"] = proj.get("subbacia")
     if cfg.get("sondagem_xlsx"):
         env["MEMORIAL_SONDAGEM_XLSX"] = cfg["sondagem_xlsx"]
     env["PYTHONIOENCODING"] = "utf-8"

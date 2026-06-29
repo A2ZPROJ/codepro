@@ -23,15 +23,33 @@ import cartolib as C
 VERT_EXAG = 4.0          # exagero vertical (4x) — escolhido p/ leitura do relevo
 AZIM, ELEV = -62, 26     # vista isometrica (azimute / elevacao da camera)
 
+# nome do municipio / sub-bacia (parametrico via env)
+NOME_MUN = os.environ.get("MEMORIAL_MUNICIPIO", "Amaporã")
+SUB_BACIA = os.environ.get("MEMORIAL_SUBBACIA", "Bacia 02")
+
 # ---------------- dados ----------------
 TOPO = np.load(C.ensure_topo_cache())   # (N,3) X,Y,Z
 X, Y, Z = TOPO[:, 0], TOPO[:, 1], TOPO[:, 2]
 rede_in = C.load_rede_amapora()
 pvs = C.load_pvs_amapora()
 
-pad = 10                 # margem minima em volta dos dados (mais ZOOM no terreno)
-xmin, xmax = X.min()-pad, X.max()+pad
-ymin, ymax = Y.min()-pad, Y.max()+pad
+# Enquadramento pela REDE do projeto (nao pela nuvem inteira de topografia) —
+# aproxima do local do projeto e ignora os pontos de levantamento ao redor.
+_rx = [v[0] for seg in rede_in for v in seg] + [p["x"] for p in pvs]
+_ry = [v[1] for seg in rede_in for v in seg] + [p["y"] for p in pvs]
+if _rx and _ry:
+    pad = 150            # margem em volta da rede (m)
+    xmin, xmax = min(_rx) - pad, max(_rx) + pad
+    ymin, ymax = min(_ry) - pad, max(_ry) + pad
+    # recorta a nuvem topografica ao enquadramento (interpola so o que importa)
+    _m = (X >= xmin) & (X <= xmax) & (Y >= ymin) & (Y <= ymax)
+    if _m.sum() >= 50:
+        X, Y, Z = X[_m], Y[_m], Z[_m]
+        TOPO = np.c_[X, Y, Z]
+else:
+    pad = 10
+    xmin, xmax = X.min()-pad, X.max()+pad
+    ymin, ymax = Y.min()-pad, Y.max()+pad
 
 # ---------------- grade de interpolacao ----------------
 NX, NY = 420, 360
@@ -87,8 +105,9 @@ rgba[..., 3] = np.where(MASK, 0.0, 1.0)
 # ---------------- figura ----------------
 fig = plt.figure(figsize=(11.69, 8.27), dpi=300)
 fig.patch.set_facecolor(C.PAPER)
-C.title_block(fig, "MODELO 3D DO TERRENO — BACIA 02",
-              "Vista isométrica do relevo (10.035 pontos GNSS) e rede coletora — Amaporã / PR")
+C.title_block(fig, "MODELO 3D DO TERRENO — %s" % SUB_BACIA.upper(),
+              "Vista isométrica do relevo (%s pontos GNSS) e rede coletora — %s / PR"
+              % ("{:,}".format(len(TOPO)).replace(",", "."), NOME_MUN))
 
 # area do mapa 3D: ocupa quase toda a largura/altura acima do RODAPE -> ZOOM
 _M = C.map_axes_rect(x0=0.02, w=0.90)
@@ -175,7 +194,8 @@ C.footer_legend(fig, handles, ncol=2,
                              f"Cotas {zmin:.1f}–{zmax:.1f} m · Desnível {zmax-zmin:.1f} m · "
                              f"{len(TOPO):,} pts GNSS".replace(",", ".")))
 
-C.credits(fig, fonte="Levantamento GNSS 2S — 10.035 pontos")
+C.credits(fig, fonte="Levantamento GNSS 2S — %s pontos"
+          % ("{:,}".format(len(TOPO)).replace(",", ".")))
 
 out = os.path.join(C.OUT, "Mapa6_3D_Topografia.png")
 fig.savefig(out, dpi=300, facecolor=C.PAPER)

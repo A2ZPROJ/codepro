@@ -93,6 +93,19 @@ def main():
         print(f"[mapa7] Nenhum furo encontrado para '{MUNIC}'.")
         return None
     furos = reprojetar(furos)
+    # descarta furos com coordenada grosseiramente errada (ex.: 1 ponto no
+    # Oceano Atlantico) que estouram o enquadramento: mantem so o cluster do
+    # projeto (raio robusto a partir da mediana).
+    if len(furos) >= 5:
+        _xs = np.array([f["x"] for f in furos]); _ys = np.array([f["y"] for f in furos])
+        mcx, mcy = np.median(_xs), np.median(_ys)
+        dist = np.hypot(_xs - mcx, _ys - mcy)
+        lim = max(8000.0, 6.0 * np.median(dist))
+        mant = [f for f, dd in zip(furos, dist) if dd <= lim]
+        if len(mant) >= 3 and len(mant) < len(furos):
+            print("[mapa7] descartados %d furo(s) fora do cluster (>%.0f m)" %
+                  (len(furos) - len(mant), lim))
+            furos = mant
     xs = np.array([f["x"] for f in furos]); ys = np.array([f["y"] for f in furos])
     n = len(furos)
     n_agua = sum(1 for f in furos if f["agua"])
