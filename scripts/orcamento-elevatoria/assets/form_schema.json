@@ -1,0 +1,976 @@
+{
+ "schema": [
+  {
+   "t": "area",
+   "label": "1. SERVIÇOS INICIAIS"
+  },
+  {
+   "t": "sub",
+   "label": "Dados de entrada (projeto)"
+  },
+  {
+   "t": "in",
+   "key": "cant_c",
+   "label": "Canteiro/locação — comprimento",
+   "nota": "PARQ implantação",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "cant_l",
+   "label": "Canteiro/locação — largura",
+   "nota": "PARQ implantação",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "spt",
+   "label": "Sondagem SPT — extensão",
+   "nota": "SPT sempre 25 m",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "trado",
+   "label": "Sondagem a trado — extensão",
+   "nota": "",
+   "un": "m"
+  },
+  {
+   "t": "sub",
+   "label": "Quantitativos"
+  },
+  {
+   "t": "qd",
+   "key": "placa",
+   "label": "Placa de obra (chapa metálica 2,0×2,0)",
+   "nota": "Modelo Sanepar",
+   "un": "m²"
+  },
+  {
+   "t": "qd",
+   "key": "asbuilt",
+   "label": "Cadastro as-built obra localizada",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "qd",
+   "key": "acesso",
+   "label": "Acesso provisório",
+   "nota": "",
+   "un": "m²"
+  },
+  {
+   "t": "qd",
+   "key": "plc1",
+   "label": "Placa advertência 1,0×1,0 m",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "qd",
+   "key": "plc2",
+   "label": "Placa advertência 1,0×2,0 m",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "area",
+   "label": "2. POÇO (CAIXA EEE)"
+  },
+  {
+   "t": "sub",
+   "label": "Dados de entrada (projeto)"
+  },
+  {
+   "t": "in",
+   "key": "esc_c",
+   "label": "Escavação caixa — comprimento",
+   "nota": "PEST cortes",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "esc_l",
+   "label": "Escavação caixa — largura",
+   "nota": "PEST cortes",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "esc_p",
+   "label": "Escavação caixa — profundidade",
+   "nota": "±0,00 → fundo + folga",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "c40_poco",
+   "label": "Concreto fck40 — poço",
+   "nota": "PEST-1: total − PV − base",
+   "un": "m³"
+  },
+  {
+   "t": "in",
+   "key": "frm_poco",
+   "label": "Fôrma chapa 12mm — poço",
+   "nota": "PEST-1: total − PV − base",
+   "un": "m²"
+  },
+  {
+   "t": "in",
+   "key": "aco_pc",
+   "label": "Aço CA-50 — caixa EEE",
+   "nota": "Relação de aço PEST-2",
+   "un": "kg"
+  },
+  {
+   "t": "in",
+   "key": "cmag",
+   "label": "Concreto magro fck15 (lastro)",
+   "nota": "Quantitativo estrutural",
+   "un": "m³"
+  },
+  {
+   "t": "in",
+   "key": "rec160",
+   "label": "Recalque interno PEAD DE160",
+   "nota": "Trecho dentro da EEE",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "piso_e",
+   "label": "Piso concreto — espessura",
+   "nota": "",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "calcada",
+   "label": "Calçada — área (ao redor da estação)",
+   "nota": "PARQ planta baixa 1:25",
+   "un": "m²"
+  },
+  {
+   "t": "in",
+   "key": "imp_pa_h",
+   "label": "Imperm. parede A — altura",
+   "nota": "",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "imp_pa_l",
+   "label": "Imperm. parede A — largura",
+   "nota": "",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "imp_pb_h",
+   "label": "Imperm. parede B — altura",
+   "nota": "",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "imp_pb_l",
+   "label": "Imperm. parede B — largura",
+   "nota": "",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "imp_tp_c",
+   "label": "Imperm. tampa — comprimento",
+   "nota": "",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "imp_tp_l",
+   "label": "Imperm. tampa — largura",
+   "nota": "",
+   "un": "m"
+  },
+  {
+   "t": "sub",
+   "label": "Movimento de solos"
+  },
+  {
+   "t": "sub",
+   "label": "Fundações / estrutura"
+  },
+  {
+   "t": "sub",
+   "label": "Assentamentos"
+  },
+  {
+   "t": "qd",
+   "key": "fd150ass",
+   "label": "Assentamento tubulação FD DN150",
+   "nota": "",
+   "un": "m"
+  },
+  {
+   "t": "sub",
+   "label": "Pavimentação / acessos"
+  },
+  {
+   "t": "qd",
+   "key": "escada",
+   "label": "Escada tipo marinheiro PRFV <3,5m",
+   "nota": "PARQ item 3",
+   "un": "ud"
+  },
+  {
+   "t": "sub",
+   "label": "Materiais hidráulicos — COTAÇÃO (PHID-03)"
+  },
+  {
+   "t": "cp",
+   "key": "m01",
+   "label": "Tubo PEAD PE100 PN10 ocre DE160 L=1,6m",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m02",
+   "label": "Colarinho PEAD termofusão PE100 PN10 DE160",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m03",
+   "label": "Toco tubo FD FF 0,25m esgoto DN150",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m04",
+   "label": "Conjunto motobomba em linha",
+   "nota": "",
+   "un": "cj"
+  },
+  {
+   "t": "cp",
+   "key": "m05",
+   "label": "Tê redução FD FFF PN16 DN100/DN80",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m06",
+   "label": "Ventosa tríplice esgoto PN10/16 DN100",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m07",
+   "label": "Tê FD FFF PN16 esgoto DN80",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m08",
+   "label": "Toco tubo FD FF 700mm aba PN16 DN80",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m09",
+   "label": "Colarinho PEAD termofusão PE100 PN10 DE90",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m10",
+   "label": "Válvula guilhotina FD bidirec. PN16 DN80",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m11",
+   "label": "Tubo FD K9 FF solda interf. 1,20m DN80",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m12",
+   "label": "Extremidade FD PF 700mm aba PN16 DN80",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m13",
+   "label": "Curva FD JE 2GS BB 22 esgoto DN80",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m14",
+   "label": "Tubo FD K9 PP esgoto 0,9m DN80",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m15",
+   "label": "Conj. motobomba submersível (drenagem)",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m16",
+   "label": "Adaptador PPR80 bolsa/rosca PN10 DE90",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m17",
+   "label": "Tubo PPR80 JS PP termofusão 6m PN10 DE90",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m18",
+   "label": "União PPR flangeada DE90 PN10",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m19",
+   "label": "Curva longa 90° PPR DE90",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "m20",
+   "label": "Flange aço carbono p/ colarinho PEAD DE160 DN150",
+   "nota": "",
+   "un": "cj"
+  },
+  {
+   "t": "cp",
+   "key": "m21",
+   "label": "Flange aço carbono p/ colarinho PEAD DE90 DN80",
+   "nota": "",
+   "un": "cj"
+  },
+  {
+   "t": "cp",
+   "key": "m22",
+   "label": "Kit parafuso flange colarinho PEAD DN80",
+   "nota": "",
+   "un": "cj"
+  },
+  {
+   "t": "cp",
+   "key": "m23",
+   "label": "Kit parafuso flange colarinho PEAD DN150",
+   "nota": "",
+   "un": "cj"
+  },
+  {
+   "t": "cp",
+   "key": "m24",
+   "label": "Kit parafuso válvula wafer DN80",
+   "nota": "",
+   "un": "cj"
+  },
+  {
+   "t": "cp",
+   "key": "m25",
+   "label": "Kit parafuso esgoto PN16 DN80",
+   "nota": "",
+   "un": "cj"
+  },
+  {
+   "t": "cp",
+   "key": "m26",
+   "label": "Kit parafuso esgoto PN16 DN100",
+   "nota": "",
+   "un": "cj"
+  },
+  {
+   "t": "cp",
+   "key": "m27",
+   "label": "Kit parafuso inox esgoto PN10 DN150",
+   "nota": "",
+   "un": "cj"
+  },
+  {
+   "t": "area",
+   "label": "3. POÇO DE VISITA (PV CHEGADA)"
+  },
+  {
+   "t": "sub",
+   "label": "Dados de entrada (projeto)"
+  },
+  {
+   "t": "in",
+   "key": "pv_c",
+   "label": "Escavação PV — comprimento",
+   "nota": "",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "pv_l",
+   "label": "Escavação PV — largura",
+   "nota": "",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "pv_p",
+   "label": "Escavação PV — profundidade",
+   "nota": "PEST: fundo PV",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "frm_pv",
+   "label": "Fôrma chapa 12mm — PV",
+   "nota": "PEST",
+   "un": "m²"
+  },
+  {
+   "t": "in",
+   "key": "aco_pv",
+   "label": "Aço CA-50 — PV entrada",
+   "nota": "Relação de aço PEST-3",
+   "un": "kg"
+  },
+  {
+   "t": "in",
+   "key": "c40_pv",
+   "label": "Concreto fck40 — PV",
+   "nota": "PEST",
+   "un": "m³"
+  },
+  {
+   "t": "in",
+   "key": "imp_pv",
+   "label": "Imperm. PV — área",
+   "nota": "π·D·H",
+   "un": "m²"
+  },
+  {
+   "t": "sub",
+   "label": "Quantitativos"
+  },
+  {
+   "t": "qd",
+   "key": "pvd1",
+   "label": "PV tipo D DN1200 — prof até 2,00m",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "qd",
+   "key": "anel1",
+   "label": "Poço em anéis DN1200 até 1,00m",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "qd",
+   "key": "tampao",
+   "label": "Tampão FD 850/910mm (PARQ item 1)",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "area",
+   "label": "4. ABRIGO / PAINEL ELÉTRICO"
+  },
+  {
+   "t": "sub",
+   "label": "Dados de entrada (projeto)"
+  },
+  {
+   "t": "in",
+   "key": "frm_ab",
+   "label": "Fôrma chapa 12mm — base painel",
+   "nota": "PEST",
+   "un": "m²"
+  },
+  {
+   "t": "in",
+   "key": "aco_ab",
+   "label": "Aço CA-50 — base painel",
+   "nota": "Relação de aço PEST-3",
+   "un": "kg"
+  },
+  {
+   "t": "in",
+   "key": "c40_ab",
+   "label": "Concreto fck40 — base painel",
+   "nota": "PEST",
+   "un": "m³"
+  },
+  {
+   "t": "in",
+   "key": "imp_ab",
+   "label": "Imperm. abrigo — área",
+   "nota": "",
+   "un": "m²"
+  },
+  {
+   "t": "in",
+   "key": "mur_c",
+   "label": "Mureta — comprimento",
+   "nota": "",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "mur_h",
+   "label": "Mureta — altura",
+   "nota": "",
+   "un": "m"
+  },
+  {
+   "t": "in",
+   "key": "rev",
+   "label": "Área revestida (chapisco/pintura)",
+   "nota": "Mureta 2 faces + cinta",
+   "un": "m²"
+  },
+  {
+   "t": "sub",
+   "label": "Quantitativos"
+  },
+  {
+   "t": "cp",
+   "key": "e_qcm",
+   "label": "Painel elétrico QCM 2 motores inv. 3CV",
+   "nota": "PELE 02.02",
+   "un": "ud"
+  },
+  {
+   "t": "qd",
+   "key": "e_ent",
+   "label": "Entrada de energia trifásica em mureta",
+   "nota": "PELE 01.06",
+   "un": "ud"
+  },
+  {
+   "t": "area",
+   "label": "5. ELÉTRICO / EXTERNO (LIGAÇÕES PREDIAIS) — PELE"
+  },
+  {
+   "t": "sub",
+   "label": "Eletrodutos e caixas"
+  },
+  {
+   "t": "qd",
+   "key": "e_pead",
+   "label": "Eletroduto PEAD flex. 2\" subterrâneo",
+   "nota": "PELE 01.01",
+   "un": "m"
+  },
+  {
+   "t": "qd",
+   "key": "e_aco",
+   "label": "Eletroduto aço galv. 2\" (FG)",
+   "nota": "PELE 01.02",
+   "un": "m"
+  },
+  {
+   "t": "qd",
+   "key": "e_lb",
+   "label": "Condulete LB alumínio 2\"",
+   "nota": "PELE 01.03",
+   "un": "ud"
+  },
+  {
+   "t": "qd",
+   "key": "e_t",
+   "label": "Condulete T alumínio 2\"",
+   "nota": "PELE 01.04",
+   "un": "ud"
+  },
+  {
+   "t": "qd",
+   "key": "e_cx",
+   "label": "Caixa concreto pré-mold. 0,40³",
+   "nota": "PELE 01.05",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "e_cxinsp",
+   "label": "Caixa inspeção propileno DN300",
+   "nota": "PELE 04.06",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "e_eqp",
+   "label": "Caixa equipotencialização 9 furos",
+   "nota": "PELE 04.02",
+   "un": "ud"
+  },
+  {
+   "t": "sub",
+   "label": "Cabos e conectores"
+  },
+  {
+   "t": "qd",
+   "key": "e_cabonu",
+   "label": "Cabo de cobre nu 50mm²",
+   "nota": "PELE 04.01",
+   "un": "m"
+  },
+  {
+   "t": "cp",
+   "key": "e_cabo25",
+   "label": "Cabo cobre 2,5mm² tetrapolar",
+   "nota": "PELE 05.04",
+   "un": "m"
+  },
+  {
+   "t": "qd",
+   "key": "e_instr",
+   "label": "Cabo instrumentação blindado 1x2#1,5",
+   "nota": "PELE 05.05",
+   "un": "m"
+  },
+  {
+   "t": "cp",
+   "key": "e_term",
+   "label": "Terminal estanhado 1 furo",
+   "nota": "PELE 04.04",
+   "un": "ud"
+  },
+  {
+   "t": "qd",
+   "key": "e_split",
+   "label": "Conector split-bolt",
+   "nota": "PELE 04.05",
+   "un": "ud"
+  },
+  {
+   "t": "sub",
+   "label": "Aterramento / instrumentação"
+  },
+  {
+   "t": "qd",
+   "key": "e_haste",
+   "label": "Haste de aterramento 3/4\" 3,0m",
+   "nota": "PELE 04.03",
+   "un": "ud"
+  },
+  {
+   "t": "cp",
+   "key": "e_chv",
+   "label": "Chave de nível tipo pera NA+NF",
+   "nota": "PELE 02.03",
+   "un": "ud"
+  },
+  {
+   "t": "sub",
+   "label": "Mão de obra"
+  },
+  {
+   "t": "qd",
+   "key": "e_eletr",
+   "label": "Eletricista industrial (h)",
+   "nota": "PELE 03.01",
+   "un": "h"
+  },
+  {
+   "t": "qd",
+   "key": "e_ajud",
+   "label": "Ajudante de eletricista (h)",
+   "nota": "PELE 03.02",
+   "un": "h"
+  },
+  {
+   "t": "qd",
+   "key": "e_ped",
+   "label": "Pedreiro (h)",
+   "nota": "PELE 03.03",
+   "un": "h"
+  },
+  {
+   "t": "qd",
+   "key": "e_auxped",
+   "label": "Auxiliar de pedreiro (h)",
+   "nota": "PELE 03.04",
+   "un": "h"
+  },
+  {
+   "t": "qd",
+   "key": "e_comis",
+   "label": "Comissionamento/startup 2 CMB c/ CLP (h)",
+   "nota": "PELE 03.05 — PENDENTE",
+   "un": "h"
+  },
+  {
+   "t": "sub",
+   "label": "Instalações, valas e limpeza"
+  },
+  {
+   "t": "qd",
+   "key": "e_instp",
+   "label": "Instalação de poste",
+   "nota": "",
+   "un": "ud"
+  },
+  {
+   "t": "qd",
+   "key": "e_poste",
+   "label": "Poste de concreto armado duplo T 7m",
+   "nota": "",
+   "un": "ud"
+  }
+ ],
+ "defData": {
+  "cant_c": 8.5,
+  "cant_l": 3.0,
+  "spt": 25.0,
+  "trado": 5.0,
+  "placa": 4.0,
+  "asbuilt": 1.0,
+  "acesso": 5.0,
+  "plc1": 2.0,
+  "plc2": 2.0,
+  "esc_c": 4.5,
+  "esc_l": 3.0,
+  "esc_p": 3.4,
+  "c40_poco": 9.73,
+  "frm_poco": 49.72,
+  "aco_pc": 816.92,
+  "cmag": 0.52,
+  "rec160": 6.0,
+  "piso_e": 0.05,
+  "calcada": 9.0,
+  "imp_pa_h": 3.65,
+  "imp_pa_l": 2.6,
+  "imp_pb_h": 2.9,
+  "imp_pb_l": 1.5,
+  "imp_tp_c": 3.1,
+  "imp_tp_l": 2.0,
+  "fd150ass": 0.25,
+  "escada": 1.0,
+  "m01": 1.0,
+  "m02": 1.0,
+  "m03": 1.0,
+  "m04": 1.0,
+  "m05": 1.0,
+  "m06": 1.0,
+  "m07": 1.0,
+  "m08": 1.0,
+  "m09": 1.0,
+  "m10": 1.0,
+  "m11": 1.0,
+  "m12": 1.0,
+  "m13": 1.0,
+  "m14": 1.0,
+  "m15": 1.0,
+  "m16": 1.0,
+  "m17": 1.0,
+  "m18": 1.0,
+  "m19": 1.0,
+  "m20": 1.0,
+  "m21": 1.0,
+  "m22": 1.0,
+  "m23": 1.0,
+  "m24": 1.0,
+  "m25": 4.0,
+  "m26": 2.0,
+  "m27": 1.0,
+  "pv_c": 2.0,
+  "pv_l": 2.0,
+  "pv_p": 2.5,
+  "frm_pv": 12.0,
+  "aco_pv": 37.26,
+  "c40_pv": 0.81,
+  "imp_pv": 9.34,
+  "pvd1": 1.0,
+  "anel1": 1.0,
+  "tampao": 1.0,
+  "frm_ab": 1.04,
+  "aco_ab": 28.96,
+  "c40_ab": 0.34,
+  "imp_ab": 2.72,
+  "mur_c": 0.5,
+  "mur_h": 1.8,
+  "rev": 2.592,
+  "e_qcm": 1.0,
+  "e_ent": 1.0,
+  "e_pead": 6.0,
+  "e_aco": 12.0,
+  "e_lb": 7.0,
+  "e_t": 1.0,
+  "e_cx": 1.0,
+  "e_cxinsp": 1.0,
+  "e_eqp": 1.0,
+  "e_cabonu": 20.0,
+  "e_cabo25": 30.0,
+  "e_instr": 10.0,
+  "e_term": 5.0,
+  "e_split": 5.0,
+  "e_haste": 4.0,
+  "e_chv": 1.0,
+  "e_eletr": 528.0,
+  "e_ajud": 528.0,
+  "e_ped": 176.0,
+  "e_auxped": 176.0,
+  "e_comis": 80.0,
+  "e_instp": 1.0,
+  "e_poste": 1.0
+ },
+ "defCp": {
+  "m01": [
+   135.02,
+   "Modelo A2 = 135,02; alt. Transpol 1810 (110,42/m) — conferir"
+  ],
+  "m02": [
+   520.0,
+   "Hidroluna 39285, item 43 (Colarinho PEAD DE160)"
+  ],
+  "m03": [
+   712.96,
+   "MultHidro 0045119 (TOCO TOF150x250)"
+  ],
+  "m04": [
+   118259.86,
+   "Improv Equipamentos THS26.415 R01 (25/05/26) — SBL-220-SS-2P 3CV, 0,26 l/s / 15 mca (pacote: conj. em linha + painel + válvulas + dren.)"
+  ],
+  "m05": [
+   666.2,
+   "MultHidro 0045119 (TE TFF100x80)"
+  ],
+  "m06": [
+   6333.04,
+   "Hidroluna 39285, item 47 (Ventosa tríplice DN100)"
+  ],
+  "m07": [
+   579.82,
+   "MultHidro 0045119 (TE TFF80x80)"
+  ],
+  "m08": [
+   1679.95,
+   "MultHidro 0045119 (TUBO-FLS 80x700 AV)"
+  ],
+  "m09": [
+   110.69,
+   "Hidroluna 39285, item 50 (Colarinho PEAD DE90)"
+  ],
+  "m10": [
+   1917.0,
+   "A2 — sem cotação DN80 (só DN100)"
+  ],
+  "m11": [
+   997.55,
+   "A2 — sem essa medida (1,20m DN80) nas cotações"
+  ],
+  "m12": [
+   647.0,
+   "Ferpac-Salvati 0739, item 10 (Extremidade FD PF 700mm DN80)"
+  ],
+  "m13": [
+   338.0,
+   "MultHidro 0045119 (CURVA C22FF 80)"
+  ],
+  "m14": [
+   733.85,
+   "MultHidro 0045119 (TUBO PTA 80x1000)"
+  ],
+  "m15": [
+   null,
+   "Incluído no conj. em linha (A2); cotação individual da submersível PENDENTE"
+  ],
+  "m16": [
+   112.86,
+   "A2 — PPR DE90 não cotado"
+  ],
+  "m17": [
+   645.94,
+   "A2 — PPR DE90 não cotado"
+  ],
+  "m18": [
+   731.16,
+   "A2 — PPR DE90 não cotado"
+  ],
+  "m19": [
+   503.09,
+   "A2 — PPR DE90 não cotado"
+  ],
+  "m20": [
+   372.03,
+   "Hidroluna 39285, item 62 (Flange aço carbono DE160 DN150)"
+  ],
+  "m21": [
+   182.63,
+   "Hidroluna 39285, item 61 (Flange aço carbono DE90 DN80)"
+  ],
+  "m22": [
+   103.67,
+   "A2 — kit (Ferpac 11,00 / MTS 105,85)"
+  ],
+  "m23": [
+   137.61,
+   "A2 — kit"
+  ],
+  "m24": [
+   103.67,
+   "A2 — kit"
+  ],
+  "m25": [
+   103.67,
+   "A2 — kit (Ferpac 0739: 6,50–11,00)"
+  ],
+  "m26": [
+   135.11,
+   "A2 — kit"
+  ],
+  "m27": [
+   200.21,
+   "A2 — kit inox DN150"
+  ],
+  "e_cxinsp": [
+   56.87,
+   "A2 — sem cotação (caixa inspeção DN300)"
+  ],
+  "e_eqp": [
+   497.65,
+   "A2 — sem cotação (caixa equipotencialização)"
+  ],
+  "e_cabo25": [
+   9.0,
+   "A2 — sem cotação (cabo 2,5mm² tetrapolar)"
+  ],
+  "e_term": [
+   7.06,
+   "A2 — sem cotação (terminal estanhado)"
+  ],
+  "e_chv": [
+   387.2,
+   "A2 — sem cotação de chave de nível"
+  ]
+ }
+}
