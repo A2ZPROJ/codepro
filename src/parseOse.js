@@ -1091,10 +1091,14 @@ function parseExcel(filePath) {
     const oseNum = normOseNum(m[1]);
     const ws = wb.Sheets[sheetName];
 
-    // Comprimento total: cell C6
+    // Comprimento total: cell C6. CUIDADO: quando a fórmula dá erro (#N/A, #REF!,
+    // etc.) o SheetJS marca a célula com t==='e' e v = CÓDIGO do erro — e o código
+    // do #N/A é 42. Sem checar t!=='e', o parser lia "42" como se fosse o
+    // comprimento → bug "TODAS as OSEs com 42 m" (planilhas REV02 do Diamante têm
+    // C6 = #N/A). O fallback por coordenadas abaixo cobre esse caso.
     let comp = null;
     const c6 = ws[xlsx.utils.encode_cell({ r: 5, c: 2 })];
-    if (c6 && typeof c6.v === 'number') comp = rnd(c6.v, 4);
+    if (c6 && c6.t !== 'e' && typeof c6.v === 'number') comp = rnd(c6.v, 4);
 
     // Header em row 10 (0-indexed 9), data a partir de row 11 (0-indexed 10)
     const dataStart = 10;
@@ -1117,6 +1121,7 @@ function parseExcel(filePath) {
     // Agrupa por nome (TL|PV)-\d+
     const order = [];
     const grouped = {};
+    const seq = [];   // poligonal (este,norte) de TODOS os pontos p/ comprimento real
     let emptyStreak = 0;
 
     for (let r = dataStart; r <= lastRow; r++) {
@@ -1164,6 +1169,21 @@ function parseExcel(filePath) {
         order.push(id);
       }
       grouped[id].push(rec);
+      // poligonal p/ comprimento real (fallback): coords levantadas em ordem.
+      if (rec.este != null && rec.norte != null) seq.push([rec.este, rec.norte]);
+    }
+
+    // Fallback do comprimento: se a planilha não traz (C6 #N/A/erro), calcula
+    // pela poligonal das coordenadas (PV+TL+PIT em ordem de lançamento) — é o
+    // comprimento REAL da vala. Ignora pontos repetidos e saltos absurdos.
+    if (comp == null && seq.length >= 2) {
+      let L = 0;
+      for (let i = 1; i < seq.length; i++) {
+        const dx = seq[i][0] - seq[i - 1][0], dy = seq[i][1] - seq[i - 1][1];
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > 0.001 && d < 1000) L += d;
+      }
+      if (L > 0) comp = rnd(L, 2);
     }
 
     // Filtra: só PV/TL (sem PIT) para o relatório consolidado, mas mantemos PIT
