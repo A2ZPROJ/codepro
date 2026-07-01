@@ -206,6 +206,23 @@ function rnd(v, d) {
   return Math.round(v * Math.pow(10, d)) / Math.pow(10, d);
 }
 
+// Valor mais frequente (moda) de uma lista de números, agrupando por 5 casas.
+// Usado p/ a declividade do trecho: os PITs intermediários repetem o i real do
+// trecho, então a moda o recupera e IGNORA um valor espúrio isolado (ex.: um PV
+// compartilhado que carrega a declividade de outro trecho). Empate → o maior
+// grupo; se todos únicos, cai na mediana (robusta a outlier, ≠ max).
+function modaNum(arr) {
+  const xs = arr.filter(v => v != null);
+  if (!xs.length) return null;
+  const cnt = new Map();
+  for (const v of xs) { const k = v.toFixed(5); cnt.set(k, (cnt.get(k) || 0) + 1); }
+  let bestK = null, bestC = 0;
+  for (const [k, c] of cnt) { if (c > bestC) { bestC = c; bestK = k; } }
+  if (bestC >= 2) return parseFloat(bestK);
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];   // mediana quando não há repetição
+}
+
 function lastNum(raw) {
   const s = raw
     .replace(/\\f[^;]*;/gi, '')
@@ -800,9 +817,11 @@ function parsePerfisDxf(filePath) {
         } else if (rdy > OP[0] && rdy < OP[1] && /^\d+[.,]\d+$/.test(t)) {
           const n = parseFloat(t.replace(',', '.'));
           if (!isNaN(n) && n > 0 && n < 20) rec.h = n;
-        } else if (rdy > OE[0] && rdy < OE[1] && /\d+\.\d+m/.test(t)) {
-          const m = t.match(/([\d.]+)m/);
-          if (m) rec.ext_acum = parseFloat(m[1]);
+        } else if (rdy > OE[0] && rdy < OE[1]) {
+          // EXTENSÃO: aceita "43.66m" (template com sufixo) OU "3.00"/"12.50"
+          // (template MND-curto de Diamante, ex. OSE-105/PV-CO-1, sem "m").
+          const m = t.match(/([\d.]+)\s*m\b/) || t.match(/^(\d+[.,]\d+)$/);
+          if (m) { const n = parseFloat(m[1].replace(',', '.')); if (!isNaN(n) && n >= 0 && n < 100000) rec.ext_acum = n; }
         } else if (rdy > OD[0] && rdy < OD[1]) {
           const lines = t.split('\n').map(l => l.trim().replace(',', '.'));
           for (const ln of lines) {
@@ -895,6 +914,19 @@ function parsePerfisDxf(filePath) {
         const m = dnC.t.match(/^(\d{2,4})$/);
         if (m) { const n = parseInt(m[1], 10); if (n >= 50 && n <= 1500) rec.diam = n; }
       }
+      // EXTENSÃO (m): banda abaixo das de DN. Índice calculado pela posição do
+      // rótulo EXTENSÃO relativo ao CT (topo) — no template MND de Diamante ela
+      // é a banda ~9 e traz a distância ACUMULADA do trecho (ex.: 3.00, 6.00…),
+      // SEM o sufixo "m" (por isso o fallback por rótulo, que exige "\d+m", falhava
+      // e L saía null). L da OSE = max dessas extensões.
+      if (labels.ext != null && topoDy != null) {
+        const kExt = Math.round((topoDy - labels.ext) / lineGap);
+        const extC = pick(kExt);
+        if (extC) {
+          const m = extC.t.match(/^(\d+[.,]\d+)$/);
+          if (m) { const n = parseFloat(m[1].replace(',', '.')); if (n >= 0 && n < 100000) rec.ext_acum = n; }
+        }
+      }
       return rec;
     }
 
@@ -975,7 +1007,10 @@ function parsePerfisDxf(filePath) {
     const exts = Object.values(blockPvs).map(b => b.ext_acum).filter(v => v != null);
     const decls = Object.values(blockPvs).map(b => b.decl).filter(v => v != null);
     let Lblock = exts.length ? Math.max(...exts) : null;
-    let Iblock = decls.length ? Math.max(...decls) : null;
+    // i do trecho = MODA das declividades dos PVs/PITs (não max): um valor espúrio
+    // num PV compartilhado (ex.: OSE-105 PV-105=0.0343 vs trecho real=0.0094)
+    // inflava o max e virava o i da OSE inteira. A moda pega o i que os PITs repetem.
+    let Iblock = decls.length ? modaNum(decls) : null;
 
     // Fallback "por trecho": em layouts onde EXT/DECL aparecem na coluna
     // central do trecho (não na coluna do PV), o extractPv não acha esses
@@ -989,8 +1024,8 @@ function parsePerfisDxf(filePath) {
         const rdy = dy - dyPv;
         if (!(rdy > OFF_EXTAC[0] && rdy < OFF_EXTAC[1])) continue;
         const t = cleanMtext(it.text);
-        const m = t.match(/(\d+[.,]\d+)\s*m\b/);
-        if (m) candExt.push(parseFloat(m[1].replace(',', '.')));
+        const m = t.match(/(\d+[.,]\d+)\s*m\b/) || t.match(/^(\d+[.,]\d+)$/);
+        if (m) { const n = parseFloat(m[1].replace(',', '.')); if (!isNaN(n) && n >= 0 && n < 100000) candExt.push(n); }
       }
       if (candExt.length) Lblock = Math.max(...candExt);
     }
