@@ -14864,6 +14864,8 @@ body.presenting #presentingBadge { display: flex; }
               <input id="oelev-cidade" class="oelev-inp" type="text" placeholder="ex.: ALTAMIRA DO PARANÁ/PR"/></label>
             <label class="oelev-flbl">Contrato
               <input id="oelev-contrato" class="oelev-inp" type="text" placeholder="ex.: 61670/2024"/></label>
+            <label class="oelev-flbl">Responsável
+              <input id="oelev-responsavel" class="oelev-inp" type="text" placeholder="quem está gerando o orçamento"/></label>
           </div>
         </div>
 
@@ -14885,7 +14887,13 @@ body.presenting #presentingBadge { display: flex; }
 
         <!-- 4) Dados de entrada -->
         <div>
-          <div class="oelev-sec">4. Dados de entrada (DADOS do projeto) <span style="font-weight:400;color:var(--text3)">— amarelos no memorial; <b>qty</b> = quantidade, e nos materiais (cotação) também <b>preço</b> + <b>fonte</b></span></div>
+          <div class="oelev-sec" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span>4. Dados de entrada (DADOS do projeto) <span style="font-weight:400;color:var(--text3)">— amarelos no memorial; <b>qty</b> = quantidade, e nos materiais (cotação) também <b>preço</b> + <b>fonte</b></span></span>
+            <span style="margin-left:auto;display:flex;gap:6px;flex-shrink:0">
+              <button id="oelev-expand-all" type="button" style="background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:4px 10px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">▾ Expandir tudo</button>
+              <button id="oelev-collapse-all" type="button" style="background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:4px 10px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">▸ Recolher tudo</button>
+            </span>
+          </div>
           <div id="oelev-form" style="display:flex;flex-direction:column;gap:6px"></div>
         </div>
 
@@ -14908,6 +14916,15 @@ body.presenting #presentingBadge { display: flex; }
 
         <!-- resultado -->
         <div id="oelev-result" style="display:none;border:1px solid var(--border);border-radius:8px;background:var(--surface2);padding:14px 16px"></div>
+
+        <!-- 7) Orçamentos gerados anteriormente -->
+        <div style="border-top:1px solid var(--border);padding-top:14px">
+          <div class="oelev-sec" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span>Orçamentos gerados anteriormente</span>
+            <button id="oelev-hist-clear" type="button" style="margin-left:auto;background:none;color:var(--text3);border:1px solid var(--border);border-radius:6px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:600;cursor:pointer">Limpar histórico</button>
+          </div>
+          <div id="oelev-history" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
+        </div>
 
       </div>
     </div>
@@ -15045,6 +15062,7 @@ body.presenting #presentingBadge { display: flex; }
         SB: ($('oelev-sb').value||'').trim(),
         CIDADE: ($('oelev-cidade').value||'').trim(),
         CONTRATO: ($('oelev-contrato').value||'').trim(),
+        RESPONSAVEL: ($('oelev-responsavel')?.value||'').trim(),
         A2_PATH: _a2Path,
         OUT_XLSX: saida,
         DATA, CP,
@@ -15094,8 +15112,49 @@ body.presenting #presentingBadge { display: flex; }
       _busy = false;
       if(btn){ btn.disabled=false; btn.style.opacity=1; btn.style.cursor='pointer'; }
 
-      if (r && r.ok) { setStatus('Orçamento gerado com sucesso.','var(--green,#15803d)'); renderResult(r); }
+      if (r && r.ok) {
+        setStatus('Orçamento gerado com sucesso.','var(--green,#15803d)'); renderResult(r);
+        pushHist({
+          sb: r.sb||sb, cidade: r.cidade||($('oelev-cidade').value||'').trim(),
+          responsavel: ($('oelev-responsavel')?.value||'').trim(),
+          contrato: ($('oelev-contrato').value||'').trim(),
+          total: (r.total!=null && !isNaN(Number(r.total))) ? Number(r.total) : null,
+          xlsx: r.xlsx||'', pdfs: Array.isArray(r.pdfs)?r.pdfs:[],
+          data: new Date().toLocaleString('pt-BR'),
+        });
+      }
       else { const msg=(r&&(r.erro||r.error))||'Falha desconhecida.'; setStatus('Erro ao gerar o orçamento.','var(--red,#A11312)'); renderError(msg); }
+    }
+
+    // ── Histórico de orçamentos gerados (persistido no localStorage) ──
+    const HIST_KEY = 'oelev_history_v1';
+    function loadHist(){ try { return JSON.parse(localStorage.getItem(HIST_KEY)||'[]'); } catch { return []; } }
+    function saveHist(a){ try { localStorage.setItem(HIST_KEY, JSON.stringify(a.slice(0,50))); } catch {} }
+    function pushHist(rec){ const a=loadHist(); a.unshift(rec); saveHist(a); renderHistory(); }
+    function renderHistory(){
+      const box=$('oelev-history'); if(!box) return;
+      const a=loadHist();
+      if(!a.length){ box.innerHTML=`<span style="font-size:11px;color:var(--text3)">Nenhum orçamento gerado ainda.</span>`; return; }
+      box.innerHTML = a.map((h,i) =>
+        `<div style="display:flex;gap:10px;align-items:center;border:1px solid var(--border);border-radius:7px;padding:8px 10px;background:var(--surface2)">`
+        + `<div style="flex:1;min-width:0">`
+        +   `<div style="font-size:12px;font-weight:700;color:var(--text)">${esc(h.sb||'—')} <span style="font-weight:400;color:var(--text3)">· ${esc(h.cidade||'')}</span></div>`
+        +   `<div style="font-size:10px;color:var(--text3);margin-top:2px">${esc(h.data||'')}${h.responsavel?` · resp.: <b>${esc(h.responsavel)}</b>`:''}${(h.total!=null)?` · ${fmtRS(h.total)}`:''}</div>`
+        +   `<div title="${escA(h.xlsx||'')}" style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(h.xlsx||'')}</div>`
+        + `</div>`
+        + `<button class="oelev-hist-open" data-p="${escA(h.xlsx||'')}" ${h.xlsx?'':'disabled'} style="flex-shrink:0;background:var(--gray-900);color:white;border:none;border-radius:6px;padding:6px 12px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">Abrir</button>`
+        + (h.pdfs&&h.pdfs[1]?`<button class="oelev-hist-open" data-p="${escA(h.pdfs[1])}" style="flex-shrink:0;background:var(--surface);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">Memorial</button>`:'')
+        + `<button class="oelev-hist-del" data-i="${i}" title="remover do histórico" style="flex-shrink:0;background:none;border:none;color:var(--red,#A11312);cursor:pointer;font-size:14px;font-weight:700;padding:0 4px">×</button>`
+        + `</div>`
+      ).join('');
+      box.querySelectorAll('.oelev-hist-open').forEach(b => b.addEventListener('click', async () => {
+        if(!b.dataset.p) return;
+        const rr = await window.electronAPI.orcElev.abrir(b.dataset.p);
+        if (rr && !rr.ok) setStatus('Não foi possível abrir: '+(rr.error||'arquivo pode ter sido movido/excluído'),'var(--red,#A11312)');
+      }));
+      box.querySelectorAll('.oelev-hist-del').forEach(b => b.addEventListener('click', () => {
+        const arr=loadHist(); arr.splice(+b.dataset.i,1); saveHist(arr); renderHistory();
+      }));
     }
 
     function abrirBtn(label, p){
@@ -15148,11 +15207,17 @@ body.presenting #presentingBadge { display: flex; }
       } catch(e){ setStatus('Falha ao inicializar: '+(e&&e.message||e),'var(--red,#A11312)'); }
       renderRefs();
       renderForm();
+      renderHistory();
       // progresso do engine
       if (window.electronAPI.orcElev.onProgresso && !_unsub) _unsub = window.electronAPI.orcElev.onProgresso(logLine);
       const a2btn=$('oelev-pick-a2');
       if (a2btn) a2btn.addEventListener('click', async () => { const p = await window.electronAPI.orcElev.pickA2(); if(p){ _a2Path=p; const inp=$('oelev-a2-path'); if(inp) inp.value=p; } });
       const gbtn=$('oelev-gerar'); if (gbtn) gbtn.addEventListener('click', gerar);
+      // minimizar/maximizar todas as áreas do formulário
+      const setAllAreas = (op) => document.querySelectorAll('#oelev-form .oelev-area').forEach(d => { d.open = op; });
+      $('oelev-expand-all')?.addEventListener('click', () => setAllAreas(true));
+      $('oelev-collapse-all')?.addEventListener('click', () => setAllAreas(false));
+      $('oelev-hist-clear')?.addEventListener('click', () => { if(confirm('Limpar todo o histórico de orçamentos gerados?')){ saveHist([]); renderHistory(); } });
     };
   })();
   </script>
