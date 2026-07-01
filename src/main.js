@@ -1861,13 +1861,13 @@ ipcMain.handle('orc-elev:pick-a2', async () => {
 });
 
 ipcMain.handle('orc-elev:pick-pdf', async () => {
-  if (!mainWindow) return null;
+  if (!mainWindow) return [];
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Selecionar projeto (PDF)',
-    properties: ['openFile'],
+    title: 'Selecionar projeto(s) — pode escolher vários PDFs',
+    properties: ['openFile', 'multiSelections'],
     filters: [{ name: 'PDF', extensions: ['pdf'] }, { name: 'Todos os arquivos', extensions: ['*'] }],
   });
-  return result.canceled ? null : result.filePaths[0];
+  return result.canceled ? [] : result.filePaths;   // array (seleção múltipla)
 });
 
 ipcMain.handle('orc-elev:pick-save', async (_e, defaultName) => {
