@@ -190,15 +190,22 @@ function classifyOse(r, ctx) {
     ]));
   }
 
-  // Declividade i
+  // Declividade i — compara o MÓDULO arredondado à 4ª casa decimal.
+  // Por quê: (1) a 5ª casa em diante é ruído de arredondamento entre as fontes e
+  // NÃO deve acusar divergência — se planilha/perfil/mapa batem até a 4ª casa,
+  // está OK; (2) o mapa às vezes traz o SINAL da declividade enquanto a planilha/
+  // perfil trazem só o módulo — comparar |i| evita o falso "i divergente" nesse
+  // caso (o sentido do fluxo já é checado pelos testes de contra-declive).
+  const r4i = (x) => (x == null ? null : Math.round(Math.abs(x) * 1e4) / 1e4);
   const Im = r.mapa_i, Ip = r.excel_i, If = r.perfil_i;
+  const Ima = r4i(Im), Ipa = r4i(Ip), Ifa = r4i(If);
   const I_DIV = [
-    Im != null && Ip != null && Math.abs(Im - Ip) > TOL.I,
-    Im != null && If != null && Math.abs(Im - If) > TOL.I,
-    Ip != null && If != null && Math.abs(Ip - If) > TOL.I,
+    Ima != null && Ipa != null && Math.abs(Ima - Ipa) > TOL.I,
+    Ima != null && Ifa != null && Math.abs(Ima - Ifa) > TOL.I,
+    Ipa != null && Ifa != null && Math.abs(Ipa - Ifa) > TOL.I,
   ].some(Boolean);
   if (I_DIV) {
-    errors.push(divergMsg('i', 'OSE', '', 5, [
+    errors.push(divergMsg('i', 'OSE', '', 4, [
       { name: 'Planilha', v: Ip },
       { name: 'Mapa',     v: Im },
       { name: 'Perfil',   v: If },
