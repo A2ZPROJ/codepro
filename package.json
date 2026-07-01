@@ -45,6 +45,17 @@
         ]
       },
       {
+        "from": "scripts/orcamento-elevatoria",
+        "to": "scripts/orcamento-elevatoria",
+        "filter": [
+          "**/*.py",
+          "assets/**/*",
+          "!_gen_form_schema.py",
+          "!**/__pycache__/**",
+          "!configs/**"
+        ]
+      },
+      {
         "from": "scripts/memorial",
         "to": "scripts/memorial",
         "filter": [

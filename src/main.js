@@ -1803,6 +1803,143 @@ ipcMain.handle('orc-rce:abrir', async (_e, p) => {
 });
 
 // ────────────────────────────────────────────────────────────────────
+// ORÇAMENTO ELEVATÓRIA (EEE) — gera o orçamento de Estação Elevatória a
+// partir do gabarito A2 + DADOS DE ENTRADA do projeto, chamando o wrapper
+// Python (scripts/orcamento-elevatoria/gerar_orcamento_elevatoria.py), que
+// monta o config e roda o engine (Excel COM). Padrão isolado "orc-elev:".
+// Reusa o resolvedor de Python do RCE (orcRceResolvePython). Progresso do
+// engine (Custo/TOTAL/xlsx/pdf) sobe por 'orc-elev:progresso'; última
+// linha do stdout = JSON com {ok,xlsx,pdfs,total,...}.
+// ────────────────────────────────────────────────────────────────────
+function orcElevResolveScript() {
+  const candidates = [
+    path.join(__dirname, '..', 'scripts', 'orcamento-elevatoria', 'gerar_orcamento_elevatoria.py'),
+    path.join(process.resourcesPath || '', 'scripts', 'orcamento-elevatoria', 'gerar_orcamento_elevatoria.py'),
+    path.join(app.getAppPath(), '..', 'scripts', 'orcamento-elevatoria', 'gerar_orcamento_elevatoria.py'),
+  ];
+  for (const c of candidates) { try { if (c && fs.existsSync(c)) return c; } catch {} }
+  return null;
+}
+function orcElevA2Default() {
+  // gabarito A2 empacotado em scripts/orcamento-elevatoria/assets/
+  const candidates = [
+    path.join(__dirname, '..', 'scripts', 'orcamento-elevatoria', 'assets', '01 - ORC. ELEVATÓRIA_A2.xlsx'),
+    path.join(process.resourcesPath || '', 'scripts', 'orcamento-elevatoria', 'assets', '01 - ORC. ELEVATÓRIA_A2.xlsx'),
+    path.join(app.getAppPath(), '..', 'scripts', 'orcamento-elevatoria', 'assets', '01 - ORC. ELEVATÓRIA_A2.xlsx'),
+  ];
+  for (const c of candidates) { try { if (c && fs.existsSync(c)) return c; } catch {} }
+  return null;
+}
+
+ipcMain.handle('orc-elev:a2-default', async () => {
+  const p = orcElevA2Default();
+  return { ok: !!p, path: p || null };
+});
+
+ipcMain.handle('orc-elev:schema', async () => {
+  // schema do formulário (DADOS DE ENTRADA + CP) + defaults da família Altamira,
+  // gerado por scripts/orcamento-elevatoria/_gen_form_schema.py em assets/form_schema.json.
+  const candidates = [
+    path.join(__dirname, '..', 'scripts', 'orcamento-elevatoria', 'assets', 'form_schema.json'),
+    path.join(process.resourcesPath || '', 'scripts', 'orcamento-elevatoria', 'assets', 'form_schema.json'),
+    path.join(app.getAppPath(), '..', 'scripts', 'orcamento-elevatoria', 'assets', 'form_schema.json'),
+  ];
+  for (const c of candidates) {
+    try { if (c && fs.existsSync(c)) return { ok: true, data: JSON.parse(fs.readFileSync(c, 'utf8')) }; } catch (e) { return { ok: false, erro: e.message }; }
+  }
+  return { ok: false, erro: 'form_schema.json não encontrado.' };
+});
+
+ipcMain.handle('orc-elev:pick-a2', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecionar gabarito A2 (.xlsx)',
+    properties: ['openFile'],
+    filters: [{ name: 'Excel', extensions: ['xlsx'] }, { name: 'Todos os arquivos', extensions: ['*'] }],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('orc-elev:pick-pdf', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecionar projeto (PDF)',
+    properties: ['openFile'],
+    filters: [{ name: 'PDF', extensions: ['pdf'] }, { name: 'Todos os arquivos', extensions: ['*'] }],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('orc-elev:pick-save', async (_e, defaultName) => {
+  if (!mainWindow) return null;
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Salvar orçamento da Elevatória',
+    defaultPath: defaultName || 'ORC_EEE.xlsx',
+    filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+  });
+  return result.canceled ? null : result.filePath;
+});
+
+ipcMain.handle('orc-elev:gerar', async (event, cfg) => {
+  try {
+    cfg = cfg || {};
+    if (!cfg.SB)       return { ok: false, erro: 'Identificação (SB) não informada.' };
+    if (!cfg.A2_PATH)  return { ok: false, erro: 'Gabarito A2 não informado.' };
+    if (!cfg.OUT_XLSX) return { ok: false, erro: 'Caminho de saída não informado.' };
+    if (!cfg.DATA || typeof cfg.DATA !== 'object') return { ok: false, erro: 'DADOS DE ENTRADA ausentes.' };
+    if (!fs.existsSync(cfg.A2_PATH)) return { ok: false, erro: 'Gabarito A2 não encontrado: ' + cfg.A2_PATH };
+
+    const script = orcElevResolveScript();
+    if (!script) return { ok: false, erro: 'Wrapper Python não encontrado (scripts/orcamento-elevatoria/gerar_orcamento_elevatoria.py).' };
+
+    const py = orcRceResolvePython();
+    if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
+
+    const tmpJson = path.join(os.tmpdir(), `nexus_orc_elev_${Date.now()}.json`);
+    fs.writeFileSync(tmpJson, JSON.stringify(cfg, null, 2), 'utf8');
+
+    const { spawn } = require('child_process');
+    const args = [...py.args, script, '--config', tmpJson];
+    const send = (m) => { try { event.sender.send('orc-elev:progresso', m); } catch {} };
+
+    return await new Promise((resolve) => {
+      let out = '', err = '', proc;
+      try {
+        proc = spawn(py.cmd, args, {
+          windowsHide: true, cwd: path.dirname(script),
+          env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+        });
+      } catch (e) {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        return resolve({ ok: false, erro: 'Falha ao iniciar o Python: ' + e.message });
+      }
+      proc.stdout.setEncoding('utf8'); proc.stderr.setEncoding('utf8');
+      proc.stdout.on('data', d => { out += d; d.split(/\r?\n/).forEach(l => { l = l.trim(); if (l && l[0] !== '{') send(l); }); });
+      proc.stderr.on('data', d => { err += d; d.split(/\r?\n/).forEach(l => { l = l.trim(); if (l) send('⚠ ' + l); }); });
+      proc.on('error', (e) => {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        resolve({ ok: false, erro: 'Erro ao executar o Python: ' + e.message });
+      });
+      proc.on('close', (code) => {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        let parsed = null;
+        for (let i = lines.length - 1; i >= 0; i--) { try { parsed = JSON.parse(lines[i]); break; } catch {} }
+        if (parsed && typeof parsed === 'object') resolve(parsed);
+        else resolve({ ok: false, erro: (err || out || `Python saiu com código ${code} sem JSON.`).slice(-1500) });
+      });
+    });
+  } catch (e) {
+    return { ok: false, erro: e.message };
+  }
+});
+
+ipcMain.handle('orc-elev:abrir', async (_e, p) => {
+  try { const r = await shell.openPath(p); return { ok: !r, error: r || null }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ────────────────────────────────────────────────────────────────────
 // RH — BANCO DE CURRÍCULOS (índice local + busca por palavra-chave).
 // Store em userData\curriculos (arquivos copiados + index.json). Extração
 // de texto via scripts/rh/curriculos.py. Reusa orcRceResolvePython().

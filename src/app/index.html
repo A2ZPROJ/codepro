@@ -348,7 +348,7 @@
     const TAB_MAP = {
       generator: 'Cadastrar Novo Projeto', history: 'Histórico', dashboard: 'Dashboard',
       projects: 'Projetos', grd: 'GRD', verificar: 'Verificar Projeto',
-      conferencia: 'Conferência', 'gerar-pdf-ose': 'Gerar PDF Planilha OSE', orcamento: 'Orçamento', renomear: 'Renomear',
+      conferencia: 'Conferência', 'gerar-pdf-ose': 'Gerar PDF Planilha OSE', orcamento: 'Orçamento', 'orcamento-elevatoria': 'Orçamento Elevatória', renomear: 'Renomear',
       'planilhas-gis': 'Correção de Planilha GIS', perfil: 'Perfil', estoque: 'Estoque',
       pedidos: 'Pedidos de Compra', diretoria: 'Dashboard Contrato',
       relatorios: 'Relatórios Técnicos', sobre: 'Sobre',
@@ -375,7 +375,7 @@
     };
     const TAB_REQUIRES = {
       generator: 1, projects: 1, history: 1, dashboard: 1, perfil: 1, sobre: 1,
-      grd: 2, orcamento: 2, 'gerar-pdf-ose': 2, 'planilhas-gis': 2, renomear: 2, 'coleta-end': 2,
+      grd: 2, orcamento: 2, 'orcamento-elevatoria': 2, 'gerar-pdf-ose': 2, 'planilhas-gis': 2, renomear: 2, 'coleta-end': 2,
       estoque: 2, pedidos: 2, relatorios: 2,
       'frotas-veiculos': 2, 'frotas-abastec': 2,
       'obras-vistorias': 2,
@@ -7735,6 +7735,11 @@ body.presenting #presentingBadge { display: flex; }
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
           <span class="sb-label">Orçamento</span>
         </button>
+        <!-- 7c. Orçamento Elevatória (EEE) — gerador Python (Excel COM) -->
+        <button class="sb-item" data-tab="orcamento-elevatoria" data-label="Orçamento Elevatória" onclick="switchTab('orcamento-elevatoria',this);setTimeout(()=>window.orcElevInit&&window.orcElevInit(),60);">
+          <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.5C8 8 5 11.5 5 15a7 7 0 0014 0c0-3.5-3-7-7-12.5z"/><path d="M9 15a3 3 0 003 3"/></svg>
+          <span class="sb-label">Orçamento Elevatória</span>
+        </button>
         <!-- 8. Correção de Planilha GIS -->
         <button class="sb-item" data-tab="planilhas-gis" data-label="Correção de Planilha GIS" style="display:none" onclick="switchTab('planilhas-gis',this)">
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -14835,6 +14840,295 @@ body.presenting #presentingBadge { display: flex; }
       const t = e.target.closest && e.target.closest('.sb-item[data-tab="gerar-pdf-ose"]');
       if (t) setTimeout(wire, 30);
     });
+  })();
+  </script>
+
+  <!-- ── ORÇAMENTO ELEVATÓRIA (EEE) TAB — gerador Python (Excel COM) ───────── -->
+  <div class="tab-content" id="tab-orcamento-elevatoria">
+    <div style="padding:20px;max-width:1120px;margin:0 auto">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <div style="font-size:18px;font-weight:700;color:var(--text)">Orçamento de Estação Elevatória (EEE)</div>
+        <span style="font-size:11px;font-weight:700;background:rgba(13,148,136,.14);color:#0d9488;padding:3px 9px;border-radius:10px">2S / SANEPAR</span>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">Gera o orçamento (xlsx + 2 PDFs: orçamento e memorial) a partir do gabarito A2 + DADOS DE ENTRADA do projeto. Pré-preenchido com a família padronizada Altamira — ajuste por obra (leitura de PEST/PARQ/PHID/PELE). Requer Excel instalado.</div>
+
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:18px 20px;display:flex;flex-direction:column;gap:18px">
+
+        <!-- 1) Identificação -->
+        <div>
+          <div class="oelev-sec">1. Identificação</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+            <label class="oelev-flbl">SB <span style="color:var(--red,#A11312)">*</span>
+              <input id="oelev-sb" class="oelev-inp" type="text" placeholder="ex.: SB-A5"/></label>
+            <label class="oelev-flbl">Cidade / UF
+              <input id="oelev-cidade" class="oelev-inp" type="text" placeholder="ex.: ALTAMIRA DO PARANÁ/PR"/></label>
+            <label class="oelev-flbl">Contrato
+              <input id="oelev-contrato" class="oelev-inp" type="text" placeholder="ex.: 61670/2024"/></label>
+          </div>
+        </div>
+
+        <!-- 2) Gabarito A2 -->
+        <div>
+          <div class="oelev-sec">2. Gabarito A2 (planilha-base)</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="oelev-pick-a2" style="background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0">Trocar gabarito…</button>
+            <input id="oelev-a2-path" readonly placeholder="(gabarito padrão embutido)" style="flex:1;padding:7px 10px;font-family:inherit;font-size:11px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:5px">Por padrão usa o gabarito A2 embutido no app. Só troque se for usar outra planilha-base.</div>
+        </div>
+
+        <!-- 3) Projetos de referência (opcional) -->
+        <div>
+          <div class="oelev-sec">3. Projetos de referência <span style="font-weight:400;color:var(--text3)">(opcional — anexa o caminho p/ registro / leitura futura)</span></div>
+          <div id="oelev-refs" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px"></div>
+        </div>
+
+        <!-- 4) Dados de entrada -->
+        <div>
+          <div class="oelev-sec">4. Dados de entrada (DADOS do projeto) <span style="font-weight:400;color:var(--text3)">— amarelos no memorial; <b>qty</b> = quantidade, e nos materiais (cotação) também <b>preço</b> + <b>fonte</b></span></div>
+          <div id="oelev-form" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
+        <!-- 5) Ajustes avançados -->
+        <details style="border:1px dashed var(--border);border-radius:8px;padding:10px 12px">
+          <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text2)">Ajustes avançados (JSON) — opcional</summary>
+          <div style="font-size:10px;color:var(--text3);margin:8px 0">Cole overrides do config: <code>PRICE_UPD</code>, <code>QTY_UPD</code>, <code>CODE_UPD</code>, <code>AREA_INSERTS</code>, <code>EXTRA_BLOCK</code>, <code>MEMO_FONTES</code>. Ex.: <code>{"PRICE_UPD":{"81":118259.86},"EXTRA_BLOCK":{"titulo":"PAVIMENTAÇÃO ASFÁLTICA","itens":[["PAV-01","Pintura de ligação","MO","Sanepar",9,"m²",12.02]]}}</code></div>
+          <textarea id="oelev-adv" rows="4" placeholder="{ }" style="width:100%;font-family:ui-monospace,Consolas,monospace;font-size:11px;border:1.5px solid var(--border);border-radius:6px;padding:8px;color:var(--text);background:var(--surface);outline:none;resize:vertical"></textarea>
+          <div id="oelev-adv-err" style="font-size:10px;color:var(--red,#A11312);margin-top:4px"></div>
+        </details>
+
+        <!-- 6) Gerar -->
+        <div style="display:flex;align-items:center;gap:12px;border-top:1px solid var(--border);padding-top:14px">
+          <button id="oelev-gerar" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:10px 20px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Gerar orçamento</button>
+          <div id="oelev-status" style="font-size:12px;color:var(--text3)"></div>
+        </div>
+
+        <!-- progresso -->
+        <pre id="oelev-log" style="display:none;white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--text2);margin:0;font-family:ui-monospace,Consolas,monospace;max-height:180px;overflow:auto;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px"></pre>
+
+        <!-- resultado -->
+        <div id="oelev-result" style="display:none;border:1px solid var(--border);border-radius:8px;background:var(--surface2);padding:14px 16px"></div>
+
+      </div>
+    </div>
+  </div>
+  <style>
+    #tab-orcamento-elevatoria .oelev-inp {
+      padding:7px 10px; font-family:inherit; font-size:12px;
+      border:1.5px solid var(--border); border-radius:6px;
+      color:var(--text); background:var(--surface); outline:none; min-width:0;
+    }
+    #tab-orcamento-elevatoria .oelev-inp:focus { border-color:var(--gray-900); }
+    #tab-orcamento-elevatoria .oelev-flbl { display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2); }
+    #tab-orcamento-elevatoria .oelev-sec { font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px; }
+    #tab-orcamento-elevatoria .oelev-area { border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden; }
+    #tab-orcamento-elevatoria .oelev-area>summary { cursor:pointer;padding:9px 12px;font-size:12px;font-weight:700;color:var(--text);background:var(--surface2);list-style:none; }
+    #tab-orcamento-elevatoria .oelev-area>summary::-webkit-details-marker { display:none; }
+    #tab-orcamento-elevatoria .oelev-area>summary:before { content:'▸';margin-right:7px;color:var(--text3); }
+    #tab-orcamento-elevatoria .oelev-area[open]>summary:before { content:'▾'; }
+    #tab-orcamento-elevatoria .oelev-area-body { padding:8px 12px;display:flex;flex-direction:column;gap:5px; }
+    #tab-orcamento-elevatoria .oelev-sub { font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:7px 0 2px; }
+    #tab-orcamento-elevatoria .oelev-row { display:grid;grid-template-columns:1fr 90px 34px;gap:8px;align-items:center; }
+    #tab-orcamento-elevatoria .oelev-row-cp { grid-template-columns:1fr 70px 34px 90px 1.2fr; }
+    #tab-orcamento-elevatoria .oelev-lbl { font-size:11px;color:var(--text2); }
+    #tab-orcamento-elevatoria .oelev-nota { color:var(--text3);font-size:10px; }
+    #tab-orcamento-elevatoria .oelev-un { font-size:10px;color:var(--text3); }
+    #tab-orcamento-elevatoria .oelev-row .oelev-inp { padding:5px 8px;font-size:11px; }
+  </style>
+  <script>
+  (function(){
+    // Fluxo isolado: gera o orçamento de Elevatória chamando o wrapper Python via
+    // window.electronAPI.orcElev (IPC orc-elev:*). Schema do formulário vem do
+    // backend (orc-elev:schema -> assets/form_schema.json, gerado do engine.py).
+    const $ = (id) => document.getElementById(id);
+    let _busy = false, _a2Path = null, _inited = false, _unsub = null;
+    let SCHEMA = [], DEF_DATA = {}, DEF_CP = {};
+    const REFS = [
+      { k:'pest', lbl:'PEST (estrutural)' }, { k:'parq', lbl:'PARQ (arquitetônico)' },
+      { k:'phid', lbl:'PHID (hidráulico)' }, { k:'pele', lbl:'PELE (elétrico)' },
+    ];
+    const _refPaths = {};
+
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function escA(s){ return esc(s).replace(/"/g,'&quot;'); }
+    function numBR(v){
+      if (v == null) return null;
+      const raw = String(v).trim(); if (raw === '') return null;
+      if (!raw.includes(',')) { const n = parseFloat(raw); return isNaN(n) ? null : n; }
+      const n = parseFloat(raw.replace(/\./g,'').replace(',','.')); return isNaN(n) ? null : n;
+    }
+    function fmtRS(n){ try { return (Number(n)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); } catch { return 'R$ '+(Number(n)||0).toFixed(2); } }
+    function setStatus(t,c){ const el=$('oelev-status'); if(el){ el.textContent=t||''; el.style.color=c||'var(--text3)'; } }
+    function logLine(m){ const el=$('oelev-log'); if(!el) return; el.style.display=''; el.textContent += (el.textContent?'\n':'') + m; el.scrollTop = el.scrollHeight; }
+
+    function fieldRow(f){
+      const v = (DEF_DATA[f.key] != null ? DEF_DATA[f.key] : '');
+      const lbl = `<div class="oelev-lbl">${esc(f.label)}${f.nota?` <span class="oelev-nota">(${esc(f.nota)})</span>`:''}</div>`;
+      if (f.t === 'cp') {
+        const cp = DEF_CP[f.key] || [null,''];
+        const price = (cp[0]==null?'':cp[0]);
+        const fonte = (cp[1]||'');
+        return `<div class="oelev-row oelev-row-cp">${lbl}`
+          + `<input class="oelev-inp oelev-qty" data-k="${escA(f.key)}" type="text" inputmode="decimal" value="${escA(v)}" title="quantidade"/>`
+          + `<span class="oelev-un">${esc(f.un)}</span>`
+          + `<input class="oelev-inp oelev-price" data-k="${escA(f.key)}" type="text" inputmode="decimal" value="${escA(price)}" placeholder="preço R$" title="preço unitário (cotação)"/>`
+          + `<input class="oelev-inp oelev-fonte" data-k="${escA(f.key)}" type="text" value="${escA(fonte)}" placeholder="fonte / cotação"/>`
+          + `</div>`;
+      }
+      return `<div class="oelev-row">${lbl}`
+        + `<input class="oelev-inp oelev-qty" data-k="${escA(f.key)}" type="text" inputmode="decimal" value="${escA(v)}"/>`
+        + `<span class="oelev-un">${esc(f.un)}</span></div>`;
+    }
+
+    function renderForm(){
+      let html='', inArea=false;
+      SCHEMA.forEach(s => {
+        if (s.t === 'area') { if (inArea) html+='</div></details>'; html += `<details class="oelev-area" open><summary>${esc(s.label)}</summary><div class="oelev-area-body">`; inArea=true; }
+        else if (s.t === 'sub') { html += `<div class="oelev-sub">${esc(s.label)}</div>`; }
+        else { html += fieldRow(s); }
+      });
+      if (inArea) html+='</div></details>';
+      const box=$('oelev-form'); if (box) box.innerHTML = html;
+    }
+
+    function renderRefs(){
+      const box=$('oelev-refs'); if(!box) return;
+      box.innerHTML = REFS.map(r =>
+        `<div style="display:flex;gap:6px;align-items:center">`
+        + `<button class="oelev-ref-btn" data-k="${r.k}" style="background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">${esc(r.lbl)}</button>`
+        + `<input id="oelev-ref-${r.k}" readonly placeholder="—" style="flex:1;padding:5px 8px;font-family:inherit;font-size:10px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>`
+        + `</div>`
+      ).join('');
+      box.querySelectorAll('.oelev-ref-btn').forEach(b => b.addEventListener('click', async () => {
+        const p = await window.electronAPI.orcElev.pickPdf();
+        if (p) { _refPaths[b.dataset.k] = p; const inp=$('oelev-ref-'+b.dataset.k); if(inp) inp.value = p; }
+      }));
+    }
+
+    function buildCfg(saida){
+      const DATA = {}, CP = {};
+      document.querySelectorAll('#oelev-form .oelev-qty').forEach(inp => {
+        const k = inp.dataset.k; const n = numBR(inp.value); DATA[k] = (n==null ? 0 : n);
+      });
+      document.querySelectorAll('#oelev-form .oelev-price').forEach(inp => {
+        const k = inp.dataset.k; const price = numBR(inp.value);
+        const fEl = document.querySelector('#oelev-form .oelev-fonte[data-k="'+k+'"]');
+        const fonte = fEl ? (fEl.value||'').trim() : '';
+        CP[k] = [price, fonte || '(sem cotação)'];
+      });
+      const cfg = {
+        SB: ($('oelev-sb').value||'').trim(),
+        CIDADE: ($('oelev-cidade').value||'').trim(),
+        CONTRATO: ($('oelev-contrato').value||'').trim(),
+        A2_PATH: _a2Path,
+        OUT_XLSX: saida,
+        DATA, CP,
+        PROJETOS: { ..._refPaths },
+      };
+      // ajustes avançados (JSON) — merge dos overrides opcionais
+      const advRaw = ($('oelev-adv').value||'').trim();
+      if (advRaw) {
+        const adv = JSON.parse(advRaw); // pode lançar -> tratado no caller
+        for (const key of ['PRICE_UPD','QTY_UPD','CODE_UPD','AREA_INSERTS','EXTRA_BLOCK','MEMO_FONTES']) {
+          if (adv[key] != null) cfg[key] = adv[key];
+        }
+      }
+      return cfg;
+    }
+
+    async function gerar(){
+      if (_busy) return;
+      if (!window.electronAPI || !window.electronAPI.orcElev) { setStatus('IPC indisponível (rode pelo app Electron).','var(--red,#A11312)'); return; }
+      const sb = ($('oelev-sb').value||'').trim();
+      if (!sb) { setStatus('Informe o SB (identificação).','var(--red,#A11312)'); $('oelev-sb').focus(); return; }
+      if (!_a2Path) { setStatus('Gabarito A2 não disponível — selecione um.','var(--red,#A11312)'); return; }
+      // valida JSON avançado antes do save dialog
+      $('oelev-adv-err').textContent = '';
+      const advRaw = ($('oelev-adv').value||'').trim();
+      if (advRaw) { try { JSON.parse(advRaw); } catch(e){ $('oelev-adv-err').textContent = 'JSON inválido: '+e.message; setStatus('Ajustes avançados: JSON inválido.','var(--red,#A11312)'); return; } }
+
+      const sanitize = (s) => (s||'').replace(/[\\/:*?"<>|]/g,'').trim().replace(/\s+/g,'_');
+      const defName = 'ORC_EEE_' + (sanitize(sb)||'Elevatoria') + '.xlsx';
+      const saida = await window.electronAPI.orcElev.pickSave(defName);
+      if (!saida) { setStatus(''); return; }
+
+      let cfg;
+      try { cfg = buildCfg(saida); }
+      catch(e){ setStatus('Erro montando configuração: '+(e&&e.message||e),'var(--red,#A11312)'); return; }
+
+      _busy = true;
+      const btn=$('oelev-gerar'); if(btn){ btn.disabled=true; btn.style.opacity=.6; btn.style.cursor='default'; }
+      $('oelev-result').style.display='none';
+      const log=$('oelev-log'); if(log){ log.textContent=''; log.style.display=''; }
+      setStatus('Gerando orçamento… (abre o Excel em segundo plano; pode levar ~1 min)','var(--text2)');
+
+      let r;
+      try { r = await window.electronAPI.orcElev.gerar(cfg); }
+      catch(e){ r = { ok:false, erro:(e&&e.message)||String(e) }; }
+
+      _busy = false;
+      if(btn){ btn.disabled=false; btn.style.opacity=1; btn.style.cursor='pointer'; }
+
+      if (r && r.ok) { setStatus('Orçamento gerado com sucesso.','var(--green,#15803d)'); renderResult(r); }
+      else { const msg=(r&&(r.erro||r.error))||'Falha desconhecida.'; setStatus('Erro ao gerar o orçamento.','var(--red,#A11312)'); renderError(msg); }
+    }
+
+    function abrirBtn(label, p){
+      return `<button class="oelev-abrir" data-p="${escA(p)}" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">${esc(label)}</button>`;
+    }
+    function renderResult(r){
+      const box=$('oelev-result'); if(!box) return;
+      const pdfs = Array.isArray(r.pdfs) ? r.pdfs : [];
+      const hasTotal = (r.total != null && !isNaN(Number(r.total)));
+      const totalHtml = hasTotal
+        ? `<div style="font-size:14px;font-weight:700;color:var(--text)">${fmtRS(r.total)}</div>`
+        : `<div style="font-size:13px;font-weight:700;color:#d97706" title="A planilha foi gerada, mas o VALOR TOTAL ficou #VALUE! — em geral algum item ficou SEM PREÇO (ex.: Painel QCM pendente). Preencha o preço do item (ou exclua-o) e gere de novo.">— (verifique itens sem preço)</div>`;
+      box.innerHTML =
+        `<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">Resumo</div>`
+        + `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px">`
+        + `<div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Total (c/ BDI)</div>${totalHtml}</div>`
+        + `<div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">SB</div><div style="font-size:14px;font-weight:700;color:var(--text)">${esc(r.sb||'')}</div></div>`
+        + `<div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Cidade</div><div style="font-size:13px;font-weight:600;color:var(--text)">${esc(r.cidade||'')}</div></div>`
+        + `</div>`
+        + `<div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">`
+        + abrirBtn('Abrir planilha', r.xlsx||'')
+        + (pdfs[0]?abrirBtn('Abrir PDF orçamento', pdfs[0]):'')
+        + (pdfs[1]?abrirBtn('Abrir PDF memorial', pdfs[1]):'')
+        + `</div>`
+        + `<div style="font-size:11px;color:var(--text3);word-break:break-all;margin-top:8px">${esc(r.xlsx||'')}</div>`;
+      box.style.display='';
+      box.querySelectorAll('.oelev-abrir').forEach(b => b.addEventListener('click', async () => {
+        const rr = await window.electronAPI.orcElev.abrir(b.dataset.p);
+        if (rr && !rr.ok) setStatus('Não foi possível abrir: '+(rr.error||''),'var(--red,#A11312)');
+      }));
+    }
+    function renderError(msg){
+      const box=$('oelev-result'); if(!box) return;
+      box.innerHTML = `<div style="font-size:13px;font-weight:700;color:var(--red,#A11312);margin-bottom:6px">Erro ao gerar</div>`
+        + `<pre style="white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--text2);margin:0;font-family:ui-monospace,Consolas,monospace">${esc(msg)}</pre>`;
+      box.style.display='';
+    }
+
+    window.orcElevInit = async function(){
+      if (_inited) return;
+      _inited = true;
+      try {
+        // gabarito padrão
+        const a = await window.electronAPI.orcElev.a2Default();
+        if (a && a.ok) { _a2Path = a.path; const inp=$('oelev-a2-path'); if(inp) inp.value = a.path; }
+        // schema do formulário
+        const s = await window.electronAPI.orcElev.schema();
+        if (s && s.ok && s.data) { SCHEMA = s.data.schema||[]; DEF_DATA = s.data.defData||{}; DEF_CP = s.data.defCp||{}; }
+        else { setStatus('Falha ao carregar o formulário: '+((s&&s.erro)||'?'),'var(--red,#A11312)'); }
+      } catch(e){ setStatus('Falha ao inicializar: '+(e&&e.message||e),'var(--red,#A11312)'); }
+      renderRefs();
+      renderForm();
+      // progresso do engine
+      if (window.electronAPI.orcElev.onProgresso && !_unsub) _unsub = window.electronAPI.orcElev.onProgresso(logLine);
+      const a2btn=$('oelev-pick-a2');
+      if (a2btn) a2btn.addEventListener('click', async () => { const p = await window.electronAPI.orcElev.pickA2(); if(p){ _a2Path=p; const inp=$('oelev-a2-path'); if(inp) inp.value=p; } });
+      const gbtn=$('oelev-gerar'); if (gbtn) gbtn.addEventListener('click', gerar);
+    };
   })();
   </script>
 
@@ -32047,6 +32341,13 @@ window.MODULES = {
     tabs: ['cronograma','planner','dashboard','grd','renomear','coleta-end','conferencia','gerar-pdf-ose','orcamento','planilhas-gis','relatorios','diretoria','verificar','history'],
     extraButtons: ['civil3dSbBtn'],
   },
+  orcamentos: {
+    name: 'Orçamentos',
+    desc: 'Orçamentos de saneamento: Rede Coletora de Esgoto (RCE) e Estação Elevatória de Esgoto (EEE), padrão 2S/SANEPAR',
+    color: '#0d9488',
+    iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>',
+    tabs: ['orcamento-elevatoria','orcamento'],
+  },
   estoque_compras: {
     name: 'Estoque e Compras',
     desc: 'Itens, movimentações, inventário e pedidos de compra pra fornecedores',
@@ -32187,7 +32488,7 @@ function renderModulosGrid() {
   const PLANO_TIER = { trial:3, essencial:1, profissional:2, empresarial:3, sob_medida:3, solo:1, time:2, empresa:3 };
   const tier = PLANO_TIER[plano] || 1;
   const TAB_REQUIRES = { generator:1, projects:1, history:1, dashboard:1, perfil:1, sobre:1,
-    grd:2, orcamento:2, 'gerar-pdf-ose':2, 'planilhas-gis':2, renomear:2, 'coleta-end':2, estoque:2, pedidos:2, relatorios:2,
+    grd:2, orcamento:2, 'orcamento-elevatoria':2, 'gerar-pdf-ose':2, 'planilhas-gis':2, renomear:2, 'coleta-end':2, estoque:2, pedidos:2, relatorios:2,
     'frotas-veiculos':2, 'frotas-abastec':2,
     'obras-vistorias':2, 'obras-diario':2, 'obras-medicao':2, 'obras-nc':2,
     'rh-funcionarios':2, 'rh-folha':2,

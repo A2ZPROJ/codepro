@@ -128,6 +128,23 @@ window.electronAPI = {
     gerar:      (cfg)   => ipcRenderer.invoke('orc-rce:gerar', cfg),
     abrir:      (p)     => ipcRenderer.invoke('orc-rce:abrir', p),
   },
+  // Orçamento de Elevatória (EEE) — gera o orçamento de Estação Elevatória a
+  // partir do gabarito A2 + dados de entrada do projeto, via wrapper Python
+  // (scripts/orcamento-elevatoria). Excel COM → Python real + Excel.
+  orcElev: {
+    schema:     ()      => ipcRenderer.invoke('orc-elev:schema'),
+    a2Default:  ()      => ipcRenderer.invoke('orc-elev:a2-default'),
+    pickA2:     ()      => ipcRenderer.invoke('orc-elev:pick-a2'),
+    pickPdf:    ()      => ipcRenderer.invoke('orc-elev:pick-pdf'),
+    pickSave:   (name)  => ipcRenderer.invoke('orc-elev:pick-save', name),
+    gerar:      (cfg)   => ipcRenderer.invoke('orc-elev:gerar', cfg),
+    abrir:      (p)     => ipcRenderer.invoke('orc-elev:abrir', p),
+    onProgresso: (cb) => {
+      const handler = (_e, msg) => { try { cb(msg); } catch {} };
+      ipcRenderer.on('orc-elev:progresso', handler);
+      return () => ipcRenderer.off('orc-elev:progresso', handler);
+    },
+  },
   // RH — Banco de Currículos (índice local + busca por palavra-chave).
   rhCv: {
     importarPasta:    ()      => ipcRenderer.invoke('rh-cv:importar-pasta'),
