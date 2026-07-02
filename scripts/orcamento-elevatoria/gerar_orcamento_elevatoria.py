@@ -52,29 +52,47 @@ def build_cfg(d):
 CATALOGO_PATH = r"\\2s-eng-servidor\maringa\_PROGRAMAS\COTACOES NEXUS\precos.json"
 
 
-def _norm_sb(sb):
-    import re
-    return re.sub(r'^SB[\s\-]*', '', str(sb or '').upper().strip())
+def _norm(s):
+    """MAIÚSCULO sem acento (p/ casar cidade: 'Mandaguaçu/PR' -> 'MANDAGUACU/PR')."""
+    import unicodedata
+    s = unicodedata.normalize('NFKD', str(s or '')).encode('ascii', 'ignore').decode('ascii')
+    return s.upper().strip()
+
+
+def _preco_item(info, cidade, sb):
+    """Escolhe o preço do item pela CIDADE/obra (mais específico), depois pelo SB,
+    e por fim o default. O painel/QCM varia por OBRA (Mandaguaçu ≠ Altamira), não
+    pelo número do SB — por isso a cidade tem prioridade."""
+    # 1) por cidade (match por substring normalizado: chave contida na cidade)
+    for chave, val in (info.get('precos_por_cidade', {}) or {}).items():
+        if _norm(chave) and _norm(chave) in cidade:
+            return val
+    # 2) por SB (quando o preço realmente varia por SB dentro da mesma obra)
+    v = (info.get('precos_por_sb', {}) or {}).get(sb)
+    if v is not None:
+        return v
+    # 3) default
+    return info.get('preco_default')
 
 
 def aplicar_catalogo_cotacoes(cfg):
     """Lê o catálogo de preços do banco de cotações e injeta nos itens CP cujo
-    preço está pendente (None/ausente), casando pelo SB. Devolve os aplicados."""
+    preço está pendente (None/ausente), casando por CIDADE/obra (e SB). Devolve
+    a lista de (key, preco) aplicados."""
     try:
         with open(CATALOGO_PATH, 'r', encoding='utf-8') as f:
             cat = json.load(f)
     except Exception:
         return []
     itens = (cat or {}).get('itens', {}) or {}
-    sb = _norm_sb(getattr(cfg, 'SB', ''))
+    cidade = _norm(getattr(cfg, 'CIDADE', ''))
+    sb = _norm(getattr(cfg, 'SB', '')).lstrip('SB').lstrip('-').strip()
     if getattr(cfg, 'CP', None) is None:
         cfg.CP = {}
     aplicados = []
     for key, info in itens.items():
         info = info or {}
-        preco = (info.get('precos_por_sb', {}) or {}).get(sb)
-        if preco is None:
-            preco = info.get('preco_default')
+        preco = _preco_item(info, cidade, sb)
         if preco is None:
             continue
         atual = cfg.CP.get(key)
