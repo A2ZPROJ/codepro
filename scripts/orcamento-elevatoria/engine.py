@@ -488,6 +488,20 @@ def run(cfg):
         for r in range(205,330):
             v=ws.Cells(r,2).Value or ws.Cells(r,5).Value
             if v and 'VALOR TOTAL' in str(v).upper(): vt=r; break
+        # 9d) VALOR TOTAL ROBUSTO — soma TODOS os itens via SUMIF por TIPO (G=Mat/MO),
+        #      ignorando cabeçalhos. A fórmula herdada do A2 (SUM range + soma de áreas)
+        #      NÃO acompanhava os inserts/prune/extra_block e deixava faixas de item FORA
+        #      (bug: custo e total subestimados — SB-A5 perdia elétr.externa/aterr/poste/
+        #      limpeza, ~R$1.953). SUMIF por tipo pega tudo, seja qual for a estrutura.
+        fim=vt-1
+        retry(lambda: setattr(ws.Cells(vt,15),'Formula',
+            '=SUMIF(G16:G%d,"Mat",O16:O%d)+SUMIF(G16:G%d,"MO",O16:O%d)'%(fim,fim,fim,fim)))
+        retry(lambda: setattr(ws.Cells(vt,16),'Formula',
+            '=SUMIF(G16:G%d,"Mat",P16:P%d)+SUMIF(G16:G%d,"MO",P16:P%d)'%(fim,fim,fim,fim)))
+        # BDI!F1 (custo direto p/ faixa do BDI) segue o VALOR TOTAL, não a linha fixa 210
+        try: retry(lambda: setattr(wb.Worksheets('BDI').Range('F1'),'Formula',"='%s'!O%d"%(sheet,vt)))
+        except Exception: pass
+        retry(lambda: xl.CalculateFull())
         custo=sv(ws.Cells(vt,15).Value); total=sv(ws.Cells(vt,16).Value)
         wb.Save()
         # 10) PDFs

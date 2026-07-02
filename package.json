@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "2.84.48",
+  "version": "2.84.49",
   "description": "Nexus â€” GestÃ£o Integrada A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
@@ -50,6 +50,7 @@
         "filter": [
           "**/*.py",
           "assets/**/*",
+          "formato_rce/rce_logos/*.png",
           "!_gen_form_schema.py",
           "!**/__pycache__/**",
           "!configs/**"
