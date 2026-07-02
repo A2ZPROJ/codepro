@@ -217,15 +217,23 @@ put_logos(wr)
 wf=out.create_sheet('Referências')
 for k,w in [('A',4),('B',30),('C',48),('D',30),('E',60)]: wf.column_dimensions[k].width=w
 wf.merge_cells('A1:E1'); wf['A1']='REFERÊNCIAS NORMATIVAS — EEE (FONTE DE CADA CRITÉRIO)'; band(wf,1,1,5,C_TITULO,F(15,True,BRANCO)); wf['A1'].alignment=AL_L; wf.row_dimensions[1].height=26
-wf.merge_cells('A2:E2'); wf['A2']='Cada premissa amarrada ao manual SANEPAR (MOS/MPS) ou norma. Template EEE — completar por obra.'; wf['A2'].font=F(9,color='666666'); wf['A2'].alignment=AL_L
-for i,t in enumerate(['Nº','CRITÉRIO','REGRA APLICADA NO ORÇAMENTO','FONTE (Manual - Módulo - Página)','TRECHO CITADO'],1):
+wf.merge_cells('A2:E2'); wf['A2']='De onde vem cada preço e critério: SANEPAR MOS/MPS, cotação de fornecedor, projeto executivo da obra ou norma (ABNT/TCU). Rastreável item a item.'; wf['A2'].font=F(9,color='666666'); wf['A2'].alignment=AL_L
+for i,t in enumerate(['Nº','CRITÉRIO','REGRA APLICADA NO ORÇAMENTO','FONTE (de onde puxa)','OBSERVAÇÃO / ONDE CONFERIR'],1):
     c=wf.cell(4,i,t); c.fill=FILL(C_TITULO); c.font=F(9.5,True,BRANCO); c.alignment=AL_C; c.border=BD
-REFS=[('1','BDI duplo (Acórdão TCU 2622/2013)','BDI 1 Obras 24,49% e BDI 2 Materiais 12,99%, por item pelo TIPO.','TCU - Acórdão 2622/2013-Plenário','(texto integral no portal do TCU)'),
- ('2','Base de preços SANEPAR MOS','Custos unitários SANEPAR MOS 5ª Ed. v02, jun/2025.','MOS - Regulamentação de Preços','(código de cada item na coluna CÓDIGO)'),
- ('3','Estrutura da caixa EEE','Concreto fck40, aço CA-50 e fôrma conforme projeto estrutural.','Projeto PEST','(preencher trecho)'),
- ('4','Impermeabilização','Impermeab. poliuretano nas faces internas poço/PV/abrigo.','MOS - Módulo 12','(preencher)'),
- ('5','Conjunto motobomba','Bomba pela vazão/altura manométrica do hidráulico.','Projeto PHID + cotação','(preencher)'),
- ('6','Instalações elétricas','QCM, entrada, cabos e eletrodutos conforme elétrico.','Projeto PELE + cotação','(preencher)')]
+REFS=[
+ ('1','Base de preços — itens SANEPAR','Custo unitário de cada item com código SANEPAR puxado direto da tabela oficial de preços.','SANEPAR — MOS 5ª Ed. v02 (JUN/2025)','O código na coluna CÓDIGO identifica o item na tabela MOS (aba REF_TAB_PREÇOS_SANEPAR).'),
+ ('2','Base de preços — itens sem código (cotação)','Itens com ORIGEM = CP (tubos/conexões PEAD-FD-PPR, motobomba, painéis) não constam no MOS → preço por cotação de fornecedor.','Cotação de fornecedor (mín. 3 orçamentos → menor preço)','Ver pasta COTAÇÕES da obra; anexar os PDFs de referência.'),
+ ('3','BDI duplo','BDI 1 (Obras/Serviços) 24,49% e BDI 2 (Fornecimento de Materiais/Equip.) 12,99%, aplicado item a item pelo TIPO (Obra/Mat).','TCU — Acórdão 2622/2013-Plenário','Cálculo detalhado na aba BDI da planilha-base (parcelas AC/SG/R/DF/L).'),
+ ('4','Levantamento de quantidades','Toda a coluna QUANT sai da aba Memória de Cálculo, levantada dos projetos executivos da obra.','Memória de Cálculo (esta planilha) + projetos','Cada quantidade rastreável à fórmula/medida na Memória de Cálculo.'),
+ ('5','Movimento de solo / escavação','Escavação e reaterro do poço/PV pela geometria de projeto; VCA (vala a céu aberto) até a profundidade de projeto.','Projeto (implantação/perfil) + SANEPAR MOS','Volume = área × profundidade da escavação (Memória de Cálculo).'),
+ ('6','Estrutura do poço e PV','Concreto fck 40 MPa, aço CA-50 e fôrma de chapa conforme dimensionamento; PV em anéis de concreto armado + tampão FD.','Projeto Estrutural (PEST) + SANEPAR MOS','Quantidades de concreto/aço/fôrma no PEST.'),
+ ('7','Impermeabilização','Impermeabilização em poliuretano nas faces internas do poço, PV e abrigo.','SANEPAR MOS + projeto','Área das faces internas (Memória de Cálculo).'),
+ ('8','Conjunto motobomba','Bomba selecionada pela vazão (Q) e altura manométrica (Hman) do hidráulico; fornecimento e montagem por cotação.','Projeto Hidráulico (PHID) + cotação','Q e Hman de projeto → modelo cotado (pasta COTAÇÕES).'),
+ ('9','Instalações elétricas','QCM, entrada de energia, cabos, eletrodutos e aterramento conforme elétrico; fornecimentos por cotação.','Projeto Elétrico (PELE) + cotação','Cargas e componentes definidos no PELE.'),
+ ('10','Abrigo (arquitetura / acabamento)','Alvenaria, revestimento (chapisco/emboço/reboco) e pintura no padrão SANEPAR (azul claro/escuro).','Projeto Arquitetônico (PARQ) + SANEPAR MOS','Áreas de parede/pintura na Memória de Cálculo.'),
+ ('11','Reposição de pavimento','Reposição do pavimento removido na implantação, no mesmo tipo do existente, dentro da área correspondente.','Projeto + SANEPAR MOS','Área reposta lançada dentro da área a que pertence.'),
+ ('12','Norma de referência — EEE','Concepção da estação elevatória de esgoto conforme norma técnica.','ABNT NBR 12208 — Estações elevatórias de esgoto sanitário','Complementar: NBR 9649 (redes) e MPS SANEPAR.'),
+ ('13','Limpeza final de obra','Limpeza geral ao término, lançada como grupo próprio ao final do orçamento.','SANEPAR MOS','Grupo LIMPEZA DE OBRA (sempre o último).')]
 rr=5
 for row in REFS:
     for i,v in enumerate(row,1):
