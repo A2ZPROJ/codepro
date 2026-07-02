@@ -2341,13 +2341,16 @@ function c3dEnsureTrustedPath() {
     try {
       const { execSync } = require('child_process');
       // PowerShell que percorre todos os profiles daquela versão e garante o path.
-      // Idempotente: se path já está presente, não duplica.
+      // Idempotente: se path já está presente, não duplica. Emite um marcador
+      // NO_BRANCH/OK:<n>/NO_PROFILES pra o Node logar — é o que revela, no log do
+      // usuário, quando o ramo R26.0 (Civil 2027) ainda não existe (causa nº1 do
+      // SECURELOAD travar o 2027: o Civil 2027 nunca foi aberto p/ criar o profile).
       const ps = `
 $ErrorActionPreference = 'SilentlyContinue';
 $bundlePath = '${trustedDir.replace(/'/g, "''")}';
 $baseRegPath = 'HKCU:\\Software\\Autodesk\\AutoCAD\\${regVer}';
-if (-not (Test-Path $baseRegPath)) { exit 0; }
-
+if (-not (Test-Path $baseRegPath)) { Write-Output 'NO_BRANCH'; exit 0; }
+$n = 0;
 Get-ChildItem $baseRegPath -ErrorAction SilentlyContinue | ForEach-Object {
   $productKey = $_.PSChildName;
   $profilesPath = "$baseRegPath\\$productKey\\Profiles";
@@ -2366,17 +2369,24 @@ Get-ChildItem $baseRegPath -ErrorAction SilentlyContinue | ForEach-Object {
       $newValue = if ($current) { "$current;$bundlePath" } else { $bundlePath };
       Set-ItemProperty -Path $generalPath -Name 'TrustedPaths' -Value $newValue -Type String -Force;
     }
+    $n++;
   };
 };
+if ($n -eq 0) { Write-Output 'NO_PROFILES'; } else { Write-Output ('OK:' + $n); }
 exit 0;
 `.trim();
 
-      execSync(`powershell.exe -NoProfile -NonInteractive -Command "${ps.replace(/"/g, '\\"')}"`, {
+      const out = execSync(`powershell.exe -NoProfile -NonInteractive -Command "${ps.replace(/"/g, '\\"')}"`, {
         windowsHide: true,
         timeout: 8000,
-        stdio: 'ignore',
-      });
-      logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}/${regVer}) inclui ${trustedDir}`);
+        encoding: 'utf8',
+      }).trim();
+      if (out === 'NO_BRANCH')
+        logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}/${regVer}) PULADO — Civil ${t.ver} nunca foi aberto (ramo do registro ${regVer} inexistente). Abra o Civil ${t.ver} 1x e reabra o Nexus.`);
+      else if (out === 'NO_PROFILES')
+        logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}/${regVer}) sem profiles no registro — SECURELOAD pode pedir confirmação na 1ª carga.`);
+      else
+        logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}/${regVer}) OK em ${out.replace('OK:', '')} profile(s): ${trustedDir}`);
     } catch (e) {
       logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}) falhou: ` + e.message);
     }
