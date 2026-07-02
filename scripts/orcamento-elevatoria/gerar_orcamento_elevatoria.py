@@ -46,6 +46,45 @@ def build_cfg(d):
     return cfg
 
 
+# ── BANCO DE COTAÇÕES: catálogo de preços que o Claude preenche lendo os PDFs ──
+# precos.json no servidor mapeia key-do-item-do-engine -> preço por SB. O gerador
+# injeta esses preços nos itens CP cujo preço está pendente, casando pelo SB da obra.
+CATALOGO_PATH = r"\\2s-eng-servidor\maringa\_PROGRAMAS\COTACOES NEXUS\precos.json"
+
+
+def _norm_sb(sb):
+    import re
+    return re.sub(r'^SB[\s\-]*', '', str(sb or '').upper().strip())
+
+
+def aplicar_catalogo_cotacoes(cfg):
+    """Lê o catálogo de preços do banco de cotações e injeta nos itens CP cujo
+    preço está pendente (None/ausente), casando pelo SB. Devolve os aplicados."""
+    try:
+        with open(CATALOGO_PATH, 'r', encoding='utf-8') as f:
+            cat = json.load(f)
+    except Exception:
+        return []
+    itens = (cat or {}).get('itens', {}) or {}
+    sb = _norm_sb(getattr(cfg, 'SB', ''))
+    if getattr(cfg, 'CP', None) is None:
+        cfg.CP = {}
+    aplicados = []
+    for key, info in itens.items():
+        info = info or {}
+        preco = (info.get('precos_por_sb', {}) or {}).get(sb)
+        if preco is None:
+            preco = info.get('preco_default')
+        if preco is None:
+            continue
+        atual = cfg.CP.get(key)
+        pendente = atual is None or (isinstance(atual, (list, tuple)) and (not atual or atual[0] is None))
+        if pendente:
+            cfg.CP[key] = (float(preco), info.get('fonte') or 'cotação (banco)')
+            aplicados.append((key, float(preco)))
+    return aplicados
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--config', required=True, help='caminho do JSON de configuração da obra')
@@ -58,6 +97,13 @@ def main():
     except Exception as e:
         print(json.dumps({'ok': False, 'erro': 'config inválido: %s' % e}, ensure_ascii=False))
         sys.exit(1)
+
+    # aplica preços do banco de cotações (itens CP pendentes) ANTES de gerar
+    try:
+        for k, p in aplicar_catalogo_cotacoes(cfg):
+            print('cotação aplicada (banco): %s = R$ %.2f' % (k, p))
+    except Exception as e:
+        print('[aviso] catálogo de cotações não aplicado: %s' % e)
 
     try:
         total = engine.run(cfg)              # imprime progresso (Custo/TOTAL/xlsx/pdf)
