@@ -348,7 +348,7 @@
     const TAB_MAP = {
       generator: 'Cadastrar Novo Projeto', history: 'Histórico', dashboard: 'Dashboard',
       projects: 'Projetos', grd: 'GRD', verificar: 'Verificar Projeto',
-      conferencia: 'Conferência', 'gerar-pdf-ose': 'Gerar PDF Planilha OSE', orcamento: 'Orçamento', 'orcamento-elevatoria': 'Orçamento Elevatória', renomear: 'Renomear',
+      conferencia: 'Conferência', 'gerar-pdf-ose': 'Gerar PDF Planilha OSE', orcamento: 'Orçamento de Rede', 'orcamento-elevatoria': 'Orçamento de Elevatórias', renomear: 'Renomear',
       'planilhas-gis': 'Correção de Planilha GIS', perfil: 'Perfil', estoque: 'Estoque',
       pedidos: 'Pedidos de Compra', diretoria: 'Dashboard Contrato',
       relatorios: 'Relatórios Técnicos', sobre: 'Sobre',
@@ -7730,15 +7730,15 @@ body.presenting #presentingBadge { display: flex; }
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 13h6M9 17h4"/></svg>
           <span class="sb-label">Gerar PDF Planilha OSE</span>
         </button>
-        <!-- 7. Orçamento -->
-        <button class="sb-item" data-tab="orcamento" data-label="Orçamento" data-requires-online="1" onclick="switchTab('orcamento',this);setTimeout(()=>window.orcInit&&window.orcInit(),60);">
+        <!-- 7. Orçamento de Rede (RCE) -->
+        <button class="sb-item" data-tab="orcamento" data-label="Orçamento de Rede" data-requires-online="1" onclick="switchTab('orcamento',this);setTimeout(()=>window.orcInit&&window.orcInit(),60);">
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-          <span class="sb-label">Orçamento</span>
+          <span class="sb-label">Orçamento de Rede</span>
         </button>
-        <!-- 7c. Orçamento Elevatória (EEE) — gerador Python (Excel COM) -->
-        <button class="sb-item" data-tab="orcamento-elevatoria" data-label="Orçamento Elevatória" onclick="switchTab('orcamento-elevatoria',this);setTimeout(()=>window.orcElevInit&&window.orcElevInit(),60);">
+        <!-- 7c. Orçamento de Elevatórias (EEE) — gerador Python (Excel COM) -->
+        <button class="sb-item" data-tab="orcamento-elevatoria" data-label="Orçamento de Elevatórias" onclick="switchTab('orcamento-elevatoria',this);setTimeout(()=>window.orcElevInit&&window.orcElevInit(),60);">
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.5C8 8 5 11.5 5 15a7 7 0 0014 0c0-3.5-3-7-7-12.5z"/><path d="M9 15a3 3 0 003 3"/></svg>
-          <span class="sb-label">Orçamento Elevatória</span>
+          <span class="sb-label">Orçamento de Elevatórias</span>
         </button>
         <!-- 8. Correção de Planilha GIS -->
         <button class="sb-item" data-tab="planilhas-gis" data-label="Correção de Planilha GIS" style="display:none" onclick="switchTab('planilhas-gis',this)">
@@ -8160,7 +8160,7 @@ body.presenting #presentingBadge { display: flex; }
       <button class="tab-btn" draggable="true" onclick="switchTab('grd',this)">GRD</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('verificar',this)">Verificar projeto existente</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('conferencia',this)">Conferência</button>
-      <button class="tab-btn" draggable="true" onclick="switchTab('orcamento',this);setTimeout(()=>window.orcInit&&window.orcInit(),60);">Orçamento</button>
+      <button class="tab-btn" draggable="true" onclick="switchTab('orcamento',this);setTimeout(()=>window.orcInit&&window.orcInit(),60);">Orçamento de Rede</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('renomear',this)">Renomear</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('planilhas-gis',this)">Planilhas GIS</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('perfil',this)">Perfil</button>
@@ -18717,7 +18717,7 @@ body.presenting #presentingBadge { display: flex; }
               <span style="padding:3px 10px;border-radius:6px;background:rgba(220,38,38,.08);color:#dc2626;font-size:11px;font-weight:600;border:1px solid rgba(220,38,38,.25)">Dashboard</span>
               <span style="padding:3px 10px;border-radius:6px;background:rgba(220,38,38,.08);color:#dc2626;font-size:11px;font-weight:600;border:1px solid rgba(220,38,38,.25)">Projetos</span>
               <span style="padding:3px 10px;border-radius:6px;background:rgba(220,38,38,.08);color:#dc2626;font-size:11px;font-weight:600;border:1px solid rgba(220,38,38,.25)">GRD</span>
-              <span style="padding:3px 10px;border-radius:6px;background:rgba(220,38,38,.08);color:#dc2626;font-size:11px;font-weight:600;border:1px solid rgba(220,38,38,.25)">Orçamento</span>
+              <span style="padding:3px 10px;border-radius:6px;background:rgba(220,38,38,.08);color:#dc2626;font-size:11px;font-weight:600;border:1px solid rgba(220,38,38,.25)">Orçamento de Rede</span>
               <span style="padding:3px 10px;border-radius:6px;background:rgba(220,38,38,.08);color:#dc2626;font-size:11px;font-weight:600;border:1px solid rgba(220,38,38,.25)">Dashboard Contrato</span>
               <span style="padding:3px 10px;border-radius:6px;background:rgba(220,38,38,.08);color:#dc2626;font-size:11px;font-weight:600;border:1px solid rgba(220,38,38,.25)">Admin</span>
             </div>
@@ -32425,10 +32425,10 @@ window.showLogin=()=>{
 window.MODULES = {
   saneamento: {
     name: 'Saneamento',
-    desc: 'Projetos de água/esgoto: cadastro, GRD, conferência OSE, orçamento, GIS, perfis, mapas, Civil 3D',
+    desc: 'Projetos de água/esgoto: cadastro, GRD, conferência OSE, GIS, perfis, mapas, Civil 3D',
     color: '#0891b2',
     iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2.5C8 8 5 11.5 5 15a7 7 0 0014 0c0-3.5-3-7-7-12.5z"/><path d="M9 15a3 3 0 003 3"/></svg>',
-    tabs: ['cronograma','planner','dashboard','grd','renomear','coleta-end','conferencia','gerar-pdf-ose','orcamento','planilhas-gis','relatorios','diretoria','verificar','history'],
+    tabs: ['cronograma','planner','dashboard','grd','renomear','coleta-end','conferencia','gerar-pdf-ose','planilhas-gis','diretoria','verificar','history'],
     extraButtons: ['civil3dSbBtn'],
   },
   orcamentos: {
@@ -32436,7 +32436,14 @@ window.MODULES = {
     desc: 'Orçamentos de saneamento: Rede Coletora de Esgoto (RCE) e Estação Elevatória de Esgoto (EEE), padrão 2S/SANEPAR',
     color: '#0d9488',
     iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>',
-    tabs: ['orcamento-elevatoria','orcamento'],
+    tabs: ['orcamento','orcamento-elevatoria'],
+  },
+  relatorios: {
+    name: 'Relatórios Técnicos',
+    desc: 'Relatórios técnicos de saneamento: memorial descritivo (RCE), monografia de marco topográfico e demais relatórios',
+    color: '#4f46e5',
+    iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>',
+    tabs: ['relatorios'],
   },
   estoque_compras: {
     name: 'Estoque e Compras',
