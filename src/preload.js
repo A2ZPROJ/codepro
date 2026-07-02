@@ -139,9 +139,11 @@ window.electronAPI = {
     pickSave:   (name)  => ipcRenderer.invoke('orc-elev:pick-save', name),
     gerar:      (cfg)   => ipcRenderer.invoke('orc-elev:gerar', cfg),
     abrir:      (p)     => ipcRenderer.invoke('orc-elev:abrir', p),
-    cotacoesList: ()    => ipcRenderer.invoke('orc-elev:cotacoes-list'),
-    cotacoesAdd:  (c)   => ipcRenderer.invoke('orc-elev:cotacoes-add', c),
-    cotacoesDel:  (id)  => ipcRenderer.invoke('orc-elev:cotacoes-del', id),
+    cotacoesList:   ()   => ipcRenderer.invoke('orc-elev:cotacoes-list'),
+    cotacoesAdd:    (c)  => ipcRenderer.invoke('orc-elev:cotacoes-add', c),
+    cotacoesAddDoc: (m)  => ipcRenderer.invoke('orc-elev:cotacoes-add-doc', m),
+    cotacoesDel:    (id) => ipcRenderer.invoke('orc-elev:cotacoes-del', id),
+    cotacoesAbrir:  (id) => ipcRenderer.invoke('orc-elev:cotacoes-abrir', id),
     onProgresso: (cb) => {
       const handler = (_e, msg) => { try { cb(msg); } catch {} };
       ipcRenderer.on('orc-elev:progresso', handler);

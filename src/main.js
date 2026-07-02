@@ -1997,11 +1997,60 @@ ipcMain.handle('orc-elev:cotacoes-add', async (_e, cot) => {
     return { ok: true, cotacoes: arr, ...info };
   } catch (e) { return { ok: false, erro: e.message }; }
 });
+// Anexa um DOCUMENTO de cotação (PDF do fornecedor, com vários itens). Copia o
+// arquivo p/ a pasta docs\ do banco (servidor, fallback local) e registra o
+// metadado. Os VALORES não são digitados — o documento fica guardado p/ o Claude
+// ler e entender os itens/preços na hora de montar o orçamento.
+ipcMain.handle('orc-elev:cotacoes-add-doc', async (_e, meta) => {
+  try {
+    const src = String((meta && meta.arquivo) || '').trim();
+    if (!src || !fs.existsSync(src)) return { ok: false, erro: 'Selecione o arquivo PDF da cotação.' };
+    const now = new Date();
+    const id = String(now.getTime()) + '-' + Math.random().toString(36).slice(2, 7);
+    const s = cotacoesServerPath();
+    const baseDir = s ? path.dirname(s) : path.dirname(cotacoesLocalPath());
+    const docsDir = path.join(baseDir, 'docs');
+    try { if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true }); } catch {}
+    const nomeOrig = path.basename(src);
+    const destName = id + '__' + nomeOrig.replace(/[^\w.\-() ]+/g, '_');
+    const dest = path.join(docsDir, destName);
+    let arquivoFinal = src, copiado = false;
+    try { fs.copyFileSync(src, dest); arquivoFinal = dest; copiado = true; } catch {}
+    const rec = {
+      id, tipo: 'doc',
+      assunto: String((meta && meta.assunto) || '').trim(),
+      fornecedor: String((meta && meta.fornecedor) || '').trim(),
+      data: String((meta && meta.data) || '').trim(),
+      arquivo: arquivoFinal,
+      nomeOriginal: nomeOrig,
+      obs: String((meta && meta.obs) || '').trim(),
+      criadoPor: String((meta && meta.criadoPor) || '').trim(),
+      criadoEm: now.toISOString(),
+    };
+    const arr = cotacoesLoad(); arr.unshift(rec);
+    const info = cotacoesSave(arr);
+    return { ok: true, cotacoes: arr, copiado, ...info };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
 ipcMain.handle('orc-elev:cotacoes-del', async (_e, id) => {
   try {
-    const arr = cotacoesLoad().filter(c => c.id !== id);
-    const info = cotacoesSave(arr);
-    return { ok: true, cotacoes: arr, ...info };
+    const arr = cotacoesLoad();
+    const alvo = arr.find(c => c.id === id);
+    if (alvo && alvo.tipo === 'doc' && alvo.arquivo) {
+      try { if (alvo.arquivo.includes(path.sep + 'docs' + path.sep) && fs.existsSync(alvo.arquivo)) fs.unlinkSync(alvo.arquivo); } catch {}
+    }
+    const rest = arr.filter(c => c.id !== id);
+    const info = cotacoesSave(rest);
+    return { ok: true, cotacoes: rest, ...info };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
+// Abre o PDF de uma cotação (doc) no visualizador padrão.
+ipcMain.handle('orc-elev:cotacoes-abrir', async (_e, id) => {
+  try {
+    const alvo = cotacoesLoad().find(c => c.id === id);
+    if (!alvo || !alvo.arquivo) return { ok: false, erro: 'Cotação não encontrada.' };
+    const r = await shell.openPath(alvo.arquivo);
+    return { ok: !r, error: r || null };
   } catch (e) { return { ok: false, erro: e.message }; }
 });
 
