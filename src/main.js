@@ -1940,6 +1940,72 @@ ipcMain.handle('orc-elev:abrir', async (_e, p) => {
 });
 
 // ────────────────────────────────────────────────────────────────────
+// ORÇAMENTO ELEVATÓRIA — BANCO DE COTAÇÕES (acumulável e compartilhado).
+// Fonte de verdade = JSON no SERVIDOR (todos os PCs acessam + é o arquivo
+// que o Claude lê p/ consolidar na memória). Fallback = userData local se
+// o servidor estiver indisponível; na leitura une os dois (dedup por id)
+// p/ não perder o que foi cadastrado offline.
+// ────────────────────────────────────────────────────────────────────
+const COTACOES_SERVER_DIR = '\\\\2s-eng-servidor\\maringa\\_PROGRAMAS\\COTACOES NEXUS';
+function cotacoesServerPath() {
+  try {
+    if (!fs.existsSync(COTACOES_SERVER_DIR)) fs.mkdirSync(COTACOES_SERVER_DIR, { recursive: true });
+    fs.accessSync(COTACOES_SERVER_DIR, fs.constants.W_OK);
+    return path.join(COTACOES_SERVER_DIR, 'cotacoes.json');
+  } catch { return null; }
+}
+function cotacoesLocalPath() { return path.join(app.getPath('userData'), 'cotacoes-eee.json'); }
+function cotacoesReadFrom(p) {
+  try { if (p && fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8')) || []; } catch {}
+  return [];
+}
+function cotacoesLoad() {
+  const s = cotacoesServerPath();
+  const map = new Map();
+  for (const c of [...cotacoesReadFrom(s), ...cotacoesReadFrom(cotacoesLocalPath())])
+    if (c && c.id) map.set(c.id, c);
+  return Array.from(map.values()).sort((a, b) => String(b.criadoEm || '').localeCompare(String(a.criadoEm || '')));
+}
+function cotacoesSave(arr) {
+  const s = cotacoesServerPath();
+  const p = s || cotacoesLocalPath();
+  fs.writeFileSync(p, JSON.stringify(arr, null, 2), 'utf8');
+  return { onServer: !!s, path: p };
+}
+ipcMain.handle('orc-elev:cotacoes-list', async () => {
+  try { const s = cotacoesServerPath(); return { ok: true, cotacoes: cotacoesLoad(), onServer: !!s, path: s || cotacoesLocalPath() }; }
+  catch (e) { return { ok: false, erro: e.message, cotacoes: [] }; }
+});
+ipcMain.handle('orc-elev:cotacoes-add', async (_e, cot) => {
+  try {
+    const now = new Date();
+    const rec = {
+      id: String(now.getTime()) + '-' + Math.random().toString(36).slice(2, 7),
+      item: String((cot && cot.item) || '').trim(),
+      unidade: String((cot && cot.unidade) || '').trim(),
+      preco: Number(cot && cot.preco) || 0,
+      fornecedor: String((cot && cot.fornecedor) || '').trim(),
+      data: String((cot && cot.data) || '').trim(),
+      codigo: String((cot && cot.codigo) || '').trim(),
+      obs: String((cot && cot.obs) || '').trim(),
+      criadoPor: String((cot && cot.criadoPor) || '').trim(),
+      criadoEm: now.toISOString(),
+    };
+    if (!rec.item) return { ok: false, erro: 'Descrição do item é obrigatória.' };
+    const arr = cotacoesLoad(); arr.unshift(rec);
+    const info = cotacoesSave(arr);
+    return { ok: true, cotacoes: arr, ...info };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
+ipcMain.handle('orc-elev:cotacoes-del', async (_e, id) => {
+  try {
+    const arr = cotacoesLoad().filter(c => c.id !== id);
+    const info = cotacoesSave(arr);
+    return { ok: true, cotacoes: arr, ...info };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
+
+// ────────────────────────────────────────────────────────────────────
 // RH — BANCO DE CURRÍCULOS (índice local + busca por palavra-chave).
 // Store em userData\curriculos (arquivos copiados + index.json). Extração
 // de texto via scripts/rh/curriculos.py. Reusa orcRceResolvePython().

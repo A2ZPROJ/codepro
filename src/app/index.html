@@ -14926,6 +14926,38 @@ body.presenting #presentingBadge { display: flex; }
           <div id="oelev-history" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
         </div>
 
+        <!-- 8) Banco de Cotações (acumulável, compartilhado) -->
+        <details id="oelev-cot-box" style="border-top:1px solid var(--border);padding-top:14px">
+          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px">
+            <span class="oelev-sec" style="margin-bottom:0">Banco de Cotações</span>
+            <span id="cot-count" style="font-size:11px;font-weight:700;color:#0d9488;background:rgba(13,148,136,.14);padding:2px 8px;border-radius:9px"></span>
+            <span style="margin-left:auto;font-size:10px;color:var(--text3)">preços de fornecedor (itens CP) — acumulam p/ os orçamentos</span>
+          </summary>
+          <div style="margin-top:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="display:grid;grid-template-columns:2.2fr 55px 90px 1.3fr 130px;gap:8px;align-items:end">
+              <label class="oelev-flbl">Item / descrição <span style="color:var(--red,#A11312)">*</span>
+                <input id="cot-item" class="oelev-inp" type="text" placeholder="ex.: Tubo PEAD DE160 PN10"/></label>
+              <label class="oelev-flbl">Un.
+                <input id="cot-un" class="oelev-inp" type="text" placeholder="m"/></label>
+              <label class="oelev-flbl">Preço R$ <span style="color:var(--red,#A11312)">*</span>
+                <input id="cot-preco" class="oelev-inp" type="number" step="0.01" min="0" placeholder="0,00"/></label>
+              <label class="oelev-flbl">Fornecedor
+                <input id="cot-forn" class="oelev-inp" type="text" placeholder="fornecedor"/></label>
+              <label class="oelev-flbl">Data
+                <input id="cot-data" class="oelev-inp" type="date"/></label>
+            </div>
+            <div style="display:grid;grid-template-columns:120px 1fr auto;gap:8px;align-items:end;margin-top:8px">
+              <label class="oelev-flbl">Código (opc.)
+                <input id="cot-cod" class="oelev-inp" type="text" placeholder="ref."/></label>
+              <label class="oelev-flbl">Observação
+                <input id="cot-obs" class="oelev-inp" type="text" placeholder="condição, validade, contato…"/></label>
+              <button id="cot-add" type="button" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:0 18px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;height:34px;white-space:nowrap">＋ Incluir cotação</button>
+            </div>
+            <div id="cot-status" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
+          </div>
+          <div id="cot-list" style="display:flex;flex-direction:column;gap:6px;margin-top:10px"></div>
+        </details>
+
       </div>
     </div>
   </div>
@@ -15208,6 +15240,7 @@ body.presenting #presentingBadge { display: flex; }
       renderRefs();
       renderForm();
       renderHistory();
+      renderCotacoes();
       // progresso do engine
       if (window.electronAPI.orcElev.onProgresso && !_unsub) _unsub = window.electronAPI.orcElev.onProgresso(logLine);
       const a2btn=$('oelev-pick-a2');
@@ -15218,7 +15251,51 @@ body.presenting #presentingBadge { display: flex; }
       $('oelev-expand-all')?.addEventListener('click', () => setAllAreas(true));
       $('oelev-collapse-all')?.addEventListener('click', () => setAllAreas(false));
       $('oelev-hist-clear')?.addEventListener('click', () => { if(confirm('Limpar todo o histórico de orçamentos gerados?')){ saveHist([]); renderHistory(); } });
+      $('cot-add')?.addEventListener('click', addCotacao);
+      $('cot-item')?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); addCotacao(); } });
+      $('cot-preco')?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); addCotacao(); } });
     };
+
+    // ── Banco de Cotações (acumula preços de fornecedor / itens CP) ──
+    async function renderCotacoes(){
+      const list=$('cot-list'), cnt=$('cot-count'); if(!list) return;
+      let r; try { r = await window.electronAPI.orcElev.cotacoesList(); } catch(e){ r=null; }
+      const arr=(r&&r.cotacoes)||[];
+      if(cnt) cnt.textContent = arr.length ? (arr.length+(arr.length===1?' cotação':' cotações')) : 'vazio';
+      const st=$('cot-status');
+      if(st && r){ st.style.color='var(--text3)'; st.innerHTML = (r.onServer? 'Salvo no servidor (compartilhado com o time e com a memória).' : '<span style="color:var(--red,#A11312)">Servidor indisponível — salvando localmente neste PC.</span>'); }
+      if(!arr.length){ list.innerHTML='<div style="font-size:11px;color:var(--text3);padding:8px">Nenhuma cotação cadastrada ainda. Preencha acima e clique em Incluir.</div>'; return; }
+      list.innerHTML = arr.map(c => {
+        const preco = (Number(c.preco)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+        const meta = [c.fornecedor, c.data, c.codigo?('cód. '+c.codigo):'', c.criadoPor?('por '+c.criadoPor):''].filter(Boolean).join(' · ');
+        return `<div style="display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:7px;padding:8px 12px;background:var(--surface)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:600;color:var(--text)">${esc(c.item)}${c.unidade?` <span style="color:var(--text3);font-weight:400">/ ${esc(c.unidade)}</span>`:''}</div>
+            ${meta?`<div style="font-size:10px;color:var(--text3);margin-top:2px">${esc(meta)}</div>`:''}
+            ${c.obs?`<div style="font-size:10px;color:var(--text3);margin-top:1px;font-style:italic">${esc(c.obs)}</div>`:''}
+          </div>
+          <div style="font-size:13px;font-weight:700;color:#0d9488;white-space:nowrap">R$ ${preco}</div>
+          <button data-id="${esc(c.id)}" class="cot-del" title="Excluir" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:2px 5px">×</button>
+        </div>`;
+      }).join('');
+      list.querySelectorAll('.cot-del').forEach(b => b.addEventListener('click', ()=>delCotacao(b.dataset.id)));
+    }
+    async function addCotacao(){
+      const item=($('cot-item')?.value||'').trim(), preco=$('cot-preco')?.value;
+      const st=$('cot-status');
+      if(!item){ if(st){st.style.color='var(--red,#A11312)';st.textContent='Informe a descrição do item.';} $('cot-item')?.focus(); return; }
+      if(preco===''||preco==null||isNaN(Number(preco))){ if(st){st.style.color='var(--red,#A11312)';st.textContent='Informe o preço.';} $('cot-preco')?.focus(); return; }
+      const cot={ item, unidade:($('cot-un')?.value||'').trim(), preco:Number(preco), fornecedor:($('cot-forn')?.value||'').trim(), data:($('cot-data')?.value||''), codigo:($('cot-cod')?.value||'').trim(), obs:($('cot-obs')?.value||'').trim(), criadoPor:($('oelev-responsavel')?.value||'').trim() };
+      if(st){st.style.color='var(--text3)';st.textContent='Salvando…';}
+      let r; try { r = await window.electronAPI.orcElev.cotacoesAdd(cot); } catch(e){ r={ok:false,erro:e.message}; }
+      if(r&&r.ok){ ['cot-item','cot-un','cot-preco','cot-forn','cot-cod','cot-obs'].forEach(id=>{const el=$(id); if(el) el.value='';}); $('cot-item')?.focus(); renderCotacoes(); }
+      else if(st){ st.style.color='var(--red,#A11312)'; st.textContent='Erro: '+((r&&r.erro)||'?'); }
+    }
+    async function delCotacao(id){
+      if(!confirm('Excluir esta cotação?')) return;
+      try { await window.electronAPI.orcElev.cotacoesDel(id); } catch(e){}
+      renderCotacoes();
+    }
   })();
   </script>
 
