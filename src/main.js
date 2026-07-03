@@ -2055,6 +2055,45 @@ ipcMain.handle('orc-elev:cotacoes-abrir', async (_e, id) => {
 });
 
 // ────────────────────────────────────────────────────────────────────
+// ANÁLISE DE PROJETOS (Fase 2) — "inbox" de análises que o Claude produz.
+// O Claude lê os projetos no chat, mapeia campo-a-campo (schema) e grava um
+// JSON aqui; o Nexus lista e importa p/ pré-preencher o form (o usuário revisa).
+// Formato do JSON: { obra, sb, cidade, contrato, data:{key:val}, cp:{key:[preco,fonte]}, meta:{...} }
+// ────────────────────────────────────────────────────────────────────
+const ANALISES_SERVER_DIR = '\\\\2s-eng-servidor\\maringa\\_PROGRAMAS\\NEXUS-ANALISES';
+function analisesDir() {
+  try {
+    if (!fs.existsSync(ANALISES_SERVER_DIR)) fs.mkdirSync(ANALISES_SERVER_DIR, { recursive: true });
+    fs.accessSync(ANALISES_SERVER_DIR, fs.constants.R_OK);
+    return ANALISES_SERVER_DIR;
+  } catch { return null; }
+}
+ipcMain.handle('orc-elev:analises-list', async () => {
+  try {
+    const dir = analisesDir();
+    if (!dir) return { ok: true, analises: [], onServer: false };
+    const files = fs.readdirSync(dir).filter(f => /\.json$/i.test(f));
+    const analises = files.map(f => {
+      const full = path.join(dir, f);
+      let meta = {};
+      try { const j = JSON.parse(fs.readFileSync(full, 'utf8')); meta = { obra: j.obra, sb: j.sb, cidade: j.cidade, ncampos: Object.keys(j.data || {}).length }; } catch {}
+      let mtime = 0; try { mtime = fs.statSync(full).mtimeMs; } catch {}
+      return { file: f, ...meta, mtime };
+    }).sort((a, b) => b.mtime - a.mtime);
+    return { ok: true, analises, onServer: true };
+  } catch (e) { return { ok: false, erro: e.message, analises: [] }; }
+});
+ipcMain.handle('orc-elev:analises-load', async (_e, file) => {
+  try {
+    const dir = analisesDir();
+    if (!dir) return { ok: false, erro: 'Pasta de análises indisponível.' };
+    const full = path.join(dir, path.basename(String(file || '')));
+    if (!fs.existsSync(full)) return { ok: false, erro: 'Análise não encontrada.' };
+    return { ok: true, analise: JSON.parse(fs.readFileSync(full, 'utf8')) };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
+
+// ────────────────────────────────────────────────────────────────────
 // RH — BANCO DE CURRÍCULOS (índice local + busca por palavra-chave).
 // Store em userData\curriculos (arquivos copiados + index.json). Extração
 // de texto via scripts/rh/curriculos.py. Reusa orcRceResolvePython().
