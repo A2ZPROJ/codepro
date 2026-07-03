@@ -76,9 +76,13 @@ def _preco_item(info, cidade, sb):
 
 
 def aplicar_catalogo_cotacoes(cfg):
-    """Lê o catálogo de preços do banco de cotações e injeta nos itens CP cujo
-    preço está pendente (None/ausente), casando por CIDADE/obra (e SB). Devolve
-    a lista de (key, preco) aplicados."""
+    """Lê o catálogo de preços do banco de cotações e injeta os preços de cotação
+    casando por CIDADE/obra (e SB). Escreve o preço em DOIS lugares:
+      • cfg.PRICE_UPD[linha]  -> preço UNIT no ORÇAMENTO (coluna K), via a linha
+        do item no engine (MAP_REF). É o que faz o valor APARECER no orçamento.
+      • cfg.CP[key]           -> fonte/preço na aba MEMORIAL (rastreio da cotação).
+    Só injeta em itens cujo preço está pendente (não sobrescreve valor já dado).
+    Devolve a lista de (key, preco) aplicados."""
     try:
         with open(CATALOGO_PATH, 'r', encoding='utf-8') as f:
             cat = json.load(f)
@@ -89,17 +93,33 @@ def aplicar_catalogo_cotacoes(cfg):
     sb = _norm(getattr(cfg, 'SB', '')).lstrip('SB').lstrip('-').strip()
     if getattr(cfg, 'CP', None) is None:
         cfg.CP = {}
+    if getattr(cfg, 'PRICE_UPD', None) is None:
+        cfg.PRICE_UPD = {}
+    # key -> linhas do orçamento (inverte MAP_REF do engine)
+    key2rows = {}
+    try:
+        for r, k in engine.MAP_REF.items():
+            key2rows.setdefault(k, []).append(int(r))
+    except Exception:
+        pass
     aplicados = []
     for key, info in itens.items():
         info = info or {}
         preco = _preco_item(info, cidade, sb)
         if preco is None:
             continue
+        preco = float(preco)
         atual = cfg.CP.get(key)
         pendente = atual is None or (isinstance(atual, (list, tuple)) and (not atual or atual[0] is None))
-        if pendente:
-            cfg.CP[key] = (float(preco), info.get('fonte') or 'cotação (banco)')
-            aplicados.append((key, float(preco)))
+        if not pendente:
+            continue
+        cfg.CP[key] = (preco, info.get('fonte') or 'cotação (banco)')
+        # escreve o preço no ORÇAMENTO (coluna K) nas linhas do item — sem sobrescrever
+        rows = key2rows.get(key, [])
+        for row in rows:
+            if row not in cfg.PRICE_UPD:
+                cfg.PRICE_UPD[row] = preco
+        aplicados.append((key, preco, rows))
     return aplicados
 
 
@@ -118,8 +138,9 @@ def main():
 
     # aplica preços do banco de cotações (itens CP pendentes) ANTES de gerar
     try:
-        for k, p in aplicar_catalogo_cotacoes(cfg):
-            print('cotação aplicada (banco): %s = R$ %.2f' % (k, p))
+        for k, p, rows in aplicar_catalogo_cotacoes(cfg):
+            linhas = (' (linha %s)' % ','.join(map(str, rows))) if rows else ' (SEM linha no orçamento — só memorial)'
+            print('cotação aplicada (banco): %s = R$ %.2f%s' % (k, p, linhas))
     except Exception as e:
         print('[aviso] catálogo de cotações não aplicado: %s' % e)
 
