@@ -190,9 +190,20 @@ def to_rce(a2_path):
     try:
         wb = xl.Workbooks.Open(rce); xl.CalculateFull()
         wo = wb.Worksheets('Orçamento')
-        ps = wo.PageSetup; ps.Orientation = 2; ps.Zoom = False; ps.FitToPagesWide = 1; ps.FitToPagesTall = False
+        ps = wo.PageSetup; ps.Orientation = 2; ps.Zoom = False; ps.FitToPagesWide = 1; ps.FitToPagesTall = False; ps.CenterHorizontally = True
         wo.Columns('C:C').Hidden = True            # oculta ORIGEM só no PDF
-        wo.ExportAsFixedFormat(0, pdf)
+        # PDF do orçamento = RESUMO (pág 1) + ORÇAMENTO juntos (abas agrupadas)
+        try:
+            wr = wb.Worksheets('Resumo')
+            psr = wr.PageSetup; psr.Orientation = 1; psr.Zoom = False
+            psr.FitToPagesWide = 1; psr.FitToPagesTall = 1; psr.CenterHorizontally = True
+            wr.Select(True)      # seleciona só o Resumo
+            wo.Select(False)     # agrupa o Orçamento à seleção
+            wb.ActiveSheet.ExportAsFixedFormat(0, pdf)   # grupo -> 1 PDF (Resumo, depois Orçamento)
+            wr.Select(True)      # desagrupa
+        except Exception as e:
+            print('[aviso] Resumo não incluído no PDF (%s) — gerando só o orçamento' % e)
+            wo.ExportAsFixedFormat(0, pdf)
         wo.Columns('C:C').Hidden = False
         wb.Save(); wb.Close(True)
     finally:

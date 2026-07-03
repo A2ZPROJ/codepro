@@ -638,7 +638,9 @@ def export_pdfs(xl, wb, sheet, out_xlsx):
     ps.PrintArea='$A$1:$G$%d'%last; ps.Orientation=2; ps.Zoom=False
     ps.FitToPagesWide=1; ps.FitToPagesTall=False; ps.PrintTitleRows='$4:$4'; ps.CenterHorizontally=True
     for a in ('LeftMargin','RightMargin','TopMargin','BottomMargin'): setattr(ps,a,xl.InchesToPoints(0.4))
+    m.Columns('G:G').Hidden=True    # ocultar FONTE/COTAÇÃO (item CP) SÓ no PDF do memorial
     m.ExportAsFixedFormat(0, pdf_m, 0)
+    m.Columns('G:G').Hidden=False   # reexibir -> o .xlsx permanece completo
     return [pdf_o, pdf_m]
 
 def load_cfg(path):
