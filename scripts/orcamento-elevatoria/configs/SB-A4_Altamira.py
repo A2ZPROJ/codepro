@@ -13,7 +13,7 @@ mentado (rua asfalto, implantação cita MEIO FIO/PAVIMENTO ASFALTICO/CALÇADA).
 Recalque externo PENDENTE (Daniel) -> sem rede externa. QCM/motobomba: cotação individual PENDENTE."""
 import os
 _BASE = (r"C:\Users\LUCAS_ABDALA\OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA"
-         r"\Área de Trabalho\ORÇAMENTOS ELEVATÓRIA\Teste NEXUS - Orçamento")
+         r"\Área de Trabalho\LIXO IMPORTANTE\ORÇAMENTOS ELEVATÓRIA\Teste NEXUS - Orçamento")
 
 SB       = 'SB-A4'
 CIDADE   = 'ALTAMIRA DO PARANÁ/PR'

@@ -13,7 +13,7 @@ exata é caixa-survey + cota-implantação. ASFALTO 9,0 m²/0,45 m³ = footprint
 mentado (rua asfalto), idêntico à A5. Recalque externo PENDENTE (Daniel) -> sem rede externa."""
 import os
 _BASE = (r"C:\Users\LUCAS_ABDALA\OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA"
-         r"\Área de Trabalho\ORÇAMENTOS ELEVATÓRIA\Teste NEXUS - Orçamento")
+         r"\Área de Trabalho\LIXO IMPORTANTE\ORÇAMENTOS ELEVATÓRIA\Teste NEXUS - Orçamento")
 
 SB       = 'SB-A3'
 CIDADE   = 'ALTAMIRA DO PARANÁ/PR'

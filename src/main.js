@@ -2092,6 +2092,28 @@ ipcMain.handle('orc-elev:analises-load', async (_e, file) => {
     return { ok: true, analise: JSON.parse(fs.readFileSync(full, 'utf8')) };
   } catch (e) { return { ok: false, erro: e.message }; }
 });
+// Aplica o catálogo de preços de cotação (precos.json) por CIDADE/SB -> {key:[preço,fonte]}.
+// Usado no Importar da análise p/ já trazer os preços CP (ex.: painel) preenchidos.
+const PRECOS_CATALOGO_PATH = '\\\\2s-eng-servidor\\maringa\\_PROGRAMAS\\COTACOES NEXUS\\precos.json';
+function _normTxt(s) { return String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toUpperCase().trim(); }
+ipcMain.handle('orc-elev:catalogo-aplicar', async (_e, ctx) => {
+  try {
+    const cat = JSON.parse(fs.readFileSync(PRECOS_CATALOGO_PATH, 'utf8'));
+    const itens = (cat && cat.itens) || {};
+    const cidade = _normTxt(ctx && ctx.cidade);
+    const sb = _normTxt(ctx && ctx.sb).replace(/^SB[-\s]*/, '');
+    const out = {};
+    for (const [key, info] of Object.entries(itens)) {
+      let preco = null;
+      const pc = (info && info.precos_por_cidade) || {};
+      for (const [ch, val] of Object.entries(pc)) { const n = _normTxt(ch); if (n && cidade.includes(n)) { preco = val; break; } }
+      if (preco == null) { const ps = (info && info.precos_por_sb) || {}; if (ps[sb] != null) preco = ps[sb]; }
+      if (preco == null && info && info.preco_default != null) preco = info.preco_default;
+      if (preco != null) out[key] = [Number(preco), (info && info.fonte) || 'cotação (banco)'];
+    }
+    return { ok: true, precos: out };
+  } catch (e) { return { ok: false, erro: e.message, precos: {} }; }
+});
 
 // ────────────────────────────────────────────────────────────────────
 // RH — BANCO DE CURRÍCULOS (índice local + busca por palavra-chave).

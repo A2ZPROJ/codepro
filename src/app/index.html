@@ -15293,10 +15293,10 @@ body.presenting #presentingBadge { display: flex; }
       if(st){st.style.color='var(--text3)';st.textContent='Importando…';}
       let r; try { r = await window.electronAPI.orcElev.analisesLoad(file); } catch(e){ r={ok:false,erro:e.message}; }
       if(!r||!r.ok){ if(st){st.style.color='var(--red,#A11312)';st.textContent='Erro: '+((r&&r.erro)||'?');} return; }
-      const n = aplicarAnalise(r.analise||{});
-      if(st){ st.style.color='#0d9488'; st.innerHTML = `<b>${n} campo(s)</b> pré-preenchido(s) (em amarelo) — <b>revise</b> antes de gerar.`; }
+      const n = await aplicarAnalise(r.analise||{});
+      if(st){ st.style.color='#0d9488'; st.innerHTML = `<b>${n} campo(s)</b> pré-preenchido(s) (em amarelo, incluindo preços de cotação do banco) — <b>revise</b> antes de gerar.`; }
     }
-    function aplicarAnalise(a){
+    async function aplicarAnalise(a){
       const setId=(id,v)=>{ const el=$(id); if(el && v!=null && v!=='') el.value=v; };
       setId('oelev-sb', a.sb); setId('oelev-cidade', a.cidade); setId('oelev-contrato', a.contrato);
       const brl=(x)=> (x==null?'':String(x).replace('.',','));
@@ -15307,13 +15307,19 @@ body.presenting #presentingBadge { display: flex; }
         const el=document.querySelector('#oelev-form .oelev-qty[data-k="'+CSS.escape(k)+'"]');
         if(el){ el.value=brl(v); mark(el); n++; }
       });
-      Object.entries(a.cp||{}).forEach(([k,pf])=>{
-        if(!Array.isArray(pf)) return;
+      const setPreco=(k,preco,fonte)=>{
         const pe=document.querySelector('#oelev-form .oelev-price[data-k="'+CSS.escape(k)+'"]');
         const fe=document.querySelector('#oelev-form .oelev-fonte[data-k="'+CSS.escape(k)+'"]');
-        if(pe && pf[0]!=null){ pe.value=brl(pf[0]); mark(pe); n++; }
-        if(fe && pf[1]){ fe.value=pf[1]; }
-      });
+        if(pe && preco!=null && !pe.value){ pe.value=brl(preco); mark(pe); n++; }
+        if(fe && fonte && !fe.value){ fe.value=fonte; }
+      };
+      // preços vindos na própria análise
+      Object.entries(a.cp||{}).forEach(([k,pf])=>{ if(Array.isArray(pf)) setPreco(k, pf[0], pf[1]); });
+      // preços do BANCO DE COTAÇÕES pela cidade/SB (ex.: painel) — já traz preenchido no Importar
+      try {
+        const cr = await window.electronAPI.orcElev.catalogoAplicar({ cidade:a.cidade, sb:a.sb });
+        if(cr && cr.ok) Object.entries(cr.precos||{}).forEach(([k,pf])=>{ if(Array.isArray(pf)) setPreco(k, pf[0], pf[1]); });
+      } catch(e){}
       document.querySelectorAll('#oelev-form .oelev-area').forEach(d=>{ d.open=true; });
       return n;
     }

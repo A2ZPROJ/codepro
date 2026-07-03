@@ -3,7 +3,7 @@
 Preenchido a partir dos projetos PEST/PARQ/PHID/PELE. Base: gabarito A2."""
 import os
 _BASE = (r"C:\Users\LUCAS_ABDALA\OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA"
-         r"\Área de Trabalho\ORÇAMENTOS ELEVATÓRIA\Teste NEXUS - Orçamento")
+         r"\Área de Trabalho\LIXO IMPORTANTE\ORÇAMENTOS ELEVATÓRIA\Teste NEXUS - Orçamento")
 
 SB       = 'SB-A5'
 CIDADE   = 'ALTAMIRA DO PARANÁ/PR'

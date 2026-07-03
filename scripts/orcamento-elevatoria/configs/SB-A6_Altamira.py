@@ -18,7 +18,7 @@ repavimentado (rua asfalto). Base: gabarito A2. Recalque externo PENDENTE (PARQ 
 RECALQUE" mas traçado/extensão não vem no pacote) -> sem rede externa. QCM/motobomba: cotação PEND."""
 import os
 _BASE = (r"C:\Users\LUCAS_ABDALA\OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA"
-         r"\Área de Trabalho\ORÇAMENTOS ELEVATÓRIA\Teste NEXUS - Orçamento")
+         r"\Área de Trabalho\LIXO IMPORTANTE\ORÇAMENTOS ELEVATÓRIA\Teste NEXUS - Orçamento")
 
 SB       = 'SB-A6'
 CIDADE   = 'ALTAMIRA DO PARANÁ/PR'

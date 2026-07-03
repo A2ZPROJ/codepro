@@ -28,7 +28,7 @@ PENDENTES (deixados FORA do total — escolha do Lucas "montar tudo menos elétr
 Base: gabarito A2."""
 import os
 _BASE = (r"C:\Users\LUCAS_ABDALA\OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA"
-         r"\Área de Trabalho\ORÇAMENTOS ELEVATÓRIA\Teste NEXUS - Orçamento")
+         r"\Área de Trabalho\LIXO IMPORTANTE\ORÇAMENTOS ELEVATÓRIA\Teste NEXUS - Orçamento")
 
 SB       = 'SB-A3'
 CIDADE   = 'MANDAGUAÇU/PR'

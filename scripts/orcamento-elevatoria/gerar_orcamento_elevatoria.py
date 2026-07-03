@@ -105,21 +105,24 @@ def aplicar_catalogo_cotacoes(cfg):
     aplicados = []
     for key, info in itens.items():
         info = info or {}
-        preco = _preco_item(info, cidade, sb)
-        if preco is None:
+        preco_cat = _preco_item(info, cidade, sb)
+        if preco_cat is None:
             continue
-        preco = float(preco)
         atual = cfg.CP.get(key)
         pendente = atual is None or (isinstance(atual, (list, tuple)) and (not atual or atual[0] is None))
-        if not pendente:
-            continue
-        cfg.CP[key] = (preco, info.get('fonte') or 'cotação (banco)')
-        # escreve o preço no ORÇAMENTO (coluna K) nas linhas do item — sem sobrescrever
+        if pendente:
+            cfg.CP[key] = (float(preco_cat), info.get('fonte') or 'cotação (banco)')
+        # preço FINAL do item = o do form/import se preenchido (Lucas pode ter editado),
+        # senão o do catálogo. SEMPRE reflete no ORÇAMENTO (col K via PRICE_UPD), pros itens
+        # do catálogo — sem isso, preço vindo do form ia só p/ o Memorial. Não sobrescreve
+        # PRICE_UPD já definido (manual).
+        cur = cfg.CP.get(key)
+        preco_final = float(cur[0]) if (isinstance(cur, (list, tuple)) and cur and cur[0] is not None) else float(preco_cat)
         rows = key2rows.get(key, [])
         for row in rows:
             if row not in cfg.PRICE_UPD:
-                cfg.PRICE_UPD[row] = preco
-        aplicados.append((key, preco, rows))
+                cfg.PRICE_UPD[row] = preco_final
+        aplicados.append((key, preco_final, rows))
     return aplicados
 
 

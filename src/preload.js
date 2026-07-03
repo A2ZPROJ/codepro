@@ -146,6 +146,7 @@ window.electronAPI = {
     cotacoesAbrir:  (id) => ipcRenderer.invoke('orc-elev:cotacoes-abrir', id),
     analisesList:   ()   => ipcRenderer.invoke('orc-elev:analises-list'),
     analisesLoad:   (f)  => ipcRenderer.invoke('orc-elev:analises-load', f),
+    catalogoAplicar:(ctx)=> ipcRenderer.invoke('orc-elev:catalogo-aplicar', ctx),
     onProgresso: (cb) => {
       const handler = (_e, msg) => { try { cb(msg); } catch {} };
       ipcRenderer.on('orc-elev:progresso', handler);
