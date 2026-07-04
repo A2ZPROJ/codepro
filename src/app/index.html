@@ -43873,47 +43873,26 @@ window.deleteFromBucket = async function(bucketName, path) {
   }
 
   // ── Carregamento ──
+  // Lê por fetch EXPLÍCITO no PostgREST com o token da sessão.
+  // Motivo: o query builder do supabase-js estava retornando 0 linhas p/ `demandas`
+  // neste renderer (Electron) mesmo com sessão válida, enquanto o MESMO token via
+  // fetch direto retorna certo (comprovado). Fetch explícito = robusto e determinístico.
+  async function _restGet(path){
+    const sess=(await sb().auth.getSession())?.data?.session||null;
+    const tok=sess?.access_token || window.SUPABASE_ANON_KEY;
+    const r=await fetch((window.SUPABASE_URL||'')+'/rest/v1/'+path,
+      { headers:{ apikey:(window.SUPABASE_ANON_KEY||''), Authorization:'Bearer '+tok } });
+    if(!r.ok){ throw new Error('HTTP '+r.status+' '+(await r.text().catch(()=>'')).slice(0,200)); }
+    const j=await r.json();
+    return Array.isArray(j)?j:[];
+  }
   async function loadDemandas(){
     if(!sb()) return;
-    // ── DIAGNÓSTICO v2.84.63 — compara supabase-js x fetch cru + decodifica o JWT ──
-    let _sess=null; try{ _sess=(await sb().auth.getSession())?.data?.session||null; }catch(e){}
-    const _tok=_sess?.access_token||null;
-    let _claims={}; try{ _claims=JSON.parse(decodeURIComponent(escape(atob((_tok||'').split('.')[1]||'')))); }catch(e){ try{ _claims=JSON.parse(atob((_tok||'').split('.')[1]||'')); }catch(e2){} }
-    const {data,error}=await sb().from('demandas')
-      .select('*')
-      .is('deleted_at',null)
-      .order('ordem',{ascending:true})
-      .order('criado_em',{ascending:false});
-    const _n=(data||[]).length;
-    // fetch CRU no PostgREST com o MESMO token (fora do supabase-js)
-    let _raw='?';
+    let rows=[];
     try{
-      const _r=await fetch((window.SUPABASE_URL||'')+'/rest/v1/demandas?select=id&deleted_at=is.null',
-        { headers:{ apikey:(window.SUPABASE_ANON_KEY||''), Authorization:'Bearer '+(_tok||window.SUPABASE_ANON_KEY||'') } });
-      const _j=await _r.json();
-      _raw=_r.status+' → '+(Array.isArray(_j)?(_j.length+' linhas'):('resp: '+JSON.stringify(_j).slice(0,140)));
-    }catch(e){ _raw='erro fetch: '+(e?.message||e); }
-    if(error || _n===0){
-      try{
-        const _am=_claims.app_metadata||{};
-        (window.nexusAlert||alert)([
-          '[Planner · diagnóstico v2]',
-          '',
-          'Demandas (supabase-js): '+_n,
-          'Demandas (fetch cru, mesmo token): '+_raw,
-          '',
-          'JWT role: '+(_claims.role||'—'),
-          'JWT sub: '+((_claims.sub||'—')+'').slice(0,12),
-          'JWT app_metadata.tenant_id: '+(_am.tenant_id||'AUSENTE'),
-          'JWT app_metadata.is_super_admin: '+(_am.is_super_admin),
-          '',
-          'Responsáveis: '+((window._responsaveis||[]).length),
-          'Erro: '+(error?(error.message||JSON.stringify(error)):'nenhum'),
-        ].join('\n'));
-      }catch(e){}
-    }
-    if(error){ console.error('loadDemandas:',error); return; }
-    window._demandas = data||[];
+      rows=await _restGet('demandas?select=*&deleted_at=is.null&order=ordem.asc,criado_em.desc');
+    }catch(err){ console.error('loadDemandas:',err); return; }
+    window._demandas = rows;
     _plLoaded = true;
     window.plannerRender();
     window.plannerRenderDash?.();
