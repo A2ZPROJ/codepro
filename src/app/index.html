@@ -8817,6 +8817,7 @@ body.presenting #presentingBadge { display: flex; }
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
             <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px">Responsáveis</div>
             <span style="flex:1"></span>
+            <button type="button" id="plfRespNew" class="plf-resp-add" style="display:none;margin-right:6px" title="Cadastrar um novo nome na lista (somente master)" onclick="window.plannerNovoResponsavel()">+ Cadastrar novo</button>
             <button type="button" class="plf-resp-add" onclick="window.plannerAddRespRow()">+ Adicionar responsável</button>
           </div>
           <div id="plfRespList"></div>
@@ -43736,6 +43737,40 @@ window.deleteFromBucket = async function(bucketName, path) {
     const row=btn.closest('.plf-resp-row'); if(row) row.remove();
     if(!list.querySelector('.plf-resp-row')) window.plannerAddRespRow(); // mantém ao menos 1 linha
   };
+  // Re-renderiza as opções de TODOS os selects de responsável preservando a seleção atual.
+  function plRefreshRespSelects(){
+    document.querySelectorAll('#plfRespList .plf-resp-sel').forEach(s=>{ const v=s.value; s.innerHTML=plRespOptionsHtml(v); });
+  }
+  // MASTER-only: cadastra um NOVO responsável (tabela Supabase `responsaveis`) direto do Planner.
+  // Usuários comuns não veem o botão e só selecionam nomes já existentes.
+  window.plannerNovoResponsavel = async function(){
+    const alertFn = window.nexusAlert || ((m)=>alert(m));
+    if(!(window._isMaster || window._isSuperAdmin)){ alertFn('Apenas usuários master podem cadastrar responsáveis.'); return; }
+    if(!sb()){ alertFn('Sem conexão com o banco de dados.'); return; }
+    const promptFn = (msg,def)=> window.nexusPrompt ? window.nexusPrompt(msg,def) : Promise.resolve(prompt(msg,def));
+    const nome = await promptFn('Nome do responsável:','');
+    if(nome===null) return;
+    if(!String(nome).trim()){ alertFn('Nome não pode ser vazio.'); return; }
+    const cargo = await promptFn('Cargo (opcional):','');
+    if(cargo===null) return;
+    let newId=null;
+    try{
+      const { data, error } = await sb().from('responsaveis')
+        .insert({ nome:String(nome).trim(), cargo:String(cargo||'').trim()||null })
+        .select('id').single();
+      if(error) throw error;
+      newId = data?.id || null;
+    }catch(err){
+      console.error('plannerNovoResponsavel:',err);
+      (window.toastError||alertFn)('Erro ao cadastrar: '+(err?.message||err));
+      return;
+    }
+    try{ await window.loadEquipes?.(); }catch(e){ console.warn('reload responsaveis:',e); }
+    plRefreshRespSelects();
+    if(newId) window.plannerAddRespRow(newId); // já deixa uma linha apontando pro novo nome
+    populateFilters();
+    window.toastSuccess?.('Responsável cadastrado');
+  };
   function plSelectedRespIds(){
     return [...new Set(Array.from(document.querySelectorAll('#plfRespList .plf-resp-sel')).map(s=>s.value).filter(Boolean))];
   }
@@ -43823,7 +43858,10 @@ window.deleteFromBucket = async function(bucketName, path) {
     }
   }
 
-  window.plannerInit = function(){
+  window.plannerInit = async function(){
+    // Garante a lista de responsáveis mesmo que o loadEquipes do boot ainda não tenha resolvido
+    // (é async e sem await no boot) — sem isso os dropdowns de responsável ficam vazios.
+    if(!(window._responsaveis||[]).length){ try{ await window.loadEquipes?.(); }catch(e){ console.warn('plannerInit loadEquipes:',e); } }
     populateFilters();
     if(!_plLoaded) loadDemandas(); else window.plannerRender();
   };
@@ -44041,8 +44079,13 @@ window.deleteFromBucket = async function(bucketName, path) {
     if(sp) sp.innerHTML='<option value="">— Sem projeto —</option>'+(window._projects||[]).map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
   }
 
-  window.plannerOpenModal=(id,colKey)=>{
+  window.plannerOpenModal=async(id,colKey)=>{
     fillModalSelects();
+    // Garante que a lista de responsáveis esteja carregada antes de montar os selects (evita dropdown vazio)
+    if(!(window._responsaveis||[]).length){ try{ await window.loadEquipes?.(); }catch(e){ console.warn('plannerOpenModal loadEquipes:',e); } }
+    // Botão "Cadastrar novo" só pra master/super-admin; comuns só selecionam da lista
+    const respNewBtn=document.getElementById('plfRespNew');
+    if(respNewBtn) respNewBtn.style.display=(window._isMaster || window._isSuperAdmin)?'':'none';
     const d = id ? (window._demandas||[]).find(x=>x.id===id) : null;
     document.getElementById('plfId').value = d?.id || '';
     document.getElementById('plfTitulo').value = d?.titulo || '';
