@@ -2057,12 +2057,16 @@
   };
 
   async function loadEquipes() {
-    const [resEmp,resResp]=await Promise.all([
+    const [resEmp,resResp,resPrio]=await Promise.all([
       sb.from('empresas_equipe').select('*').order('nome'),
       sb.from('responsaveis').select('*, empresa:empresas_equipe(id,nome,cor,logo_url)').order('nome'),
+      sb.from('prioridades').select('*').is('deleted_at',null).order('ordem',{ascending:true}).order('nome'),
     ]);
     if(resEmp.error){console.error('loadEquipes empresas_equipe:',resEmp.error);return;}
     if(resResp.error){console.error('loadEquipes responsaveis:',resResp.error);return;}
+    // prioridades é opcional (tabela nova) — se falhar, não bloqueia responsáveis/empresas
+    if(resPrio.error){ console.warn('loadEquipes prioridades:',resPrio.error); window._prioridades=window._prioridades||[]; }
+    else window._prioridades=resPrio.data||[];
     window._equipes=resEmp.data||[];
     window._responsaveis=resResp.data||[];
     populateTeamSelects();
@@ -8828,7 +8832,11 @@ body.presenting #presentingBadge { display: flex; }
             <select id="plfProj" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none;cursor:pointer"></select>
           </div>
           <div>
-            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">Prioridade</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+              <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px">Prioridade</div>
+              <span style="flex:1"></span>
+              <button type="button" id="plfPrioNew" class="plf-resp-add" style="display:none" title="Cadastrar uma nova prioridade (somente master)" onclick="window.plannerNovaPrioridade()">+ Cadastrar</button>
+            </div>
             <select id="plfPrio" style="width:100%;padding:9px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none;cursor:pointer">
               <option value="baixa">Baixa</option>
               <option value="media" selected>Média</option>
@@ -43694,6 +43702,24 @@ window.deleteFromBucket = async function(bucketName, path) {
     alta:    {label:'Fudeu',       bg:'#fef3c7', color:'#d97706'},
     urgente: {label:'Fudeu muito', bg:'#fee2e2', color:'#dc2626'},
   };
+  const PL_PRIO_BUILTIN = ['baixa','media','alta','urgente']; // ordem dos níveis embutidos
+  // Estilo de uma prioridade: built-in (slug) OU customizada (uuid da tabela `prioridades`).
+  function plPrioStyle(key){
+    if(PL_PRIO[key]) return PL_PRIO[key];
+    const c=(window._prioridades||[]).find(p=>p.id===key);
+    if(c){ const cor=c.cor||'#64748b'; return {label:c.nome||'—', bg:cor+'22', color:cor}; }
+    return PL_PRIO.media;
+  }
+  // <option>s do select de prioridade: níveis embutidos + os cadastrados pelo master.
+  function plPrioOptionsHtml(sel){
+    let h=PL_PRIO_BUILTIN.map(k=>`<option value="${k}"${k===sel?' selected':''}>${esc(PL_PRIO[k].label)}</option>`).join('');
+    const cust=(window._prioridades||[]);
+    if(cust.length){
+      h+='<option disabled>──────────</option>';
+      h+=cust.map(p=>`<option value="${esc(p.id)}"${p.id===sel?' selected':''}>${esc(p.nome)}</option>`).join('');
+    }
+    return h;
+  }
   const PL_TAGS = [
     {key:'Anteprojeto',          color:'#7c3aed', bg:'#ede9fe'},
     {key:'Modelagem Hidráulica', color:'#0891b2', bg:'#cffafe'},
@@ -43770,6 +43796,36 @@ window.deleteFromBucket = async function(bucketName, path) {
     if(newId) window.plannerAddRespRow(newId); // já deixa uma linha apontando pro novo nome
     populateFilters();
     window.toastSuccess?.('Responsável cadastrado');
+  };
+  // MASTER-only: cadastra uma NOVA prioridade (tabela Supabase `prioridades`) direto do Planner.
+  // Usuários comuns não veem o botão e só selecionam os níveis existentes.
+  window.plannerNovaPrioridade = async function(){
+    const alertFn = window.nexusAlert || ((m)=>alert(m));
+    if(!(window._isMaster || window._isSuperAdmin)){ alertFn('Apenas usuários master podem cadastrar prioridades.'); return; }
+    if(!sb()){ alertFn('Sem conexão com o banco de dados.'); return; }
+    const promptFn=(msg,def)=> window.nexusPrompt ? window.nexusPrompt(msg,def) : Promise.resolve(prompt(msg,def));
+    const nome=await promptFn('Nome da prioridade:','');
+    if(nome===null) return;
+    if(!String(nome).trim()){ alertFn('Nome não pode ser vazio.'); return; }
+    let cor=await promptFn('Cor (hex, ex: #dc2626):','#6366f1');
+    if(cor===null) return;
+    cor=String(cor||'').trim(); if(cor && !/^#[0-9a-fA-F]{6}$/.test(cor)) cor='#6366f1';
+    let newId=null;
+    try{
+      const rec={ nome:String(nome).trim(), cor:cor||null, ordem:100 };
+      if(window._tenantId) rec.tenant_id=window._tenantId;
+      const { data, error } = await sb().from('prioridades').insert(rec).select('id').single();
+      if(error) throw error;
+      newId=data?.id||null;
+    }catch(err){
+      console.error('plannerNovaPrioridade:',err);
+      (window.toastError||alertFn)('Erro ao cadastrar: '+(err?.message||err));
+      return;
+    }
+    try{ await window.loadEquipes?.(); }catch(e){ console.warn('reload prioridades:',e); }
+    const prioSel=document.getElementById('plfPrio');
+    if(prioSel) prioSel.innerHTML=plPrioOptionsHtml(newId||prioSel.value); // já seleciona a nova
+    window.toastSuccess?.('Prioridade cadastrada');
   };
   function plSelectedRespIds(){
     return [...new Set(Array.from(document.querySelectorAll('#plfRespList .plf-resp-sel')).map(s=>s.value).filter(Boolean))];
@@ -44018,7 +44074,7 @@ window.deleteFromBucket = async function(bucketName, path) {
   const ACEITE_BADGE={ pendente:{t:'⏳ Aguardando aceite',bg:'#fef3c7',c:'#b45309'}, aceito:{t:'✓ Aceita',bg:'#dcfce7',c:'#15803d'}, rejeitado:{t:'✗ Rejeitada',bg:'#fee2e2',c:'#b91c1c'} };
   function aceiteBadge(st){ const a=ACEITE_BADGE[st||'pendente']; if(!a)return ''; return `<span title="${esc(a.t)}" style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:${a.bg};color:${a.c}">${esc(a.t)}</span>`; }
   function cardHtml(d){
-    const prio=PL_PRIO[d.prioridade]||PL_PRIO.media;
+    const prio=plPrioStyle(d.prioridade);
     const resps=respIdsOf(d).map(respById).filter(Boolean);
     const respHtml = resps.length ? `<span class="pl-resp-stack" title="${esc(resps.map(r=>r.nome).join(', '))}">`
       + resps.slice(0,4).map(r=>`<span class="pl-resp-av" style="background:${safeCor(r.empresa?.cor)}">${esc(initials(r.nome))}</span>`).join('')
@@ -44099,7 +44155,11 @@ window.deleteFromBucket = async function(bucketName, path) {
       else { window.plannerAddRespRow(); window.plannerAddRespRow(); }
     }
     document.getElementById('plfProj').value = d?.projeto_id || '';
-    document.getElementById('plfPrio').value = d?.prioridade || 'media';
+    // Prioridade: opções = níveis embutidos + customizadas; botão "Cadastrar" só p/ master
+    const prioSel=document.getElementById('plfPrio');
+    if(prioSel) prioSel.innerHTML = plPrioOptionsHtml(d?.prioridade || 'media');
+    const prioNewBtn=document.getElementById('plfPrioNew');
+    if(prioNewBtn) prioNewBtn.style.display=(window._isMaster || window._isSuperAdmin)?'':'none';
     document.getElementById('plfInicio').value = d?.data_inicio || '';
     document.getElementById('plfData').value = d?.data_entrega || '';
     document.getElementById('plfFimReal').value = d?.data_fim_real || '';
