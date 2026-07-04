@@ -43875,11 +43875,30 @@ window.deleteFromBucket = async function(bucketName, path) {
   // ── Carregamento ──
   async function loadDemandas(){
     if(!sb()) return;
+    // ── DIAGNÓSTICO TEMPORÁRIO (v2.84.62) — remover depois de identificar a causa ──
+    let _sess=null; try{ _sess=(await sb().auth.getSession())?.data?.session||null; }catch(e){}
     const {data,error}=await sb().from('demandas')
       .select('*')
       .is('deleted_at',null)
       .order('ordem',{ascending:true})
       .order('criado_em',{ascending:false});
+    const _n=(data||[]).length;
+    if(error || _n===0){
+      try{
+        const linhas=[
+          '[Planner · diagnóstico]',
+          '',
+          'Demandas lidas: '+_n,
+          'Responsáveis carregados: '+((window._responsaveis||[]).length),
+          'Sessão Supabase: '+(_sess ? ('ATIVA ('+(_sess.user?.email||'?')+')') : 'NENHUMA — rodando como ANON'),
+          'tenant no app: '+(window._tenantId||'—'),
+          'super admin: '+(!!window._isSuperAdmin),
+          'role: '+(window._currentUserRole||'—'),
+          'Erro leitura: '+(error?(error.message||JSON.stringify(error)):'nenhum'),
+        ].join('\n');
+        (window.nexusAlert||alert)(linhas);
+      }catch(e){}
+    }
     if(error){ console.error('loadDemandas:',error); return; }
     window._demandas = data||[];
     _plLoaded = true;
