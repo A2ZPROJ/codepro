@@ -43886,6 +43886,25 @@ window.deleteFromBucket = async function(bucketName, path) {
     const j=await r.json();
     return Array.isArray(j)?j:[];
   }
+  // Escrita robusta (PATCH/POST/DELETE) pelo MESMO motivo do _restGet: o query
+  // builder do supabase-js falha silencioso neste renderer nas ops com filtro
+  // (?id=eq...) — o INSERT (POST sem filtro) funcionava, mas UPDATE/DELETE não,
+  // por isso "excluir demanda não dava certo". Fetch direto = determinístico.
+  // Prefer: return=representation → devolve as linhas afetadas (dá pra checar).
+  async function _restWrite(method, path, body){
+    const sess=(await sb().auth.getSession())?.data?.session||null;
+    const tok=sess?.access_token || window.SUPABASE_ANON_KEY;
+    const r=await fetch((window.SUPABASE_URL||'')+'/rest/v1/'+path,
+      { method,
+        headers:{ apikey:(window.SUPABASE_ANON_KEY||''), Authorization:'Bearer '+tok,
+          'Content-Type':'application/json', Prefer:'return=representation' },
+        body: body!=null ? JSON.stringify(body) : undefined });
+    if(!r.ok){ throw new Error('HTTP '+r.status+' '+(await r.text().catch(()=>'')).slice(0,200)); }
+    const txt=await r.text().catch(()=>'');
+    let j=[]; try{ j=txt?JSON.parse(txt):[]; }catch{ j=[]; }
+    return Array.isArray(j)?j:(j?[j]:[]);
+  }
+  const _demId=id=>'demandas?id=eq.'+encodeURIComponent(id);
   async function loadDemandas(){
     if(!sb()) return;
     let rows=[];
@@ -44135,9 +44154,11 @@ window.deleteFromBucket = async function(bucketName, path) {
     const patch={status:colKey, concluido_em:d.concluido_em, atualizado_em:new Date().toISOString()};
     if(colKey==='concluido' && !d.data_fim_real){ d.data_fim_real=new Date().toISOString().slice(0,10); patch.data_fim_real=d.data_fim_real; }
     window.plannerRender(); window.plannerRenderDash?.();
-    const {error}=await sb().from('demandas').update(patch).eq('id',id);
-    if(error){ d.status=prev; d.data_fim_real=prevFim; window.plannerRender(); window.toastError?.('Erro ao mover: '+error.message); }
-    else { try{ window.audit?.log('demanda_move',{id,de:prev,para:colKey}); }catch{} }
+    try{
+      const rows=await _restWrite('PATCH', _demId(id), patch);
+      if(!rows.length) throw new Error('sem permissão nesta demanda');
+      try{ window.audit?.log('demanda_move',{id,de:prev,para:colKey}); }catch{}
+    }catch(err){ d.status=prev; d.data_fim_real=prevFim; window.plannerRender(); window.toastError?.('Erro ao mover: '+(err?.message||err)); }
   };
 
   // ── Modal ──
@@ -44233,18 +44254,19 @@ window.deleteFromBucket = async function(bucketName, path) {
         if(id){
           const cur=(window._demandas||[]).find(x=>x.id===id);
           payload.concluido_em = status==='concluido' ? (cur?.concluido_em||new Date().toISOString()) : null;
-          return await sb().from('demandas').update(payload).eq('id',id);
+          const rows=await _restWrite('PATCH', _demId(id), payload);
+          if(!rows.length) throw new Error('não foi possível salvar (sem permissão nesta demanda?)');
+          return rows;
         } else {
           payload.concluido_em = status==='concluido' ? new Date().toISOString() : null;
           payload.criado_por = window._currentUserData?.nome || null;
           payload.criado_por_id = window._currentUserData?.id || null;
           if(window._tenantId) payload.tenant_id = window._tenantId;
-          return await sb().from('demandas').insert(payload);
+          return await _restWrite('POST', 'demandas', payload);
         }
       })();
       const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Tempo esgotado ao salvar — verifique a conexão e se você está logado.')),15000));
-      const { error } = await Promise.race([op, timeout]);
-      if(error) throw error;
+      await Promise.race([op, timeout]);
       try{ window.audit?.log(id?'demanda_update':'demanda_create',{titulo}); }catch{}
       window.plannerCloseModal();
       await loadDemandas();
@@ -44261,18 +44283,21 @@ window.deleteFromBucket = async function(bucketName, path) {
     const id=document.getElementById('plfId').value;
     if(!id) return;
     if(!(await (window.nexusConfirm?.('Remover esta demanda?')??Promise.resolve(confirm('Remover esta demanda?'))))) return;
-    const {error}=await sb().from('demandas').update({deleted_at:new Date().toISOString()}).eq('id',id);
-    if(error){ window.toastError?.('Erro: '+error.message); return; }
+    let rows;
+    try{ rows=await _restWrite('PATCH', _demId(id), {deleted_at:new Date().toISOString(), atualizado_em:new Date().toISOString()}); }
+    catch(err){ console.error('plannerDelete:',err); window.toastError?.('Erro ao remover: '+(err?.message||err)); return; }
+    if(!rows.length){ window.toastError?.('Não foi possível remover (sem permissão nesta demanda?).'); return; }
     try{ window.audit?.log('demanda_delete',{id}); }catch{}
     window.plannerCloseModal();
     await loadDemandas();
+    window.toastSuccess?.('Demanda removida');
   };
 
   // ── Aceitar / Rejeitar demanda (gerada do cronograma) ──
   window.demandaAceitar=async(id)=>{
     const patch={ aceite_status:'aceito', aceite_motivo:null, aceite_em:new Date().toISOString(), aceite_por_id:window._currentUserData?.id||null, atualizado_em:new Date().toISOString() };
-    const {error}=await sb().from('demandas').update(patch).eq('id',id);
-    if(error){ window.toastError?.('Erro: '+error.message); return; }
+    try{ const rows=await _restWrite('PATCH', _demId(id), patch); if(!rows.length) throw new Error('sem permissão'); }
+    catch(err){ window.toastError?.('Erro: '+(err?.message||err)); return; }
     try{ window.audit?.log('demanda_aceitar',{id}); }catch{}
     window.plannerCloseModal(); await loadDemandas(); window.toastSuccess?.('Demanda aceita ✓');
   };
@@ -44281,8 +44306,8 @@ window.deleteFromBucket = async function(bucketName, path) {
     if(motivo==null) return;
     if(!String(motivo).trim()){ window.nexusAlert?.('A rejeição exige um motivo.'); return; }
     const patch={ aceite_status:'rejeitado', aceite_motivo:String(motivo).trim(), aceite_em:new Date().toISOString(), aceite_por_id:window._currentUserData?.id||null, atualizado_em:new Date().toISOString() };
-    const {error}=await sb().from('demandas').update(patch).eq('id',id);
-    if(error){ window.toastError?.('Erro: '+error.message); return; }
+    try{ const rows=await _restWrite('PATCH', _demId(id), patch); if(!rows.length) throw new Error('sem permissão'); }
+    catch(err){ window.toastError?.('Erro: '+(err?.message||err)); return; }
     try{ window.audit?.log('demanda_rejeitar',{id,motivo}); }catch{}
     window.plannerCloseModal(); await loadDemandas(); window.toastSuccess?.('Demanda rejeitada');
   };
