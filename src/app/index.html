@@ -351,7 +351,7 @@
       conferencia: 'Conferência', 'gerar-pdf-ose': 'Gerar PDF Planilha OSE', orcamento: 'Orçamento de Rede', 'orcamento-elevatoria': 'Orçamento de Elevatórias', renomear: 'Renomear',
       'planilhas-gis': 'Correção de Planilha GIS', perfil: 'Perfil', estoque: 'Estoque',
       pedidos: 'Pedidos de Compra', diretoria: 'Dashboard Contrato',
-      relatorios: 'Relatórios Técnicos', sobre: 'Sobre',
+      relatorios: 'Relatórios Técnicos', licencas: 'Licenças', sobre: 'Sobre',
       'coleta-end': 'Coleta de Endereços',
       'frotas-veiculos': 'Veículos', 'frotas-abastec': 'Abastecimento',
       'obras-vistorias': 'Vistoria de Obras',
@@ -788,11 +788,18 @@
         }
         // Financeiro: só tenant A2Z (mesmo não-super_admin: Matheus é A2Z).
         if (btn.id === 'finSbBtn') { btn.style.display = ehA2Z ? '' : 'none'; btn.dataset.allowedView = ehA2Z ? '1' : '0'; return; }
-        // Equipe & Licenças: só o Gestor da empresa vê.
+        // Equipe: só o Gestor da empresa vê.
         if (btn.id === 'equipeSbBtn') {
           const showEq = (currentUser.role === 'gestor');
           btn.style.display = showEq ? '' : 'none';
           btn.dataset.allowedView = showEq ? '1' : '0';
+          return;
+        }
+        // Licenças (plano + histórico de compras): Gestor ou Master da empresa.
+        if (btn.id === 'licencasSbBtn') {
+          const showLic = (currentUser.role === 'gestor' || currentUser.role === 'master');
+          btn.style.display = showLic ? '' : 'none';
+          btn.dataset.allowedView = showLic ? '1' : '0';
           return;
         }
         const onclick = btn.getAttribute('onclick') || '';
@@ -7903,6 +7910,11 @@ body.presenting #presentingBadge { display: flex; }
         <button class="sb-item" data-tab="perfil" data-label="Perfil" onclick="switchTab('perfil',this)">
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           <span class="sb-label">Perfil</span>
+        </button>
+        <!-- Licenças (gestor/master) — plano + histórico de compras -->
+        <button class="sb-item" data-tab="licencas" data-label="Licenças" id="licencasSbBtn" data-requires-online="1" style="display:none" onclick="switchTab('licencas',this);setTimeout(()=>window.licencasInit&&window.licencasInit(),60);">
+          <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          <span class="sb-label">Licenças</span>
         </button>
         <!-- 15. Sobre -->
         <button class="sb-item" data-tab="sobre" data-label="Sobre" id="sobreSbBtn" onclick="switchTab('sobre',this);setTimeout(()=>window.sobreInit&&window.sobreInit(),60);">
@@ -18866,6 +18878,21 @@ body.presenting #presentingBadge { display: flex; }
 
       </div><!-- /gis-legacy-ui -->
 
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       ABA LICENÇAS — plano do Nexus, mensalidade e histórico de compras
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-licencas">
+    <div style="max-width:1000px;margin:0 auto;padding:24px 24px 60px">
+      <div class="page-hero">
+        <div class="page-hero-content">
+          <h1 class="page-title">Gerenciamento de Licenças</h1>
+          <p class="page-subtitle">Seu plano do Nexus, mensalidade e histórico de compras dos últimos meses</p>
+        </div>
+      </div>
+      <div id="licConteudo"><div style="padding:48px;text-align:center;color:var(--text3)">Carregando…</div></div>
     </div>
   </div>
 
@@ -36698,6 +36725,7 @@ try {
     { group:'Navegação', label:'Renomear arquivos',            iconChar:'✎', action: ()=> window.switchTab('renomear', qSb('renomear')) },
     { group:'Navegação', label:'Correção de Planilha GIS',     iconChar:'◉', action: ()=> window.switchTab('planilhas-gis', qSb('planilhas-gis')) },
     { group:'Navegação', label:'Relatórios Técnicos',          iconChar:'▤', action: ()=> window.switchTab('relatorios', qSb('relatorios')) },
+    { group:'Navegação', label:'Licenças — plano e compras',   iconChar:'▭', action: ()=> { window.switchTab('licencas', qSb('licencas')); setTimeout(()=> window.licencasInit && window.licencasInit(), 60); } },
     { group:'Navegação', label:'Dashboard Contrato',           iconChar:'📊', action: ()=> { window.switchTab('diretoria', qSb('diretoria')); setTimeout(()=> window.ddashInit && window.ddashInit(), 60); } },
     { group:'Navegação', label:'Estoque',                      iconChar:'▦', action: ()=> { window.switchTab('estoque', qSb('estoque')); setTimeout(()=> window.estoqueInit && window.estoqueInit(), 60); } },
     { group:'Navegação', label:'Pedidos de Compra',            iconChar:'▣', action: ()=> { window.switchTab('pedidos', qSb('pedidos')); setTimeout(()=> window.pedidosInit && window.pedidosInit(), 60); } },
@@ -39202,15 +39230,109 @@ try {
     }
   }
 
-  // Carrega quando user vai pra aba Sobre
+  // Carrega quando user vai pra aba Sobre / Licenças
   const origSwitchTab = window.switchTab;
   if (origSwitchTab) {
     window.switchTab = function(tab, btn) {
       origSwitchTab.apply(this, arguments);
       if (tab === 'sobre') setTimeout(loadMeuPlano, 100);
+      if (tab === 'licencas') setTimeout(()=>window.licencasInit&&window.licencasInit(), 60);
     };
   }
   window.refreshMeuPlano = loadMeuPlano;
+
+  // ─── Painel de Licenças (plano do Nexus + histórico de compras) ───
+  const METODO_LBL = { pix:'PIX', credit_card:'Cartão', cartao:'Cartão', boleto:'Boleto', ted:'TED', manual:'Manual' };
+  const licStyle = `<style>
+    .lic-plan{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;background:var(--accent);color:#fff;border-radius:var(--radius-lg);padding:22px 26px;box-shadow:var(--shadow-sm)}
+    .lic-plan-badge{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.5px;padding:3px 10px;border-radius:8px;margin-bottom:8px}
+    .lic-plan-name{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+    .lic-plan-sub{font-size:12.5px;opacity:.9;margin-top:4px}
+    .lic-plan-r{text-align:right;min-width:180px}
+    .lic-plan-price{font-size:30px;font-weight:800;line-height:1}
+    .lic-plan-price span{font-size:14px;font-weight:600;opacity:.85}
+    .lic-plan-meta{font-size:12px;opacity:.92;margin-top:5px}
+    .lic-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+    .lic-tbl th{text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1.5px solid var(--border)}
+    .lic-tbl td{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text)}
+    .lic-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;text-transform:uppercase}
+  </style>`;
+  function licMsg(t){ return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:40px;text-align:center;color:var(--text3);font-size:13px">${window.esc(t)}</div>`; }
+  function licRender(a, pg){
+    const isPaid = s => /pago|paid|approv|conf|success/i.test(s||'');
+    const paid = pg.filter(p => p.data_pgto && isPaid(p.status));
+    const now = new Date(); const months = [];
+    for (let i=11;i>=0;i--){ const d=new Date(now.getFullYear(), now.getMonth()-i, 1);
+      months.push({ key:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'), total:0,
+        lbl:d.toLocaleDateString('pt-BR',{month:'short'}).replace('.',''),
+        mesAno:d.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'}).replace('.','') }); }
+    paid.forEach(p=>{ const mo=months.find(x=>x.key===(p.data_pgto||'').slice(0,7)); if(mo) mo.total += Number(p.valor||0); });
+    const maxM = Math.max(1, ...months.map(x=>x.total));
+    const total12 = months.reduce((s,x)=>s+x.total,0);
+    const totalGeral = paid.reduce((s,p)=>s+Number(p.valor||0),0);
+    const nPg = paid.length;
+    const ticket = nPg ? totalGeral/nPg : null;
+
+    const st = STATUS_BADGES[a?.status] || STATUS_BADGES.sem_assinatura;
+    const planoLbl = a ? (PLANO_LABEL[a.plano] || a.plano) : 'Sem plano ativo';
+    const cicloTxt = a ? (a.ciclo==='anual'?'Cobrança anual':'Cobrança mensal') : '';
+
+    const planCard = `<div class="lic-plan">
+      <div class="lic-plan-l">
+        <div class="lic-plan-badge" style="background:rgba(255,255,255,.22);color:#fff">${st.label}</div>
+        <div class="lic-plan-name">${window.esc(planoLbl)}</div>
+        <div class="lic-plan-sub">${window.esc(a?.observacoes || cicloTxt || 'Plano Nexus')}</div>
+      </div>
+      <div class="lic-plan-r">
+        <div class="lic-plan-price">${fmtBrl(a?.valor_mensal)}<span>/mês</span></div>
+        <div class="lic-plan-meta">Próximo vencimento: <strong>${fmtDate(a?.proximo_venc)}</strong></div>
+        <div class="lic-plan-meta">Último pagamento: <strong>${fmtDate(a?.ultimo_pgto)}</strong></div>
+      </div>
+    </div>`;
+
+    const kpi=(lbl,val,col)=>`<div class="kpi-card"><div class="kpi-content"><div class="kpi-label">${lbl}</div><div class="kpi-value"${col?` style="color:${col}"`:''}>${val}</div></div></div>`;
+    const kpis = `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-top:14px">`
+      + kpi('Gasto 12 meses', fmtBrl(total12))
+      + kpi('Total pago', fmtBrl(totalGeral))
+      + kpi('Pagamentos', nPg)
+      + kpi('Ticket médio', ticket==null?'—':fmtBrl(ticket))
+      + `</div>`;
+
+    const chart = `<div class="pn-flux" style="height:150px">`+months.map(m=>
+        `<div class="pn-fcol" title="${window.esc(m.mesAno)} — ${fmtBrl(m.total)}">`
+        +`<div class="pn-fbars"><div class="pn-fbar" style="height:${Math.round(m.total/maxM*100)}%;background:var(--accent);width:62%"></div></div>`
+        +`<div class="pn-flbl">${window.esc(m.lbl)}</div></div>`).join('')+`</div>`;
+
+    const rows = pg.length ? pg.map(p=>{
+      const paidP = isPaid(p.status);
+      return `<tr>
+        <td>${fmtDate(p.data_pgto)}</td>
+        <td>${window.esc(METODO_LBL[p.metodo]||p.metodo||'—')}</td>
+        <td style="text-align:right;font-weight:600">${fmtBrl(p.valor)}</td>
+        <td style="text-align:center"><span class="lic-badge" style="background:${paidP?'#dcfce7':'#fef3c7'};color:${paidP?'#16a34a':'#d97706'}">${window.esc(p.status||'—')}</span></td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Nenhum pagamento registrado ainda.</td></tr>`;
+    const tabela = `<div style="overflow-x:auto"><table class="lic-tbl"><thead><tr><th>Data</th><th>Método</th><th style="text-align:right">Valor</th><th style="text-align:center">Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+
+    const card=(title,inner)=>`<div class="pn-card" style="margin-top:14px"><div class="pn-card-hd">${title}</div>${inner}</div>`;
+    return licStyle + planCard + kpis
+      + card('Compras nos últimos 12 meses', chart)
+      + card('Histórico de pagamentos', tabela);
+  }
+  window.licencasInit = async function(){
+    const host = document.getElementById('licConteudo'); if(!host) return;
+    const priv = window._isMaster || window._isSuperAdmin || (window._currentUserData?.role === 'gestor');
+    if(!priv){ host.innerHTML = licMsg('Painel restrito aos gestores e administradores da empresa.'); return; }
+    const sb = window.sb; const code = window._currentUserData?.access_code;
+    if(!sb || !code){ host.innerHTML = licMsg('Sessão inválida — refaça o login.'); return; }
+    host.innerHTML = '<div style="padding:48px;text-align:center;color:var(--text3)">Carregando…</div>';
+    let a=null, pg=[];
+    try{
+      const r1 = await sb.rpc('get_my_assinatura', { p_caller_code: code }); a = r1.data?.[0] || null;
+      const r2 = await sb.rpc('get_my_pagamentos', { p_caller_code: code, p_limit: 60 }); pg = r2.data || [];
+    }catch(e){ host.innerHTML = licMsg('Erro ao carregar dados de licença: '+(e?.message||e)); return; }
+    host.innerHTML = licRender(a, pg);
+  };
 
   // ─── Super admin: gerenciar billing por tenant ─────────────────
   window.openTenantBilling = async (tenantId, tenantNome) => {
