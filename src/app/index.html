@@ -346,7 +346,7 @@
 
     // Permissões de abas por usuário
     const TAB_MAP = {
-      generator: 'Cadastrar Novo Projeto', history: 'Histórico', dashboard: 'Dashboard',
+      generator: 'Cadastrar Novo Projeto', history: 'Histórico', dashboard: 'Dashboard Projetos',
       projects: 'Projetos', grd: 'GRD', verificar: 'Verificar Projeto',
       conferencia: 'Conferência', 'gerar-pdf-ose': 'Gerar PDF Planilha OSE', orcamento: 'Orçamento de Rede', 'orcamento-elevatoria': 'Orçamento de Elevatórias', renomear: 'Renomear',
       'planilhas-gis': 'Correção de Planilha GIS', perfil: 'Perfil', estoque: 'Estoque',
@@ -7771,10 +7771,10 @@ body.presenting #presentingBadge { display: flex; }
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/><path d="M6 7h0M12 7h0M18 7h0"/></svg>
           <span class="sb-label">Planner</span>
         </button>
-        <!-- 3. Dashboard -->
-        <button class="sb-item" data-tab="dashboard" data-label="Dashboard" data-requires-online="1" onclick="switchTab('dashboard',this)">
+        <!-- 3. Dashboard Projetos -->
+        <button class="sb-item" data-tab="dashboard" data-label="Dashboard Projetos" data-requires-online="1" onclick="switchTab('dashboard',this)">
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-          <span class="sb-label">Dashboard</span>
+          <span class="sb-label">Dashboard Projetos</span>
         </button>
         <!-- 4. GRD -->
         <button class="sb-item" data-tab="grd" data-label="GRD" data-requires-online="1" onclick="switchTab('grd',this)">
@@ -8226,7 +8226,7 @@ body.presenting #presentingBadge { display: flex; }
     <div class="tab-bar-inner" id="tabBarInner">
       <button class="tab-btn active" draggable="true" onclick="switchTab('generator',this)">Cadastrar Novo Código</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('history',this)">Histórico</button>
-      <button class="tab-btn" draggable="true" onclick="switchTab('dashboard',this)">Dashboard</button>
+      <button class="tab-btn" draggable="true" onclick="switchTab('dashboard',this)">Dashboard Projetos</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('projects',this)">Projetos</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('grd',this)">GRD</button>
       <button class="tab-btn" draggable="true" onclick="switchTab('verificar',this)">Verificar projeto existente</button>
@@ -8389,7 +8389,7 @@ body.presenting #presentingBadge { display: flex; }
       <!-- HERO -->
       <div class="page-hero">
         <div class="page-hero-content">
-          <h1 class="page-title">Dashboard</h1>
+          <h1 class="page-title">Dashboard Projetos</h1>
           <p class="page-subtitle">Visão geral dos seus projetos e códigos em tempo real</p>
         </div>
       </div>
@@ -8790,6 +8790,30 @@ body.presenting #presentingBadge { display: flex; }
     .pn-fbars{flex:1;display:flex;align-items:flex-end;gap:3px;width:100%;justify-content:center}
     .pn-fbar{width:14px;border-radius:3px 3px 0 0;min-height:2px}
     .pn-flbl{font-size:10px;color:var(--text3);margin-top:5px}
+    /* Painel — dashboard profissional */
+    .pn-dash{display:flex;flex-direction:column;gap:14px}
+    .pn-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .pn-hero h2{font-size:19px;font-weight:800;color:var(--text);margin:0;letter-spacing:-.01em}
+    .pn-hero p{font-size:12.5px;color:var(--text3);margin:3px 0 0;max-width:640px}
+    .pn-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px;box-shadow:var(--shadow-sm)}
+    .pn-filters select{padding:7px 11px;font-family:inherit;font-size:12px;border:1.5px solid var(--border2);border-radius:7px;color:var(--text);background:var(--surface);outline:none;cursor:pointer;max-width:210px}
+    .pn-clear{background:transparent;border:1.5px solid var(--border2);color:var(--text3);border-radius:7px;padding:7px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:.15s}
+    .pn-clear:hover{border-color:var(--accent);color:var(--accent)}
+    .pn-count{margin-left:auto;font-size:12px;color:var(--text3);font-weight:600}
+    .pn-card{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:18px 20px}
+    .pn-card-hd{font-size:13px;font-weight:700;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+    .pn-card-hd .pn-hd-badge{margin-left:auto;font-size:11px;font-weight:600;color:var(--text3)}
+    .pn-grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @media(max-width:900px){.pn-grid2{grid-template-columns:1fr}}
+    .pn-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;display:inline-block}
+    .pn-item{display:flex;align-items:center;gap:10px;padding:9px 4px;cursor:pointer;transition:.12s;border-radius:6px}
+    .pn-item:hover{background:var(--surface2)}
+    .pn-item+.pn-item{border-top:1px solid var(--border)}
+    .pn-item-main{flex:1;min-width:0}
+    .pn-item-title{font-size:12.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .pn-item-sub{font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .pn-more{font-size:11px;color:var(--text3);text-align:center;padding:9px 0 2px}
+    .pn-empty2{color:var(--text3);font-size:12px;padding:12px 0;text-align:center}
   </style>
   <div class="tab-content" id="tab-planner">
     <div style="max-width:1320px;margin:0 auto;padding:28px 24px 60px">
@@ -9345,7 +9369,7 @@ body.presenting #presentingBadge { display: flex; }
             <div id="newUserTabs" style="display:flex;flex-wrap:wrap;gap:6px">
               <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="generator" style="cursor:pointer"> Cadastrar Novo Projeto</label>
               <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="history" style="cursor:pointer"> Histórico</label>
-              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="dashboard" style="cursor:pointer"> Dashboard</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="dashboard" style="cursor:pointer"> Dashboard Projetos</label>
               <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="projects" style="cursor:pointer"> Projetos</label>
               <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="grd" style="cursor:pointer"> GRD</label>
               <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface)"><input type="checkbox" value="verificar" style="cursor:pointer"> Verificar Projeto</label>
@@ -36665,7 +36689,7 @@ try {
     // NAVEGAÇÃO
     { group:'Navegação', label:'Cadastrar Novo Projeto',       iconChar:'+', action: ()=> window.switchTab('generator', qSb('generator')) },
     { group:'Navegação', label:'Histórico de códigos',        iconChar:'◷', action: ()=> window.switchTab('history', qSb('history')) },
-    { group:'Navegação', label:'Dashboard',                    iconChar:'▦', action: ()=> window.switchTab('dashboard', qSb('dashboard')) },
+    { group:'Navegação', label:'Dashboard Projetos',           iconChar:'▦', action: ()=> window.switchTab('dashboard', qSb('dashboard')) },
     { group:'Navegação', label:'Projetos',                     iconChar:'▤', action: ()=> window.switchTab('projects', qSb('projects')) },
     { group:'Navegação', label:'GRD — Guia de Remessa',        iconChar:'▣', action: ()=> window.switchTab('grd', qSb('grd')) },
     { group:'Navegação', label:'Verificar projeto existente',  iconChar:'✓', action: ()=> window.switchTab('verificar', qSb('verificar')) },
@@ -44100,35 +44124,80 @@ window.deleteFromBucket = async function(bucketName, path) {
   };
 
   // ── Painel de gestão à vista (calculado das demandas + datas) ──
+  // Estado dos filtros do Painel (persiste entre re-renders)
+  window._pnState = window._pnState || { resp:'', proj:'', tag:'', prio:'', emp:'' };
+  window.pnFilter = (k,v)=>{ if(window._pnState) window._pnState[k]=v; window.plannerRenderPainel(); };
+  window.pnClearFilters = ()=>{ window._pnState={ resp:'', proj:'', tag:'', prio:'', emp:'' }; window.plannerRenderPainel(); };
+
   window.plannerRenderPainel = function(){
     const host=document.getElementById('plSubPainel'); if(!host) return;
-    const ds = window._demandas||[];
+    const st=window._pnState||{};
+    // ── Filtros ──
+    let ds=(window._demandas||[]).slice();
+    if(st.resp) ds=ds.filter(d=>respIdsOf(d).includes(st.resp));
+    if(st.proj) ds=ds.filter(d=>d.projeto_id===st.proj);
+    if(st.tag)  ds=ds.filter(d=>(d.tags||[]).includes(st.tag));
+    if(st.prio) ds=ds.filter(d=>(d.prioridade||'')===st.prio);
+    if(st.emp){ const ids=new Set((window._responsaveis||[]).filter(r=>r.empresa_id===st.emp).map(r=>r.id)); ds=ds.filter(d=>respIdsOf(d).some(x=>ids.has(x))); }
+
     const isC = d=>d.status==='concluido';
     const abertas = ds.filter(d=>!isC(d));
     const concl   = ds.filter(isC);
-    const atras   = ds.filter(isAtrasada);
-    const venc    = ds.filter(isVencendo);
-    // No prazo: concluídas com previsão + fim real, fim real <= previsão
+    const atrasArr = ds.filter(isAtrasada).sort((a,b)=>(a.data_entrega||'').localeCompare(b.data_entrega||''));
+    const vencArr  = ds.filter(d=>isVencendo(d)&&!isAtrasada(d)).sort((a,b)=>(a.data_entrega||'').localeCompare(b.data_entrega||''));
     const base   = concl.filter(d=>d.data_entrega && d.data_fim_real);
     const onTime = base.filter(d=> d.data_fim_real <= d.data_entrega).length;
     const onPct  = base.length ? Math.round(onTime/base.length*100) : null;
-    // Lead time médio (início → fim real) em dias
     const leads = concl.filter(d=>d.data_inicio && d.data_fim_real)
       .map(d=> Math.round((new Date(d.data_fim_real+'T00:00:00') - new Date(d.data_inicio+'T00:00:00'))/86400000))
       .filter(x=>x>=0);
     const leadAvg = leads.length ? Math.round(leads.reduce((a,b)=>a+b,0)/leads.length) : null;
 
-    const kpi=(lbl,val,col)=>`<div class="kpi-card"><div class="kpi-content"><div class="kpi-label">${lbl}</div><div class="kpi-value"${col?` style="color:${col}"`:''}>${val}</div></div></div>`;
-    let h='<div class="kpi-grid" style="grid-template-columns:repeat(6,1fr)">'
-      + kpi('Abertas', abertas.length)
-      + kpi('Vencendo (7d)', venc.length, '#d97706')
-      + kpi('Atrasadas', atras.length, '#dc2626')
-      + kpi('Concluídas', concl.length, '#16a34a')
-      + kpi('No prazo', onPct==null?'—':onPct+'%', onPct==null?null:(onPct>=80?'#16a34a':onPct>=50?'#d97706':'#dc2626'))
-      + kpi('Lead time', leadAvg==null?'—':leadAvg+'d')
+    // ── Barra de filtros ──
+    const opt=(v,l,cur)=>`<option value="${esc(v)}"${String(v)===String(cur)?' selected':''}>${esc(l)}</option>`;
+    const respSel=`<select onchange="window.pnFilter('resp',this.value)" title="Responsável">`+opt('','Todos os responsáveis',st.resp)+(window._responsaveis||[]).map(r=>opt(r.id,r.nome,st.resp)).join('')+`</select>`;
+    const projSel=`<select onchange="window.pnFilter('proj',this.value)" title="Projeto">`+opt('','Todos os projetos',st.proj)+(window._projects||[]).map(p=>opt(p.id,p.name,st.proj)).join('')+`</select>`;
+    const tagSel=`<select onchange="window.pnFilter('tag',this.value)" title="Disciplina">`+opt('','Todas as disciplinas',st.tag)+PL_TAGS.map(t=>opt(t.key,t.key,st.tag)).join('')+`</select>`;
+    const prioSel=`<select onchange="window.pnFilter('prio',this.value)" title="Prioridade">`+opt('','Todas as prioridades',st.prio)+PL_PRIO_BUILTIN.map(k=>opt(k,PL_PRIO[k].label,st.prio)).join('')+(window._prioridades||[]).map(p=>opt(p.id,p.nome,st.prio)).join('')+`</select>`;
+    const empSel=`<select onchange="window.pnFilter('emp',this.value)" title="Empresa">`+opt('','Todas as empresas',st.emp)+(window._equipes||[]).map(e=>opt(e.id,e.nome,st.emp)).join('')+`</select>`;
+    const hasFilter = st.resp||st.proj||st.tag||st.prio||st.emp;
+    const filters=`<div class="pn-filters">${respSel}${projSel}${tagSel}${prioSel}${empSel}`
+      +(hasFilter?`<button class="pn-clear" onclick="window.pnClearFilters()">Limpar filtros</button>`:'')
+      +`<span class="pn-count">${ds.length} demanda${ds.length===1?'':'s'}</span></div>`;
+
+    // ── KPIs (com ícone) ──
+    const IC={
+      grid:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
+      clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+      alert:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+      check:'<polyline points="20 6 9 17 4 12"/>',
+      target:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+      timer:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M9 3h6"/>',
+    };
+    const kpi=(vari,ico,lbl,val,col)=>`<div class="kpi-card"><div class="kpi-icon ${vari}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${ico}</svg></div><div class="kpi-content"><div class="kpi-label">${lbl}</div><div class="kpi-value"${col?` style="color:${col}"`:''}>${val}</div></div></div>`;
+    const kpis='<div class="kpi-grid" style="grid-template-columns:repeat(6,1fr)">'
+      + kpi('neutral',IC.grid,'Abertas',abertas.length)
+      + kpi('warning',IC.clock,'Vencendo (7d)',vencArr.length,'#d97706')
+      + kpi('danger',IC.alert,'Atrasadas',atrasArr.length,'#dc2626')
+      + kpi('success',IC.check,'Concluídas',concl.length,'#16a34a')
+      + kpi('neutral',IC.target,'No prazo',onPct==null?'—':onPct+'%',onPct==null?null:(onPct>=80?'#16a34a':onPct>=50?'#d97706':'#dc2626'))
+      + kpi('neutral',IC.timer,'Lead time',leadAvg==null?'—':leadAvg+'d')
       + '</div>';
 
-    // Carga por pessoa (demandas abertas atribuídas)
+    // ── Por status ──
+    const maxSt=Math.max(1,...PL_COLS.map(c=>ds.filter(d=>(d.status||'a_fazer')===c.key).length));
+    const statusH=PL_COLS.map(c=>{ const n=ds.filter(d=>(d.status||'a_fazer')===c.key).length;
+      return `<div class="pn-row"><div class="pn-name" style="width:130px"><span class="pn-dot" style="background:${c.color}"></span>${esc(c.label)}</div><div class="pn-track"><div class="pn-fill" style="width:${Math.round(n/maxSt*100)}%;background:${c.color}"></div></div><div class="pn-num" style="width:42px">${n}</div></div>`;
+    }).join('');
+
+    // ── Por prioridade ──
+    const prioCount={}; ds.forEach(d=>{ const k=d.prioridade||'media'; prioCount[k]=(prioCount[k]||0)+1; });
+    const prioArr=Object.entries(prioCount).map(([k,n])=>({k,n,s:plPrioStyle(k)})).sort((a,b)=>b.n-a.n);
+    const maxPr=Math.max(1,...prioArr.map(x=>x.n));
+    const prioH=prioArr.length?prioArr.map(x=>`<div class="pn-row"><div class="pn-name" style="width:130px"><span class="pn-dot" style="background:${x.s.color}"></span>${esc(x.s.label)}</div><div class="pn-track"><div class="pn-fill" style="width:${Math.round(x.n/maxPr*100)}%;background:${x.s.color}"></div></div><div class="pn-num" style="width:42px">${x.n}</div></div>`).join('')
+      :'<div class="pn-empty2">Sem demandas.</div>';
+
+    // ── Carga por pessoa (abertas) ──
     const carga=(window._responsaveis||[]).map(r=>{
       const mine=abertas.filter(d=>respIdsOf(d).includes(r.id));
       return {r, total:mine.length, late:mine.filter(isAtrasada).length};
@@ -44140,9 +44209,18 @@ window.deleteFromBucket = async function(bucketName, path) {
       return `<div class="pn-row"><div class="pn-name" title="${esc(x.r.nome)}"><span class="pl-resp-av" style="background:${safeCor(x.r.empresa?.cor)};width:22px;height:22px">${esc(initials(x.r.nome))}</span>${esc(x.r.nome.split(' ')[0])}</div>`
         +`<div class="pn-track"><div class="pn-fill" style="width:${w}%"><div class="pn-late" style="width:${lateW}%"></div></div></div>`
         +`<div class="pn-num">${x.total}${x.late?` <span style="color:#dc2626">(${x.late} atras.)</span>`:''}</div></div>`;
-    }).join('') : '<div style="color:var(--text3);font-size:12px;padding:8px 0">Nenhuma demanda aberta atribuída.</div>';
+    }).join('') : '<div class="pn-empty2">Nenhuma demanda aberta atribuída.</div>';
 
-    // Fluxo — últimas 8 semanas (criadas vs concluídas)
+    // ── Listas: atrasadas / vencendo ──
+    const pnItem=(d)=>{ const p=projById(d.projeto_id);
+      const resps=respIdsOf(d).map(respById).filter(Boolean).map(r=>r.nome.split(' ')[0]).join(', ');
+      return `<div class="pn-item" onclick="window.plannerOpenModal('${esc(d.id)}')"><div class="pn-item-main"><div class="pn-item-title">${esc(d.titulo)}</div><div class="pn-item-sub">${resps?esc(resps):'sem responsável'}${p?' · '+esc(p.name):''}</div></div>${dateTag(d.data_entrega,d.status)}</div>`;
+    };
+    const listBox=(arr,vazio)=> arr.length ? arr.slice(0,10).map(pnItem).join('')+(arr.length>10?`<div class="pn-more">+${arr.length-10} demanda(s)</div>`:'') : `<div class="pn-empty2">${vazio}</div>`;
+    const atrasH=listBox(atrasArr,'Nenhuma demanda atrasada.');
+    const vencH =listBox(vencArr,'Nada vencendo nos próximos 7 dias.');
+
+    // ── Fluxo — últimas 8 semanas ──
     const today=new Date(); today.setHours(0,0,0,0);
     const W=8, weeks=[];
     for(let i=W-1;i>=0;i--){ const end=new Date(today); end.setDate(end.getDate()-i*7); const start=new Date(end); start.setDate(start.getDate()-6); weeks.push({start,end,cri:0,con:0}); }
@@ -44159,20 +44237,26 @@ window.deleteFromBucket = async function(bucketName, path) {
         +`<div class="pn-flbl">${fmtW(w)}</div></div>`).join('')+`</div>`
       +`<div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--text3)"><span><span style="display:inline-block;width:9px;height:9px;background:var(--accent);border-radius:2px;vertical-align:middle"></span> Criadas</span><span><span style="display:inline-block;width:9px;height:9px;background:#16a34a;border-radius:2px;vertical-align:middle"></span> Concluídas</span></div>`;
 
-    // Por disciplina (tags)
+    // ── Por disciplina (tags) ──
     const tagH = PL_TAGS.map(t=>{
       const open=abertas.filter(d=>(d.tags||[]).includes(t.key)).length;
       const done=concl.filter(d=>(d.tags||[]).includes(t.key)).length;
       if(!open && !done) return '';
       return `<div class="pn-row"><div class="pn-name" style="width:auto"><span class="pl-tag" style="background:${t.bg};color:${t.color}">${esc(t.key)}</span></div><div class="pn-num" style="flex:1;text-align:right;width:auto">${open} aberta(s) · ${done} concluída(s)</div></div>`;
-    }).filter(Boolean).join('') || '<div style="color:var(--text3);font-size:12px;padding:8px 0">Sem tags atribuídas.</div>';
+    }).filter(Boolean).join('') || '<div class="pn-empty2">Sem disciplinas atribuídas.</div>';
 
-    const card=(title,inner)=>`<div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:18px 20px;margin-top:14px"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:14px">${title}</div>${inner}</div>`;
+    const card=(title,inner,badge)=>`<div class="pn-card"><div class="pn-card-hd">${title}${badge?`<span class="pn-hd-badge">${badge}</span>`:''}</div>${inner}</div>`;
 
-    host.innerHTML = h
+    host.innerHTML = `<div class="pn-dash">`
+      + `<div class="pn-hero"><div><h2>Painel de gestão</h2><p>Visão consolidada das demandas do escritório — filtre por responsável, projeto, disciplina, prioridade ou empresa.</p></div></div>`
+      + filters
+      + kpis
+      + `<div class="pn-grid2">`+card('Por status', statusH)+card('Por prioridade', prioH)+`</div>`
       + card('Carga por pessoa (demandas abertas)', cargaH)
+      + `<div class="pn-grid2">`+card('Atrasadas', atrasH, atrasArr.length?atrasArr.length+' total':'')+card('Vencendo em 7 dias', vencH, vencArr.length?vencArr.length+' total':'')+`</div>`
       + card('Fluxo — últimas 8 semanas', fluxoH)
-      + card('Por disciplina', tagH);
+      + card('Por disciplina', tagH)
+      + `</div>`;
   };
 
   // ── Render board ──
