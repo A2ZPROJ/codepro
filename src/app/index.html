@@ -2111,7 +2111,10 @@
         // Para passar em onclick=... precisa escape dupla: JS string + HTML attr
         const nomeArg=nome.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
         const cargoArg=cargo.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-        return `<div class="admin-row"><div class="user-avatar" style="background:${cor}">${esc(initials)}</div><div class="user-info"><div class="user-name">${esc(nome)}</div><div class="user-email">${esc(cargo||'—')} · ${esc(r.empresa?.nome||'Sem empresa')}</div></div><div style="display:flex;gap:5px"><button class="action-btn" onclick="editResponsavel('${esc(r.id)}','${esc(nomeArg)}','${esc(cargoArg)}')">Editar</button><button class="action-btn danger" onclick="deleteResponsavel('${esc(r.id)}')">Remover</button></div></div>`;
+        const contato = r.email
+          ? `<span style="color:var(--accent)">${esc(r.email)}</span>${r.telefone?' · '+esc(r.telefone):''}`
+          : '<span style="color:var(--amber)">sem e-mail (não recebe avisos)</span>';
+        return `<div class="admin-row"><div class="user-avatar" style="background:${cor}">${esc(initials)}</div><div class="user-info"><div class="user-name">${esc(nome)}</div><div class="user-email">${esc(cargo||'—')} · ${esc(r.empresa?.nome||'Sem empresa')}</div><div class="user-email" style="margin-top:2px">${contato}</div></div><div style="display:flex;gap:5px"><button class="action-btn" onclick="editResponsavel('${esc(r.id)}')">Editar</button><button class="action-btn danger" onclick="deleteResponsavel('${esc(r.id)}')">Remover</button></div></div>`;
       }).join('');}
     }
   }
@@ -2136,36 +2139,72 @@
     await loadEquipes();
   };
 
+  // Escrita robusta no PostgREST (mesmo motivo do _restWrite do Planner: o query
+  // builder do supabase-js falha silencioso neste renderer Electron nas ops COM
+  // filtro — ?id=eq...). PATCH/DELETE de responsaveis passam por fetch direto.
+  async function _sbRest(method, path, body){
+    const sess=(await sb.auth.getSession())?.data?.session||null;
+    const tok=sess?.access_token || window.SUPABASE_ANON_KEY;
+    const r=await fetch((window.SUPABASE_URL||'')+'/rest/v1/'+path,
+      { method,
+        headers:{ apikey:(window.SUPABASE_ANON_KEY||''), Authorization:'Bearer '+tok,
+          'Content-Type':'application/json', Prefer:'return=representation' },
+        body: body!=null ? JSON.stringify(body) : undefined });
+    if(!r.ok){ throw new Error('HTTP '+r.status+' '+(await r.text().catch(()=>'')).slice(0,180)); }
+    const txt=await r.text().catch(()=>''); let j=[]; try{ j=txt?JSON.parse(txt):[]; }catch{ j=[]; }
+    return Array.isArray(j)?j:(j?[j]:[]);
+  }
+  const _emailOk=(e)=>!e || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
   window.createResponsavel=async()=>{
     const nome=document.getElementById('newRespNome').value.trim();
     const cargo=document.getElementById('newRespCargo').value.trim();
+    const email=(document.getElementById('newRespEmail')?.value||'').trim();
     const empId=document.getElementById('newRespEmpresa')?.value||null;
     const btn=document.getElementById('btnAddResp');
     if(!nome){nexusAlert('Informe o nome do responsável.');return;}
+    if(!_emailOk(email)){nexusAlert('E-mail inválido.');return;}
     if(btn){btn.disabled=true;btn.textContent='Salvando...';}
-    const {error}=await sb.from('responsaveis').insert({nome,cargo:cargo||null,empresa_id:empId||null});
+    const {error}=await sb.from('responsaveis').insert({nome,cargo:cargo||null,email:email||null,empresa_id:empId||null});
     if(btn){btn.disabled=false;btn.textContent='Adicionar';}
     if(error){window.toastError('Erro: '+error.message);return;}
     document.getElementById('newRespNome').value='';
     document.getElementById('newRespCargo').value='';
+    if(document.getElementById('newRespEmail')) document.getElementById('newRespEmail').value='';
     await loadEquipes();
   };
 
   window.deleteResponsavel=async(id)=>{
     if(!await nexusConfirm('Remover este responsável?'))return;
-    await sb.from('responsaveis').delete().eq('id',id);
+    try{ await _sbRest('DELETE','responsaveis?id=eq.'+encodeURIComponent(id)); }
+    catch(err){ window.toastError('Erro: '+(err?.message||err)); return; }
     await loadEquipes();
   };
 
-  window.editResponsavel=async(id,nomeAtual,cargoAtual)=>{
-    const nome=await nexusPrompt('Nome:',nomeAtual);
-    if(nome===null)return;
-    if(!nome.trim()){nexusAlert('Nome não pode ser vazio.');return;}
-    const cargo=await nexusPrompt('Cargo:',cargoAtual);
-    if(cargo===null)return;
-    const {error}=await sb.from('responsaveis').update({nome:nome.trim(),cargo:cargo.trim()||null}).eq('id',id);
-    if(error){window.toastError('Erro: '+error.message);return;}
+  window.editResponsavel=async(id)=>{
+    const r=(window._responsaveis||[]).find(x=>x.id===id);
+    if(!r){nexusAlert('Responsável não encontrado.');return;}
+    const out=await window.askPrompt({
+      title:'Editar responsável',
+      fields:[
+        {type:'text',name:'nome',label:'Nome',value:r.nome||''},
+        {type:'text',name:'cargo',label:'Cargo',value:r.cargo||''},
+        {type:'text',name:'email',label:'E-mail (recebe avisos de demanda)',value:r.email||'',placeholder:'nome@empresa.com.br'},
+        {type:'text',name:'telefone',label:'Telefone',value:r.telefone||'',placeholder:'(44) 99999-9999'},
+      ],
+    });
+    if(out===null)return;
+    const nome=(out.nome||'').trim();
+    if(!nome){nexusAlert('Nome não pode ser vazio.');return;}
+    const email=(out.email||'').trim();
+    if(!_emailOk(email)){nexusAlert('E-mail inválido.');return;}
+    const patch={nome,cargo:(out.cargo||'').trim()||null,email:email||null,telefone:(out.telefone||'').trim()||null};
+    try{
+      const rows=await _sbRest('PATCH','responsaveis?id=eq.'+encodeURIComponent(id),patch);
+      if(!rows.length) throw new Error('não foi possível salvar (sem permissão?)');
+    }catch(err){ window.toastError('Erro: '+(err?.message||err)); return; }
     await loadEquipes();
+    window.toastSuccess?.('Responsável atualizado');
   };
 
   // Renderiza lista de checkboxes de códigos pra vinculação a projeto.
@@ -2476,6 +2515,7 @@
       <div class="user-info" style="min-width:200px">
         <div class="user-name">${esc(u.nome)} ${roleTag} ${founderTag} ${superTag} ${isMe?'<span style="font-size:10px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:8px;margin-left:2px">você</span>':''}</div>
         <div class="user-email">${esc(u.empresa||'—')} · Criado em ${dtCriado} · Válido até: ${expiryInfo}</div>
+        <div class="user-email" style="margin-top:2px">${u.email?`<span style="color:var(--accent)">${esc(u.email)}</span>`:'<span style="color:var(--text3)">sem e-mail</span>'}${u.telefone?' · '+esc(u.telefone):''}</div>
         <div class="user-email" style="margin-top:2px">Código: ${codeInfo}</div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;align-items:center">
@@ -2483,6 +2523,7 @@
         ${superAdminToggle}
         ${(!isMe && !isFounder)?`<button class="action-btn" onclick="editUserName('${esc(u.id)}')">Editar nome</button>`:''}
         ${(!isMe && !isFounder)?`<button class="action-btn" onclick="editUserGreeting('${esc(u.id)}')">Editar saudação</button>`:''}
+        ${(isMe || !isFounder)?`<button class="action-btn" onclick="editUserContact('${esc(u.id)}')">Editar dados</button>`:''}
         ${(!isMe && !isFounder)?`<button class="action-btn" onclick="renewLicense('${esc(u.id)}','${esc(u.license_expires||'')}')">Renovar</button>`:''}
         ${canDestroy?`<button class="action-btn danger" onclick="removeUser('${esc(u.id)}')">Excluir</button>`:''}
         ${(isFounder && !isMe) ? '<span style="font-size:10px;color:var(--text3);font-style:italic;padding:4px 8px">Protegido</span>' : ''}
@@ -2606,6 +2647,32 @@
     const {error}=await sb.rpc('update_user',{p_id:id,p_caller_code:window._currentUserData?.access_code,p_changes:payload});
     if(error){window.toastError?.('Erro: '+error.message)||nexusAlert('Erro: '+error.message);return;}
     window.toastSuccess?.('Saudação atualizada');
+    window.loadAdminPanel();
+  };
+  window.editUserContact=async(id)=>{
+    const {data:rows}=await sb.rpc('get_user_by_id',{p_id:id,p_caller_code:window._currentUserData?.access_code});
+    const u=rows?.[0]||null;
+    if(!u){nexusAlert('Usuário não encontrado.');return;}
+    const r=await window.askPrompt({
+      title:'Editar dados de '+(u.nome||''),
+      fields:[
+        {type:'text',name:'email',label:'E-mail',value:u.email||'',placeholder:'nome@empresa.com.br'},
+        {type:'text',name:'telefone',label:'Telefone',value:u.telefone||'',placeholder:'(44) 99999-9999'},
+        {type:'text',name:'cpf_cnpj',label:'CPF / CNPJ',value:u.cpf_cnpj||''},
+        {type:'text',name:'endereco_cidade',label:'Cidade',value:u.endereco_cidade||''},
+        {type:'text',name:'endereco_uf',label:'UF',value:u.endereco_uf||''},
+      ],
+    });
+    if(r===null)return;
+    const email=(r.email||'').trim();
+    if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){nexusAlert('E-mail inválido.');return;}
+    const payload={
+      email:email, telefone:(r.telefone||'').trim(), cpf_cnpj:(r.cpf_cnpj||'').trim(),
+      endereco_cidade:(r.endereco_cidade||'').trim(), endereco_uf:(r.endereco_uf||'').trim().toUpperCase(),
+    };
+    const {error}=await sb.rpc('update_user',{p_id:id,p_caller_code:window._currentUserData?.access_code,p_changes:payload});
+    if(error){window.toastError?.('Erro: '+error.message)||nexusAlert('Erro: '+error.message);return;}
+    window.toastSuccess?.('Dados atualizados');
     window.loadAdminPanel();
   };
   window.removeUser=async(id)=>{
@@ -9354,6 +9421,10 @@ body.presenting #presentingBadge { display: flex; }
             <div>
               <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Cargo</div>
               <input id="newRespCargo" placeholder="Ex: Engenheiro Civil" style="padding:8px 10px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;width:170px"/>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:4px">E-mail <span style="color:var(--text3);font-weight:400">(recebe avisos)</span></div>
+              <input id="newRespEmail" type="email" placeholder="nome@empresa.com.br" style="padding:8px 10px;font-family:inherit;font-size:13px;border:1.5px solid var(--border2);border-radius:var(--radius);color:var(--text);background:var(--surface);outline:none;width:190px"/>
             </div>
             <div>
               <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Empresa</div>
@@ -43773,16 +43844,23 @@ window.deleteFromBucket = async function(bucketName, path) {
     const alertFn = window.nexusAlert || ((m)=>alert(m));
     if(!(window._isMaster || window._isSuperAdmin)){ alertFn('Apenas usuários master podem cadastrar responsáveis.'); return; }
     if(!sb()){ alertFn('Sem conexão com o banco de dados.'); return; }
-    const promptFn = (msg,def)=> window.nexusPrompt ? window.nexusPrompt(msg,def) : Promise.resolve(prompt(msg,def));
-    const nome = await promptFn('Nome do responsável:','');
-    if(nome===null) return;
-    if(!String(nome).trim()){ alertFn('Nome não pode ser vazio.'); return; }
-    const cargo = await promptFn('Cargo (opcional):','');
-    if(cargo===null) return;
+    const out = window.askPrompt
+      ? await window.askPrompt({ title:'Cadastrar responsável', fields:[
+          {type:'text',name:'nome',label:'Nome',value:''},
+          {type:'text',name:'cargo',label:'Cargo (opcional)',value:''},
+          {type:'text',name:'email',label:'E-mail (recebe aviso ao ser atribuído)',value:'',placeholder:'nome@empresa.com.br'},
+          {type:'text',name:'telefone',label:'Telefone (opcional)',value:''},
+        ]})
+      : null;
+    if(out===null) return;
+    const nome=(out?.nome||'').trim();
+    if(!nome){ alertFn('Nome não pode ser vazio.'); return; }
+    const email=(out?.email||'').trim();
+    if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ alertFn('E-mail inválido.'); return; }
     let newId=null;
     try{
       const { data, error } = await sb().from('responsaveis')
-        .insert({ nome:String(nome).trim(), cargo:String(cargo||'').trim()||null })
+        .insert({ nome, cargo:(out?.cargo||'').trim()||null, email:email||null, telefone:(out?.telefone||'').trim()||null })
         .select('id').single();
       if(error) throw error;
       newId = data?.id || null;
@@ -43905,6 +43983,33 @@ window.deleteFromBucket = async function(bucketName, path) {
     return Array.isArray(j)?j:(j?[j]:[]);
   }
   const _demId=id=>'demandas?id=eq.'+encodeURIComponent(id);
+  // Dispara e-mail pela Edge Function send-email (Resend). Fire-and-forget: nunca
+  // trava/derruba o salvamento da demanda.
+  async function _sendEmailFn(type, to, vars){
+    try{
+      const r=await fetch((window.SUPABASE_URL||'')+'/functions/v1/send-email',
+        { method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ to, type, vars, caller_code:window._currentUserData?.access_code||null }) });
+      return r.ok;
+    }catch(e){ console.warn('send-email:',e); return false; }
+  }
+  // Notifica por e-mail os responsáveis RECÉM-atribuídos (não re-spamma quem já estava).
+  async function _notifyAtribuicao(dem, novosIds){
+    try{
+      if(!novosIds || !novosIds.length) return;
+      const proj=(window._projects||[]).find(p=>p.id===dem.projeto_id);
+      const pr=plPrioStyle(dem.prioridade);
+      for(const rid of novosIds){
+        const r=(window._responsaveis||[]).find(x=>x.id===rid);
+        if(!r || !r.email) continue;
+        await _sendEmailFn('demanda_atribuida', r.email, {
+          responsavel_nome:r.nome, titulo:dem.titulo, descricao:dem.descricao||null,
+          data_entrega:dem.data_entrega||null, prioridade:pr?.label, prioridade_cor:pr?.color,
+          projeto:proj?proj.name:null, criado_por:window._currentUserData?.nome||null,
+        });
+      }
+    }catch(e){ console.warn('_notifyAtribuicao:',e); }
+  }
   async function loadDemandas(){
     if(!sb()) return;
     let rows=[];
@@ -44249,6 +44354,15 @@ window.deleteFromBucket = async function(bucketName, path) {
     const btn=document.getElementById('plfSave');
     const reset=()=>{ if(btn){ btn.disabled=false; btn.textContent='Salvar'; } };
     if(btn){ btn.disabled=true; btn.textContent='Salvando...'; }
+    // IDs que passam a ser responsáveis AGORA e não eram antes (p/ notificar só os novos)
+    let novosResp=[];
+    try{
+      if(id){
+        const prev=(window._demandas||[]).find(x=>x.id===id);
+        const prevIds=prev?respIdsOf(prev):[];
+        novosResp=respIds.filter(x=>!prevIds.includes(x));
+      } else { novosResp=respIds.slice(); }
+    }catch{ novosResp=[]; }
     try{
       const op=(async()=>{
         if(id){
@@ -44268,6 +44382,8 @@ window.deleteFromBucket = async function(bucketName, path) {
       const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Tempo esgotado ao salvar — verifique a conexão e se você está logado.')),15000));
       await Promise.race([op, timeout]);
       try{ window.audit?.log(id?'demanda_update':'demanda_create',{titulo}); }catch{}
+      // E-mail de atribuição (só pros novos responsáveis com e-mail cadastrado) — não bloqueia
+      if(status!=='concluido' && novosResp.length){ _notifyAtribuicao(payload, novosResp); }
       window.plannerCloseModal();
       await loadDemandas();
       window.toastSuccess?.(id?'Demanda atualizada':'Demanda criada');
