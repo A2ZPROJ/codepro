@@ -15233,7 +15233,7 @@ body.presenting #presentingBadge { display: flex; }
       const advRaw = ($('oelev-adv').value||'').trim();
       if (advRaw) {
         const adv = JSON.parse(advRaw); // pode lançar -> tratado no caller
-        for (const key of ['PRICE_UPD','QTY_UPD','CODE_UPD','AREA_INSERTS','EXTRA_BLOCK','MEMO_FONTES']) {
+        for (const key of ['PRICE_UPD','QTY_UPD','CODE_UPD','DESC_UPD','AREA_INSERTS','EXTRA_BLOCK','MEMO_FONTES']) {
           if (adv[key] != null) cfg[key] = adv[key];
         }
       }
@@ -15439,6 +15439,16 @@ body.presenting #presentingBadge { display: flex; }
         const cr = await window.electronAPI.orcElev.catalogoAplicar({ cidade:a.cidade, sb:a.sb });
         if(cr && cr.ok) Object.entries(cr.precos||{}).forEach(([k,pf])=>{ if(Array.isArray(pf)) setPreco(k, pf[0], pf[1]); });
       } catch(e){}
+      // overrides avançados que vieram na análise (PRICE_UPD/QTY_UPD/DESC_UPD/...) -> caixa de Ajustes
+      // avançados. Sem isto o Nexus geraria com os preços do gabarito (ex.: ventosa 13.838 em vez da
+      // reconciliada 6.333) e sem o item painel+bomba unificado. Preenche p/ a geração bater c/ a análise.
+      const advEl=$('oelev-adv');
+      if(advEl){
+        const adv={};
+        for(const key of ['PRICE_UPD','QTY_UPD','CODE_UPD','DESC_UPD','AREA_INSERTS','EXTRA_BLOCK','MEMO_FONTES'])
+          if(a[key]!=null) adv[key]=a[key];
+        if(Object.keys(adv).length){ advEl.value=JSON.stringify(adv,null,2); mark(advEl); n++; }
+      }
       document.querySelectorAll('#oelev-form .oelev-area').forEach(d=>{ d.open=true; });
       return n;
     }

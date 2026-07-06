@@ -464,6 +464,9 @@ def run(cfg):
         for r,c in getattr(cfg,'CODE_UPD',{}).items():
             retry(lambda r=r: setattr(ws.Cells(r,2),'NumberFormat','@'))   # texto: preserva zero à esq.
             retry(lambda r=r,c=c: setattr(ws.Cells(r,2),'Value',str(c)))
+        # 9-desc) descrição (col E) sobrescrita pela config (ex.: juntar painel+bomba num item)
+        for r,d in getattr(cfg,'DESC_UPD',{}).items():
+            retry(lambda r=r,d=d: setattr(ws.Cells(r,5),'Value',str(d)))
         # 9-fix) BLINDAR N/O/P de TODO item Mat/MO. Sem isso, item SEM preço (K vazio — ex. Painel
         #         QCM/e_qcm pendente) faz N="" e P=N*I => #VALUE!, que contamina o SUBTOTAL da ÁREA
         #         e zera o VALOR TOTAL (bug achado pelo PREDATOR na SB-A5). Com IF(K="",...) o item

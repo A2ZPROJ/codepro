@@ -13,7 +13,7 @@ saem antes e são repassadas ao renderer como progresso.
 
 JSON de entrada (campos):
   obrigatórios: SB, CIDADE, A2_PATH, OUT_XLSX, DATA, CP
-  opcionais:    CONTRATO, PRICE_UPD, QTY_UPD, CODE_UPD, AREA_INSERTS, EXTRA_BLOCK, MEMO_FONTES
+  opcionais:    CONTRATO, PRICE_UPD, QTY_UPD, CODE_UPD, DESC_UPD, AREA_INSERTS, EXTRA_BLOCK, MEMO_FONTES
 """
 import sys, os, json, argparse, types
 
@@ -40,6 +40,7 @@ def build_cfg(d):
     cfg.PRICE_UPD    = _int_keys(d.get('PRICE_UPD'))
     cfg.QTY_UPD      = _int_keys(d.get('QTY_UPD'))
     cfg.CODE_UPD     = _int_keys(d.get('CODE_UPD'))
+    cfg.DESC_UPD     = _int_keys(d.get('DESC_UPD'))   # linha -> descrição (col E): ex. juntar painel+bomba
     cfg.AREA_INSERTS = d.get('AREA_INSERTS')   # [[after, header, [[cod,desc,tipo,orig,q,un,val],...]], ...]
     cfg.EXTRA_BLOCK  = d.get('EXTRA_BLOCK')
     cfg.MEMO_FONTES  = d.get('MEMO_FONTES')
