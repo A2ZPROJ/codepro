@@ -15394,7 +15394,10 @@ body.presenting #presentingBadge { display: flex; }
       const arr=(r&&r.analises)||[];
       const cur=sel.value;
       sel.innerHTML = '<option value="">— nenhuma análise —</option>' + arr.map(a=>{
-        const lbl=[a.obra||a.sb||a.file, a.cidade, (a.ncampos!=null?a.ncampos+' campos':'')].filter(Boolean).join(' · ');
+        const _d=a.mtime?new Date(a.mtime):null;
+        const _p2=x=>('0'+x).slice(-2);
+        const _dtxt=_d?(_p2(_d.getDate())+'/'+_p2(_d.getMonth()+1)+'/'+_d.getFullYear()+' '+_p2(_d.getHours())+':'+_p2(_d.getMinutes())):'';
+        const lbl=[a.cidade||'(sem cidade)', a.sb||a.obra||a.file, _dtxt&&('subiu '+_dtxt)].filter(Boolean).join(' · ');
         return `<option value="${escA(a.file)}">${esc(lbl)}</option>`;
       }).join('');
       if(cur) sel.value=cur;
