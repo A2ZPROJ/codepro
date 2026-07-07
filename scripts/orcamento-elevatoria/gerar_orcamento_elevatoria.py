@@ -165,6 +165,15 @@ def main():
         rce_xlsx, rce_pdf = to_rce(cfg.OUT_XLSX)
         out_xlsx = rce_xlsx
         pdfs = [rce_pdf, stem + ' - MEMORIAL.pdf']
+        # gerar APENAS 1 PDF de orçamento = o RCE (COM a folha Resumo). Apaga o do engine
+        # (sem Resumo) p/ não sair 2 PDFs de orçamento (Lucas 07/07). Mantido como fallback
+        # só se o RCE falhar (branch except abaixo).
+        try:
+            _semresumo = stem + ' - ORÇAMENTO.pdf'
+            if os.path.exists(_semresumo):
+                os.remove(_semresumo)
+        except Exception as e2:
+            print('[aviso] não removi o PDF sem-Resumo: %s' % e2)
         print('formato-RCE :', rce_xlsx)
     except Exception as e:
         print('[aviso] conversão formato-RCE falhou (mantendo o A2): %s' % e)
