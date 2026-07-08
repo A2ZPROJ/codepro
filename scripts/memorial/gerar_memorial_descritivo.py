@@ -10,6 +10,7 @@ Autor: A2Z / 2S Engenharia - geracao automatica.
 
 import os
 import sys
+import re
 import json
 import shutil
 import copy
@@ -54,6 +55,13 @@ TEMPLATE = _first_existing([
     os.path.join(ASSETS, "template_2s.docx"),
     r"D:\PROGRAMAÇÃO\NEXUS\src\modulos\topografia\assets\template_2s.docx",
 ])
+# Template do CONSORCIO (SANEPAR/Acciona) — traz o timbrado Acciona+Sanepar.
+# Selecionado quando cfg["modelo_memorial"] == "consorcio".
+TEMPLATE_CONSORCIO = _first_existing([
+    os.path.join(ASSETS, "template_consorcio.docx"),
+], fallback=os.path.join(ASSETS, "template_consorcio.docx"))
+# Modelo do memorial: "2s" (padrao) ou "consorcio". Resolvido em apply_config().
+MODELO_MEMORIAL = "2s"
 MAPA1 = os.path.join(MAPAS, "Mapa1_Localizacao.png")
 MAPA2 = os.path.join(MAPAS, "Mapa2_SubBacia_SB02_Rede.png")
 MAPA3 = os.path.join(MAPAS, "Mapa3_Soleiras_SB02.png")
@@ -1286,16 +1294,49 @@ def add_detalhe(doc, img_path, legenda, fonte="Fonte: 2S Engenharia."):
     return n
 
 
+_RE_NUM_HEAD = re.compile(r'^\s*\d+(?:\.\d+)*\.?\s+')
+
+def _suppress_numbering(par):
+    """Suprime a numeracao automatica de um paragrafo (numId=0), para o
+    front-matter (FOLHA DE IDENTIFICACAO, SUMARIO, LISTAS...) NAO entrar na
+    numeracao de secoes no modelo Consorcio, cujos estilos Heading auto-numeram."""
+    pPr = par._p.get_or_add_pPr()
+    for e in pPr.findall(qn('w:numPr')):
+        pPr.remove(e)
+    numPr = OxmlElement('w:numPr')
+    ilvl = OxmlElement('w:ilvl'); ilvl.set(qn('w:val'), '0')
+    numId = OxmlElement('w:numId'); numId.set(qn('w:val'), '0')
+    numPr.append(ilvl); numPr.append(numId)
+    pPr.append(numPr)
+
+
+def _add_heading(doc, text, level):
+    """Adiciona heading ciente do modelo.
+
+    Modelo 2S: estilos Heading NAO numeram -> mantem o numero literal do texto.
+    Modelo Consorcio: estilos Heading AUTO-numeram (numId). Se o texto traz
+    numero literal ("7.1. Vazoes"), tira o literal e deixa o estilo numerar.
+    Se o texto NAO traz numero (front-matter: SUMARIO, LISTAS...), suprime a
+    numeracao para nao virar "1. SUMARIO"."""
+    if MODELO_MEMORIAL == "consorcio":
+        tem_num = bool(_RE_NUM_HEAD.match(text))
+        h = doc.add_heading(_RE_NUM_HEAD.sub('', text), level=level)
+        if not tem_num:
+            _suppress_numbering(h)
+        return h
+    return doc.add_heading(text, level=level)
+
+
 def h1(doc, text):
-    return doc.add_heading(text, level=1)
+    return _add_heading(doc, text, 1)
 
 
 def h2(doc, text):
-    return doc.add_heading(text, level=2)
+    return _add_heading(doc, text, 2)
 
 
 def h3(doc, text):
-    return doc.add_heading(text, level=3)
+    return _add_heading(doc, text, 3)
 
 
 # ============================================================================
@@ -2422,6 +2463,18 @@ def build():
     # sem necessidade de F9.
     _set_update_fields_on_open(doc)
 
+    # Modelo Consorcio: o timbrado vive no header DEFAULT (2 imgs, todas as
+    # paginas) + header FIRST (1 img, so a capa). A secao 0 (capa) mantem
+    # 1a-pagina-diferente; as secoes internas passam a titlePg=False para
+    # exibir o timbrado default em TODAS as suas paginas (senao a 1a pagina de
+    # cada secao herdaria o header de capa).
+    if MODELO_MEMORIAL == "consorcio":
+        for sec in doc.sections[1:]:
+            try:
+                sec.different_first_page_header_footer = False
+            except Exception:
+                pass
+
     # salvar
     doc.save(SAIDA)
     return doc
@@ -2669,7 +2722,21 @@ def apply_config(cfg):
     """
     global CFG, BASE, MAPAS, FLUXOGRAMA, FOTOS, DADOS_JSON, DADOS_EXTRA_JSON
     global SAIDA, TEMPLATE, REDE_GEOJSON, WORKDIR, TEM_SOLEIRAS, TEM_INTERF
+    global MODELO_MEMORIAL
     CFG = cfg or {}
+
+    # Modelo do memorial: "2s" (padrao) ou "consorcio" (SANEPAR/Acciona).
+    MODELO_MEMORIAL = (cfg.get("modelo_memorial") or "2s").strip().lower()
+    if MODELO_MEMORIAL not in ("2s", "consorcio"):
+        MODELO_MEMORIAL = "2s"
+    # Sem template explicito no cfg, o modelo escolhe o timbrado.
+    if MODELO_MEMORIAL == "consorcio" and not cfg.get("template"):
+        if os.path.exists(TEMPLATE_CONSORCIO):
+            TEMPLATE = TEMPLATE_CONSORCIO
+        else:
+            sys.stderr.write(
+                "[modelo] template_consorcio.docx nao encontrado (%s); "
+                "usando template 2S.\n" % TEMPLATE_CONSORCIO)
 
     # Modo legado (sem --config / sem brutos): mantem a secao 9.5 como antes.
     # Com config: a secao so sai se o usuario apontar soleiras / interferencias.
