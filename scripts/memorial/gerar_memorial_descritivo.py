@@ -896,11 +896,21 @@ def add_caption(doc, label, numero, texto, align=None):
     p = doc.add_paragraph(style="Caption")
     if align is not None:
         p.alignment = align
-    r0 = p.add_run("%s %d – %s" % (label, numero, texto))
-    r0.bold = True
-    r0.font.size = Pt(9.5)
-    r0.font.name = FONTE
-    r0.font.color.rgb = COR_GRAFITE
+    if MODELO_MEMORIAL == "consorcio":
+        # Legenda com campo SEQ para o indice do template (TOC \c "<label>")
+        # coletar e numerar. O numero sai no F9/abertura (updateFields ligado).
+        def _sty(r):
+            r.bold = True; r.font.size = Pt(9.5); r.font.name = FONTE
+            r.font.color.rgb = COR_GRAFITE
+        _sty(p.add_run("%s " % label))
+        _sty(_add_seq_field(p, label))
+        _sty(p.add_run(" – %s" % texto))
+    else:
+        r0 = p.add_run("%s %d – %s" % (label, numero, texto))
+        r0.bold = True
+        r0.font.size = Pt(9.5)
+        r0.font.name = FONTE
+        r0.font.color.rgb = COR_GRAFITE
     return p
 
 
@@ -1702,25 +1712,26 @@ def build():
         build_front_2s(doc)
 
     # ====================================================================
-    # SUMARIO (TOC)
+    # SUMARIO + LISTA DE FIGURAS / LISTA DE TABELAS
+    # 2S: o gerador monta SUMARIO (campo TOC) + as listas LITERALMENTE
+    #     (numeros literais; preenchidas em _fill_listas ao final).
+    # CONSORCIO: o proprio TEMPLATE ja traz Sumario + Indice de Figuras +
+    #     Indice de Tabelas (campos TOC \o e TOC \c "Figura"/"Tabela"). NAO
+    #     duplicar aqui; as legendas saem com campo SEQ (add_caption) p/ esses
+    #     indices do template popularem no F9/abertura.
     # ====================================================================
-    new_section(doc)
-    h1(doc, "SUMÁRIO")
-    p = doc.add_paragraph()
-    add_toc(p, 'TOC \\o "1-3" \\h \\z \\u')
+    anchor_fig = anchor_tab = None
+    if MODELO_MEMORIAL != "consorcio":
+        new_section(doc)
+        h1(doc, "SUMÁRIO")
+        p = doc.add_paragraph()
+        add_toc(p, 'TOC \\o "1-3" \\h \\z \\u')
 
-    # ====================================================================
-    # LISTA DE FIGURAS / LISTA DE TABELAS  (montadas LITERALMENTE)
-    # As listas sao preenchidas pelo gerador, com numeros literais; nao usam
-    # campo TOC (que sairia vazio sem F9). Aqui apenas marcamos os pontos de
-    # ancoragem; o conteudo e inserido em _fill_listas() ao final, quando
-    # FIGURAS/TABELAS ja estao completas.
-    # ====================================================================
-    new_section(doc)
-    h1(doc, "LISTA DE FIGURAS")
-    anchor_fig = doc.add_paragraph()  # ancora: a lista de figuras entra apos esta
-    h1(doc, "LISTA DE TABELAS")
-    anchor_tab = doc.add_paragraph()  # ancora: a lista de tabelas entra apos esta
+        new_section(doc)
+        h1(doc, "LISTA DE FIGURAS")
+        anchor_fig = doc.add_paragraph()  # ancora: a lista de figuras entra apos esta
+        h1(doc, "LISTA DE TABELAS")
+        anchor_tab = doc.add_paragraph()  # ancora: a lista de tabelas entra apos esta
 
     # ====================================================================
     # 1. APRESENTACAO
@@ -2696,10 +2707,12 @@ def build():
 
     # --- preenche as LISTAS de figuras e tabelas LITERALMENTE (sem F9) ---
     # insere de tras para frente para manter a ordem crescente apos a ancora
-    for num, leg in reversed(FIGURAS):
-        _insert_list_paragraph_after(doc, anchor_fig, "Figura", num, leg)
-    for num, leg in reversed(TABELAS):
-        _insert_list_paragraph_after(doc, anchor_tab, "Tabela", num, leg)
+    # (SO no 2S; no consorcio quem monta os indices e o proprio template)
+    if MODELO_MEMORIAL != "consorcio" and anchor_fig is not None:
+        for num, leg in reversed(FIGURAS):
+            _insert_list_paragraph_after(doc, anchor_fig, "Figura", num, leg)
+        for num, leg in reversed(TABELAS):
+            _insert_list_paragraph_after(doc, anchor_tab, "Tabela", num, leg)
 
     # substitui os {{PLACEHOLDERS}} pelos dados reais de Amapora; campos
     # ausentes (vazao/populacao/coeficientes/fluxograma) saem em VERMELHO.
