@@ -14642,7 +14642,7 @@ body.presenting #presentingBadge { display: flex; }
     const memPaths = { ose:null, modelo:null, txt:null, soleiras:null, interferencias:null, mapas:null };
     let _memBusy = false;
 
-    const FLUX_TIPOS = ['Rede Projetada','Rede Existente','Coletor','Emissário',
+    const FLUX_TIPOS = ['Rede Projetada','Rede Existente','Coletor','Interceptor','Emissário',
                         'Linha de Recalque','EEE','ETE','Corpo Receptor'];
 
     function memStatus(txt, color) {
@@ -14711,6 +14711,7 @@ body.presenting #presentingBadge { display: flex; }
         if (targetId === 'mem-mapas-path') memPaths.mapas = p;
         if (targetId === 'mem-sol-path')   memPaths.soleiras = p;
         if (targetId === 'mem-int-path')   memPaths.interferencias = p;
+        if (targetId === 'mem-marcos-path') memPaths.marcos = p;
         memStatus('');
       }
     }
@@ -14737,6 +14738,11 @@ body.presenting #presentingBadge { display: flex; }
         soleiras:       memPaths.soleiras || null,
         interferencias: memPaths.interferencias || null,
         mapas_dir:      memPaths.mapas || null,
+        marcos_dir:     memPaths.marcos || null,
+        marcos_nomes:   ($('mem-marcos-nomes').value || '').trim(),
+        soleiras_atend:     ($('mem-sol-atend').value || '').trim(),
+        soleiras_nao_atend: ($('mem-sol-naoatend').value || '').trim(),
+        ligacoes:           ($('mem-ligacoes').value || '').trim(),
         projeto: {
           municipio: municipio,
           uf: ($('mem-uf').value || '').trim() || 'PR',
@@ -17727,6 +17733,25 @@ body.presenting #presentingBadge { display: flex; }
                 <button class="mem-pickdir" data-target="mem-mapas-path" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:8px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;min-width:180px;text-align:left">Pasta de mapas (PNG)</button>
                 <input id="mem-mapas-path" readonly placeholder="opcional — pasta com Mapa1..Mapa6 .png já gerados" style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
               </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button class="mem-pickdir" data-target="mem-marcos-path" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:8px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;min-width:180px;text-align:left">Pasta de marcos (RRNN)</button>
+                <input id="mem-marcos-path" readonly placeholder="opcional — pasta com as monografias PDF dos marcos (Monografia_M-XXXX_*.pdf); inseridas no memorial. Sem pasta, a linha de RRNN não aparece." style="flex:1;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- 1b) Soleiras / ligações / RRNN (informar manualmente) -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">1b. Soleiras, ligações e marcos <span style="font-weight:400;color:var(--text3)">(opcional — preencha o que souber)</span></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Soleiras atendidas (imóveis)
+                <input id="mem-sol-atend" type="text" inputmode="numeric" placeholder="ex.: 457" class="mem-inp"/></label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Soleiras não atendidas (negativas)
+                <input id="mem-sol-naoatend" type="text" inputmode="numeric" placeholder="ex.: 5" class="mem-inp"/></label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Ligações domiciliares (nº)
+                <input id="mem-ligacoes" type="text" inputmode="numeric" placeholder="ex.: 457" class="mem-inp"/></label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Marcos / RRNN (nomes)
+                <input id="mem-marcos-nomes" type="text" placeholder="ex.: M-0032 e M-0033 (ou deixe a pasta achar)" class="mem-inp"/></label>
             </div>
           </div>
 

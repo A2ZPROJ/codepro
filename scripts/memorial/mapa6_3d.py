@@ -20,7 +20,7 @@ from scipy.ndimage import gaussian_filter
 import cartolib as C
 
 # ---------------- parametros ----------------
-VERT_EXAG = 4.0          # exagero vertical (4x) — escolhido p/ leitura do relevo
+VERT_EXAG = 2.0          # exagero vertical (2x) — 4x ficava "picotado"/ruim (Lucas 07/07)
 AZIM, ELEV = -62, 26     # vista isometrica (azimute / elevacao da camera)
 
 # nome do municipio / sub-bacia (parametrico via env)

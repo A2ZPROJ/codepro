@@ -99,6 +99,8 @@ AGUA_CLARO  = "#7FB3D5"
 RECALQUE    = "#A11312"   # vermelho para linha de recalque
 LARANJA     = "#CA6F1E"   # coletor (linha tronco)
 LARANJA_CLARO = "#EDBB99"
+INTERCEPTOR_COR   = "#7E5109"   # interceptor (coletor-tronco principal)
+INTERCEPTOR_CLARO = "#B9770E"
 ROXO        = "#6C3483"   # emissario (transporte)
 ROXO_CLARO  = "#D2B4DE"
 BRANCO      = "#FFFFFF"
@@ -147,6 +149,29 @@ def icone_coletor(ax, cx, cy, z=8):
     for sx in (-4.2, 4.2):
         ax.add_patch(Circle((cx+sx, cy), 0.85, facecolor=BRANCO,
                             edgecolor=LARANJA, lw=1.6, zorder=z+2))
+
+def icone_interceptor(ax, cx, cy, z=8):
+    """Interceptor: coletor-tronco principal que RECEBE os coletores; linha
+    grossa continua com PVs nas pontas e contribuicoes de tronco por baixo
+    (diferencia do coletor, cujos ramais chegam por cima)."""
+    ax.plot([cx-4.5, cx+4.5], [cy, cy], color=INTERCEPTOR_COR, lw=6.5, zorder=z,
+            solid_capstyle="round")
+    ax.plot([cx-4.5, cx+4.5], [cy, cy], color=INTERCEPTOR_CLARO, lw=2.2, zorder=z+1,
+            solid_capstyle="round")
+    for sx in (-2.6, 0.0, 2.6):
+        ax.plot([cx+sx, cx+sx], [cy-2.4, cy], color=INTERCEPTOR_COR, lw=2.0, zorder=z,
+                solid_capstyle="round")
+        ax.add_patch(Circle((cx+sx, cy-2.4), 0.5, facecolor=BRANCO,
+                            edgecolor=INTERCEPTOR_COR, lw=1.2, zorder=z+2))
+    for sx in (-4.5, 4.5):
+        ax.add_patch(Circle((cx+sx, cy), 0.9, facecolor=BRANCO,
+                            edgecolor=INTERCEPTOR_COR, lw=1.7, zorder=z+2))
+
+def mini_interceptor(ax, x, y, z=7):
+    ax.plot([x-1.1, x+1.1], [y, y], color=INTERCEPTOR_COR, lw=3.4, zorder=z,
+            solid_capstyle="round")
+    ax.plot([x-1.1, x+1.1], [y, y], color=INTERCEPTOR_CLARO, lw=1.2, zorder=z+1,
+            solid_capstyle="round")
 
 def icone_emissario(ax, cx, cy, z=8):
     """Emissario: linha de transporte longa (tubo continuo, sem contribuicoes)."""
@@ -304,6 +329,13 @@ TIPOS = {
         "rotulo": "COLETOR\nTRONCO", "sub": "Linha tronco",
         "flux_cor": LARANJA, "flux_ls": "-",
     },
+    "interceptor": {
+        "icone": icone_interceptor,
+        "mini":  mini_interceptor,
+        "cor": INTERCEPTOR_COR, "fundo": "#F3ECDE",
+        "rotulo": "INTERCEPTOR", "sub": "Coletor-tronco principal",
+        "flux_cor": INTERCEPTOR_COR, "flux_ls": "-",
+    },
     "emissario": {
         "icone": icone_emissario,
         "mini":  mini_emissario,
@@ -346,6 +378,7 @@ LEGENDA_LABEL = {
     "rede_projetada": "Rede coletora PROJETADA (gravitário)",
     "rede_existente": "Rede coletora EXISTENTE (em operação)",
     "coletor":        "Coletor tronco",
+    "interceptor":    "Interceptor (coletor-tronco principal)",
     "emissario":      "Emissário (transporte)",
     "linha_recalque": "Linha de recalque (sob pressão)",
     "eee":            "Estação Elevatória de Esgoto (EEE)",
@@ -367,7 +400,8 @@ SINONIMOS = {
     "rede existente": "rede_existente", "rede coletora existente": "rede_existente",
     "existente": "rede_existente", "em operacao": "rede_existente",
     "coletor": "coletor", "coletor tronco": "coletor", "tronco": "coletor",
-    "interceptor": "coletor",
+    "interceptor": "interceptor", "interceptor de esgoto": "interceptor",
+    "coletor interceptor": "interceptor",
     "emissario": "emissario", "emissario por gravidade": "emissario",
     "linha de recalque": "linha_recalque", "recalque": "linha_recalque",
     "lr": "linha_recalque", "linha recalque": "linha_recalque",

@@ -501,6 +501,17 @@ def extrair_ose_multi(xlsx_paths):
                     tr_sum[k] += v
     merged["ext_by_dn"] = dict(merged["ext_by_dn"])
     merged["total_row"] = tr_sum if tem_total else None
+    # PV/TL do total mesclado: o somatorio por planilha DUPLICA os dispositivos
+    # que aparecem em mais de uma OSE (o mesmo PV e limite de duas OSEs vizinhas).
+    # Recontamos pelos pontos DEDUPLICADOS por nome (merged["points"]), que e a
+    # contagem UNICA correta. (Lucas 07/07)
+    if merged["total_row"] is not None:
+        n_pv_u = sum(1 for p in merged["points"].values() if p.get("tipo") == "PV")
+        n_tl_u = sum(1 for p in merged["points"].values() if p.get("tipo") == "TL")
+        if n_pv_u:
+            merged["total_row"]["pv"] = n_pv_u
+        if n_tl_u:
+            merged["total_row"]["tl"] = n_tl_u
     return merged
 
 

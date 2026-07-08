@@ -218,6 +218,36 @@ DADOS_EXTRA = {}  # JSON extra (TQ/degrau, DN, GNSS)
 DN_ROWS = []      # linhas reais da tabela de quantitativo de rede [(dn, mat, ext_str)]
 
 
+def _nomes_do_fluxograma(flux):
+    """Extrai o NOME (descricao) das etapas ETE / EEE / corpo receptor do
+    fluxograma, para reaproveitar no texto do memorial em vez de [INFORMAR].
+    O usuario informa a ETE uma unica vez (no fluxograma) e o nome flui para o
+    texto. (Lucas 07/07)"""
+    out = {}
+    if not isinstance(flux, dict):
+        return out
+    etapas = flux.get("etapas")
+    if not etapas:
+        return out
+    for e in etapas:
+        if not isinstance(e, dict):
+            continue
+        tipo = str(e.get("tipo") or "").strip().lower()
+        desc = str(e.get("descricao") or "").strip()
+        if not desc:
+            continue
+        if tipo in ("ete", "estacao de tratamento", "estação de tratamento",
+                    "estacao de tratamento de esgoto"):
+            out.setdefault("ete", desc)
+        elif tipo in ("eee", "ele", "elevatoria", "elevatória",
+                      "estacao elevatoria", "estação elevatória"):
+            out.setdefault("eee", desc)
+        elif ("corpo" in tipo or "receptor" in tipo or
+              tipo in ("rio", "lancamento", "lançamento")):
+            out.setdefault("corpo", desc)
+    return out
+
+
 def build_subst_map():
     """Monta o dicionario {{PLACEHOLDER}} -> valor real (Amapora) e registra,
     em RED_TOKENS, os marcadores que devem sair em vermelho (dados ausentes)."""
@@ -366,17 +396,24 @@ def build_subst_map():
         for _k in ("TOPO_N_PONTOS", "TOPO_Z_MIN", "TOPO_Z_MAX", "TOPO_Z_MED", "TOPO_DESNIVEL"):
             m[_k] = FALTA_PREENCHER
 
-    # --- Criterios / parametros (vazoes e coeficientes: NAO existem) -> vermelho ---
+    # --- Criterios / parametros ---
+    # Coeficientes SANEPAR PADRAO, fixos para todos os memoriais (Lucas 07/07):
+    # so o consumo per capita (QPERC) fica a preencher pelo usuario.
     m["QPERC"] = FALTA_PREENCHER
-    m["K1"] = FALTA_PREENCHER
-    m["K2"] = FALTA_PREENCHER
-    m["K3"] = FALTA_PREENCHER
-    m["C_RETORNO"] = FALTA_PREENCHER
-    m["TX_INFILTRACAO"] = FALTA_PREENCHER
-    m["DECL_MIN"] = FALTA_PREENCHER
-    m["DECL_MIN_PARAM"] = FALTA_PREENCHER
+    m["K1"] = "1,20"
+    m["K2"] = "1,50"
+    m["K3"] = "0,50"
+    m["C_RETORNO"] = "0,80"
+    m["TX_INFILTRACAO"] = "0,01"          # L/s.km
+    # Taxa de Contribuicao Linear (Tab. 07) = mesma taxa de infiltracao 0,01 L/s.km.
+    m["TAXA_LINEAR"] = "0,01"
+    # Declividade minima: sai automatica. Da vazao minima de projeto (1,50 L/s),
+    # pela relacao de tensao trativa Imin = 0,0055 * Qi^-0,47 (~0,0045 m/m).
+    # Sobrescrita pelo modelo hidraulico (declividade_min_m_m) quando apontado.
+    _decl_formula = 0.0055 * (1.50 ** -0.47)
+    m["DECL_MIN"] = "{:.4f}".format(_decl_formula).replace(".", ",")
+    m["DECL_MIN_PARAM"] = m["DECL_MIN"]
     m["RECOB_MIN"] = "0,95"
-    m["TAXA_LINEAR"] = FALTA_PREENCHER
     # defaults dos parametros de rede (sobrescritos pelo modelo, se apontado)
     m["MANNING"] = "0,010"
     m["MATERIAL_REDE"] = "PVC"
@@ -416,10 +453,13 @@ def build_subst_map():
     m["QMAX_FIM"] = FALTA_PREENCHER
     m["OBS_VAZOES_CONCENTRADAS"] = FALTA_PREENCHER
 
-    # --- Fluxograma (EEE / ETE / corpo receptor: nao informados) -> vermelho ---
-    m["EEE"] = FALTA_INFORMAR
-    m["ETE"] = FALTA_INFORMAR
-    m["CORPO_RECEPTOR"] = FALTA_INFORMAR
+    # --- Fluxograma (EEE / ETE / corpo receptor) ---
+    # Se o usuario colocou a etapa no fluxograma, o NOME (descricao) e
+    # reaproveitado no texto; senao fica [INFORMAR] (vermelho). (Lucas 07/07)
+    _flux_nomes = _nomes_do_fluxograma(CFG.get("fluxograma") if CFG else None)
+    m["EEE"] = _flux_nomes.get("eee") or FALTA_INFORMAR
+    m["ETE"] = _flux_nomes.get("ete") or FALTA_INFORMAR
+    m["CORPO_RECEPTOR"] = _flux_nomes.get("corpo") or FALTA_INFORMAR
 
     # --- Soleiras negativas (dados reais - Bacia 02) ---
     if SOL_AUSENTE:
@@ -563,6 +603,40 @@ def build_subst_map():
         m["EXT_PROF_300"] = FALTA_PREENCHER
         m["EXT_PROF_400"] = FALTA_PREENCHER
         m["EXT_PROF_500"] = FALTA_PREENCHER
+
+    # --- Override MANUAL de soleiras / ligacoes domiciliares -----------------
+    # O usuario pode informar na UI (ao apontar as pastas) o nº de soleiras
+    # atendidas / nao atendidas e o nº de ligacoes. Tem PRIORIDADE sobre o
+    # cadastro automatico, e preenche a Tabela de imoveis + dispositivos. (Lucas 07/07)
+    def _int_opt(v):
+        try:
+            s = str(v).strip().replace(".", "").replace(",", "")
+            return int(s) if s != "" else None
+        except Exception:
+            return None
+    _cfg = CFG or {}
+    man_at = _int_opt(_cfg.get("soleiras_atend"))
+    man_na = _int_opt(_cfg.get("soleiras_nao_atend"))
+    if man_at is not None or man_na is not None:
+        a = man_at or 0
+        na = man_na or 0
+        tot = a + na
+        m["IMOVEIS_ATEND"] = _fmt_int(a)
+        m["IMOVEIS_NAO_ATEND"] = _fmt_int(na)
+        m["IMOVEIS_TOTAL"] = _fmt_int(tot)
+        _pct = (a / tot * 100.0) if tot else 0.0
+        m["PCT_ATEND"] = "{:.1f}%".format(_pct).replace(".", ",")
+        m["PCT_NAO_ATEND"] = "{:.1f}%".format(100 - _pct).replace(".", ",")
+        m["QTD_SOLEIRAS"] = _fmt_int(tot)
+        m["QTD_TIL"] = _fmt_int(a)
+    man_lig = _int_opt(_cfg.get("ligacoes"))
+    if man_lig is not None:
+        m["QTD_LIGACOES"] = _fmt_int(man_lig)
+        m["QTD_TIL"] = _fmt_int(man_lig)   # TIL = nº de ligacoes prediais
+    else:
+        m.setdefault("QTD_LIGACOES",
+                     m.get("IMOVEIS_ATEND") if m.get("IMOVEIS_ATEND") not in
+                     (FALTA_PREENCHER, None) else FALTA_PREENCHER)
 
     # registra marcadores vermelhos
     for k, v in m.items():
@@ -936,9 +1010,25 @@ def ensure_list_styles(doc):
         ppr.append(numpr)
 
 
+def _detectar_fonte_template(path):
+    """Le a fonte do estilo Normal do template (p/ o corpo herdar a tipografia
+    do modelo, ex.: Aptos no consorcio). Retorna None se nao conseguir."""
+    try:
+        return Document(path).styles['Normal'].font.name
+    except Exception:
+        return None
+
+
 def style_base(doc):
-    """Configura o estilo Normal e os Headings."""
+    """Configura o estilo Normal e os Headings.
+
+    Modelo Consorcio: NAO sobrescreve Normal/Headings — preserva a tipografia do
+    template (Aptos no corpo, Calibri Light 16 nos titulos H1 cinza / H2 preto,
+    espacamento 10/10 justificado). So garante os estilos de lista. (Lucas 07/07)
+    """
     ensure_list_styles(doc)
+    if MODELO_MEMORIAL == "consorcio":
+        return
     normal = doc.styles['Normal']
     normal.font.name = FONTE
     normal.font.size = Pt(11)
@@ -1385,6 +1475,81 @@ def open_template_clean():
     return doc
 
 
+def _marcos_do_projeto():
+    """Descobre os marcos de apoio (RRNN) do projeto:
+      - a PARTIR da PASTA apontada (cfg['marcos_dir']): busca PDFs de monografia
+        (Monografia_M-XXXX_*.pdf) e extrai o nome do marco (M-XXXX);
+      - e/ou dos NOMES informados manualmente (cfg['marcos_nomes']).
+    Retorna lista de {nome, pdf}. Vazio => a linha/secao de RRNN NAO aparece
+    no memorial. (Lucas 07/07)"""
+    cfg = CFG or {}
+    out, seen = [], set()
+    mdir = cfg.get("marcos_dir")
+    if mdir and os.path.isdir(mdir):
+        import glob as _glob
+        pdfs = sorted(set(_glob.glob(os.path.join(mdir, "*.pdf")) +
+                          _glob.glob(os.path.join(mdir, "*.PDF"))))
+        for p in pdfs:
+            base = os.path.basename(p)
+            low = base.lower()
+            mo = re.search(r"(m[-_ ]?\d{3,}[a-z]?)", base, re.IGNORECASE)
+            if "monografia" not in low and not mo:
+                continue
+            nome = (mo.group(1).upper().replace("_", "-").replace(" ", "-")
+                    if mo else os.path.splitext(base)[0])
+            if nome in seen:
+                continue
+            seen.add(nome)
+            out.append({"nome": nome, "pdf": p})
+    nomes_raw = (cfg.get("marcos_nomes") or "").strip()
+    if nomes_raw:
+        for tok in re.split(r"\s*[,;+/]\s*|\s+e\s+", nomes_raw):
+            tok = tok.strip()
+            if not tok or tok.upper() in seen:
+                continue
+            seen.add(tok.upper())
+            out.append({"nome": tok, "pdf": None})
+    return out
+
+
+def _inserir_monografia(doc, nome, pdf_path):
+    """Renderiza as paginas do PDF da monografia do marco e as insere no
+    memorial como imagens de largura de pagina (python-docx nao embute PDF)."""
+    try:
+        import fitz
+    except Exception:
+        add_para(doc, "[monografia do marco %s: leitor de PDF indisponivel]" % nome,
+                 color=COR_FALTA)
+        return
+    try:
+        pdf = fitz.open(pdf_path)
+    except Exception as e:
+        sys.stderr.write("[memorial] monografia falhou (%s): %s\n" % (pdf_path, e))
+        add_para(doc, "[monografia do marco %s: falha ao abrir o PDF]" % nome,
+                 color=COR_FALTA)
+        return
+    # legenda (com numero de figura, popula a Lista de Figuras)
+    _fig_n[0] += 1
+    n = _fig_n[0]
+    FIGURAS.append((n, "Monografia do marco de apoio %s" % nome))
+    add_caption(doc, "Figura", n, "Monografia do marco de apoio %s" % nome,
+                align=WD_ALIGN_PARAGRAPH.CENTER)
+    section = doc.sections[-1]
+    width = int(page_width_emu(section) * 0.90)
+    safe = re.sub(r"[^A-Za-z0-9]", "", nome) or "marco"
+    for i, page in enumerate(pdf):
+        pix = page.get_pixmap(dpi=150)
+        img_tmp = os.path.join(WORKDIR, "_monografia_%s_%d.png" % (safe, i))
+        pix.save(img_tmp)
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.space_before = Pt(4)
+        p.paragraph_format.space_after = Pt(4)
+        run = p.add_run()
+        run.add_picture(img_tmp, width=Emu(width))
+    pdf.close()
+
+
 def build():
     # carrega dados reais de Amapora e monta o mapa de substituicao
     global SUBST
@@ -1705,7 +1870,7 @@ def build():
                  "e as declividades da rede coletora.")
         add_figure(doc, MAPA4, "Mapa hipsométrico da {{SUBBACIA}} (modelo de calor da topografia)")
         add_figure(doc, MAPA6,
-                   "Modelo digital do terreno em vista isométrica (exagero vertical 4×)")
+                   "Modelo digital do terreno em vista isométrica (exagero vertical 2×)")
         add_table_caption(doc, "Síntese do levantamento topográfico da {{SUBBACIA}}")
         make_table(
             doc,
@@ -1743,7 +1908,13 @@ def build():
     add_bullet(doc, "Precisão altimétrica típica: {{PREC_ALTI}};")
     add_bullet(doc, "Método de posicionamento: {{GNSS_METODO}};")
     add_bullet(doc, "Número de pontos levantados: {{GNSS_N_PONTOS}};")
-    add_bullet(doc, "Pontos de apoio / RRNN implantados: {{QTD_APOIO}}.")
+    # RRNN / pontos de apoio: SO aparece quando o usuario aponta a pasta dos
+    # marcos (com as monografias) ou informa os nomes. Senao, a linha some. (Lucas 07/07)
+    _marcos = _marcos_do_projeto()
+    if _marcos:
+        _nomes_mk = " e ".join(mk["nome"] for mk in _marcos)
+        _plural = "marcos geodésicos de apoio" if len(_marcos) != 1 else "marco geodésico de apoio"
+        add_bullet(doc, "Pontos de apoio / RRNN implantados: %s (%s)." % (_nomes_mk, _plural))
     add_para(doc,
              "Os valores acima correspondem à precisão típica (mediana) do conjunto de pontos. "
              "Pontos situados sob copa de árvores, junto a edificações ou em demais áreas de "
@@ -1753,6 +1924,17 @@ def build():
              "Os níveis de precisão alcançados satisfazem as exigências de projetos executivos de "
              "redes coletoras, conferindo confiabilidade às cotas de terreno e aos perfis "
              "longitudinais que serviram de base ao dimensionamento.", space_before=4)
+
+    # 5.4 - Monografias dos marcos de apoio (RRNN): so quando ha PDF de monografia.
+    _marcos_pdf = [mk for mk in _marcos if mk.get("pdf")]
+    if _marcos_pdf:
+        h2(doc, "5.4. Monografias dos Marcos de Apoio (RRNN)")
+        add_para(doc,
+                 "Reproduzem-se a seguir as monografias dos marcos de apoio (RRNN) "
+                 "empregados no georreferenciamento e no controle altimétrico do "
+                 "levantamento da {{SUBBACIA}}.", space_after=6)
+        for mk in _marcos_pdf:
+            _inserir_monografia(doc, mk["nome"], mk["pdf"])
 
     # ====================================================================
     # 6. INVESTIGACAO GEOTECNICA (SONDAGENS)
@@ -2308,7 +2490,7 @@ def build():
             ["Declividade mínima", "{{DECL_MIN_PARAM}}", "m/m"],
             ["Tensão trativa mínima", "1,00", "Pa"],
             ["Lâmina d'água máxima", "75", "%"],
-            ["Taxa de contribuição linear", "{{TAXA_LINEAR}}", "L/s·m"],
+            ["Taxa de contribuição linear", "{{TAXA_LINEAR}}", "L/s·km"],
         ],
         col_widths=[8.0, 4.0, 4.0],
         first_col_left=True,
@@ -2722,7 +2904,7 @@ def apply_config(cfg):
     """
     global CFG, BASE, MAPAS, FLUXOGRAMA, FOTOS, DADOS_JSON, DADOS_EXTRA_JSON
     global SAIDA, TEMPLATE, REDE_GEOJSON, WORKDIR, TEM_SOLEIRAS, TEM_INTERF
-    global MODELO_MEMORIAL
+    global MODELO_MEMORIAL, FONTE
     CFG = cfg or {}
 
     # Modelo do memorial: "2s" (padrao) ou "consorcio" (SANEPAR/Acciona).
@@ -2737,11 +2919,21 @@ def apply_config(cfg):
             sys.stderr.write(
                 "[modelo] template_consorcio.docx nao encontrado (%s); "
                 "usando template 2S.\n" % TEMPLATE_CONSORCIO)
+    # Fidelidade tipografica: no modelo consorcio o corpo herda a FONTE do
+    # template (Aptos) em vez do Calibri 2S; os headings/espacamento tambem
+    # ficam pelos estilos do template (ver style_base). (Lucas 07/07)
+    if MODELO_MEMORIAL == "consorcio":
+        _f = _detectar_fonte_template(TEMPLATE)
+        if _f:
+            FONTE = _f
 
     # Modo legado (sem --config / sem brutos): mantem a secao 9.5 como antes.
-    # Com config: a secao so sai se o usuario apontar soleiras / interferencias.
-    if _tem_brutos(cfg):
-        TEM_SOLEIRAS = bool(cfg.get("soleiras"))
+    # Com config: a secao so sai se o usuario apontar soleiras / interferencias,
+    # OU informar as soleiras/ligacoes manualmente na UI. (Lucas 07/07)
+    _tem_soleiras_manual = bool(str(cfg.get("soleiras_atend") or "").strip() or
+                                str(cfg.get("soleiras_nao_atend") or "").strip())
+    if _tem_brutos(cfg) or _tem_soleiras_manual:
+        TEM_SOLEIRAS = bool(cfg.get("soleiras")) or _tem_soleiras_manual
         TEM_INTERF = bool(cfg.get("interferencias"))
 
     if cfg.get("base"):
