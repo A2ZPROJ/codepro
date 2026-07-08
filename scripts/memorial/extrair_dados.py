@@ -1094,8 +1094,12 @@ def extrair(cfg):
         extensao_total_m=round(total_row.get("ext"), 2) if total_row.get("ext") else
         round(sum([o["ext"] for o in O["ose_list"] if o["ext"]]), 2),
         extensao_total_conferencia_somatorio=round(sum([o["ext"] for o in O["ose_list"] if o["ext"]]), 2),
-        n_PV=total_row.get("pv") if total_row.get("pv") is not None else n_pv_pts,
-        n_TL=total_row.get("tl") if total_row.get("tl") is not None else n_tl_pts,
+        # PV/TL: usa a contagem DEDUPLICADA por nome (O["points"]) e NAO o total
+        # da planilha, que soma os dispositivos por OSE e DUPLICA os PVs de limite
+        # (o mesmo PV e montante/jusante de duas OSEs vizinhas). Ex. ANIBAL:
+        # planilha total=16, unicos=9. So cai no total_row se nao houver pontos. (Lucas 07/07)
+        n_PV=n_pv_pts if n_pv_pts else total_row.get("pv"),
+        n_TL=n_tl_pts if n_tl_pts else total_row.get("tl"),
         n_PIT=total_row.get("pit") if total_row.get("pit") is not None else 0,
         n_TQ=len(O["tq_list"]),
         n_DEGRAU=len(O["deg_list"]),

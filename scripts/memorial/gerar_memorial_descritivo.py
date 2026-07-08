@@ -11,6 +11,7 @@ Autor: A2Z / 2S Engenharia - geracao automatica.
 import os
 import sys
 import re
+import unicodedata
 import json
 import shutil
 import copy
@@ -1463,11 +1464,29 @@ def open_template_clean():
     tmp = os.path.join(WORKDIR, "_template_work.docx")
     shutil.copyfile(TEMPLATE, tmp)
     doc = Document(tmp)
-
-    # Remove todo o conteudo do corpo (paragrafos e tabelas do relatorio
-    # topografico), MAS preserva o sectPr final do body -- que carrega as
-    # referencias de header/footer (timbrado) e a geometria da pagina.
     body = doc.element.body
+
+    if MODELO_MEMORIAL == "consorcio":
+        # PRESERVA a CAPA + a TABELA DE REVISAO do modelo (tudo ANTES do 1o
+        # Heading 1 = "RESUMO GERAL"); remove so o corpo do modelo dali em
+        # diante, mantendo o sectPr final do body. Assim as paginas 1-2 saem
+        # exatamente no padrao do consorcio (fonte/estilo/cores). (Lucas 07/07)
+        from docx.text.paragraph import Paragraph as _P
+        hit = False
+        for child in list(body):
+            if child.tag == qn('w:sectPr'):
+                continue
+            if not hit and child.tag == qn('w:p'):
+                _par = _P(child, doc)
+                _st = (_par.style.name if _par.style else "") or ""
+                if _st.lower().startswith("heading 1"):
+                    hit = True
+            if hit:
+                body.remove(child)
+        return doc
+
+    # 2S: remove todo o conteudo do corpo, preservando o sectPr final (timbrado
+    # + geometria da pagina). A capa/folha e montada por codigo (build_front_2s).
     for child in list(body):
         if child.tag == qn('w:sectPr'):
             continue
@@ -1475,15 +1494,30 @@ def open_template_clean():
     return doc
 
 
+def _fold(s):
+    """minusculo sem acento, so alfanumerico (p/ casar municipio/nome de marco
+    com nome de arquivo, tolerante a acento/hifen/underscore)."""
+    s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
 def _marcos_do_projeto():
     """Descobre os marcos de apoio (RRNN) do projeto:
-      - a PARTIR da PASTA apontada (cfg['marcos_dir']): busca PDFs de monografia
-        (Monografia_M-XXXX_*.pdf) e extrai o nome do marco (M-XXXX);
-      - e/ou dos NOMES informados manualmente (cfg['marcos_nomes']).
-    Retorna lista de {nome, pdf}. Vazio => a linha/secao de RRNN NAO aparece
-    no memorial. (Lucas 07/07)"""
+      - da PASTA apontada (cfg['marcos_dir']): busca PDFs de monografia
+        (Monografia_M-XXXX_<Cidade>_*.pdf) e extrai o nome do marco (M-XXXX);
+      - filtra pelo MUNICIPIO (senao, apontar a pasta _BACKUP traria TODAS as
+        cidades) e/ou pelos NOMES informados em cfg['marcos_nomes'];
+      - e/ou dos NOMES manuais (sem PDF).
+    Retorna lista de {nome, pdf}. Vazio => a linha/secao de RRNN NAO aparece. (Lucas 07/07)"""
     cfg = CFG or {}
     out, seen = [], set()
+    proj = cfg.get("projeto") or {}
+    muni_fold = _fold(proj.get("municipio"))
+    nomes_filtro = [t.strip() for t in
+                    re.split(r"\s*[,;+/]\s*|\s+e\s+", (cfg.get("marcos_nomes") or "").strip())
+                    if t.strip()]
+    nomes_fold = [_fold(t) for t in nomes_filtro]
+
     mdir = cfg.get("marcos_dir")
     if mdir and os.path.isdir(mdir):
         import glob as _glob
@@ -1492,8 +1526,20 @@ def _marcos_do_projeto():
         for p in pdfs:
             base = os.path.basename(p)
             low = base.lower()
+            fold = _fold(base)
             mo = re.search(r"(m[-_ ]?\d{3,}[a-z]?)", base, re.IGNORECASE)
             if "monografia" not in low and not mo:
+                continue
+            # FILTRO: se ha nomes informados, casa por nome; senao, casa por
+            # municipio (evita puxar todas as cidades da pasta _BACKUP).
+            if nomes_fold:
+                if not any(nf and nf in fold for nf in nomes_fold):
+                    continue
+            elif muni_fold:
+                if muni_fold not in fold:
+                    continue
+            else:
+                # sem municipio e sem nomes: nao da p/ saber quais -> ignora a pasta
                 continue
             nome = (mo.group(1).upper().replace("_", "-").replace(" ", "-")
                     if mo else os.path.splitext(base)[0])
@@ -1501,20 +1547,23 @@ def _marcos_do_projeto():
                 continue
             seen.add(nome)
             out.append({"nome": nome, "pdf": p})
-    nomes_raw = (cfg.get("marcos_nomes") or "").strip()
-    if nomes_raw:
-        for tok in re.split(r"\s*[,;+/]\s*|\s+e\s+", nomes_raw):
-            tok = tok.strip()
-            if not tok or tok.upper() in seen:
-                continue
-            seen.add(tok.upper())
-            out.append({"nome": tok, "pdf": None})
+    # nomes informados sem PDF correspondente -> entram so como nome
+    for nf, raw in zip(nomes_fold, nomes_filtro):
+        if any(_fold(mk["nome"]) == nf for mk in out):
+            continue
+        key = raw.upper()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"nome": raw, "pdf": None})
     return out
 
 
 def _inserir_monografia(doc, nome, pdf_path):
     """Renderiza as paginas do PDF da monografia do marco e as insere no
-    memorial como imagens de largura de pagina (python-docx nao embute PDF)."""
+    memorial como imagens de largura de pagina (python-docx nao embute PDF).
+    As imagens temporarias vao para um subdir de TEMP (nunca na pasta de saida)
+    e sao apagadas apos serem embutidas. (Lucas 07/07)"""
     try:
         import fitz
     except Exception:
@@ -1537,32 +1586,30 @@ def _inserir_monografia(doc, nome, pdf_path):
     section = doc.sections[-1]
     width = int(page_width_emu(section) * 0.90)
     safe = re.sub(r"[^A-Za-z0-9]", "", nome) or "marco"
+    tmp_dir = os.path.join(tempfile.gettempdir(), "memorial_monografias")
+    os.makedirs(tmp_dir, exist_ok=True)
     for i, page in enumerate(pdf):
         pix = page.get_pixmap(dpi=150)
-        img_tmp = os.path.join(WORKDIR, "_monografia_%s_%d.png" % (safe, i))
+        img_tmp = os.path.join(tmp_dir, "_monografia_%s_%d.png" % (safe, i))
         pix.save(img_tmp)
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.paragraph_format.space_before = Pt(4)
         p.paragraph_format.space_after = Pt(4)
         run = p.add_run()
-        run.add_picture(img_tmp, width=Emu(width))
+        run.add_picture(img_tmp, width=Emu(width))   # embute a imagem no docx
+        try:
+            os.remove(img_tmp)                        # ja embutida -> limpa
+        except OSError:
+            pass
     pdf.close()
 
 
-def build():
-    # carrega dados reais de Amapora e monta o mapa de substituicao
-    global SUBST
-    SUBST = build_subst_map()
-
-    # Parte do template da 2S (timbrado correto), nao de um Document() vazio.
-    doc = open_template_clean()
-    style_base(doc)
-
+def build_front_2s(doc):
+    """Capa + Folha de Identificacao + Controle de Revisoes no padrao 2S.
+    So no modelo 2S — no CONSORCIO essas paginas (capa + tabela de revisao) vem
+    do proprio template, preservadas por open_template_clean(). (Lucas 07/07)"""
     # --- secao 0: capa ---
-    # A geometria de pagina e o timbrado vem do template (sectPr preservado).
-    # Nao redefinimos margens/header_distance aqui para nao brigar com o
-    # timbrado flutuante. Apenas garantimos o link do timbrado.
     build_cover(doc)
 
     # ====================================================================
@@ -1636,6 +1683,23 @@ def build():
         first_col_left=False,
     )
     add_table_source(doc)
+
+
+def build():
+    # carrega os dados reais e monta o mapa de substituicao
+    global SUBST
+    SUBST = build_subst_map()
+
+    # Parte do TEMPLATE (timbrado correto). No modelo CONSORCIO, o
+    # open_template_clean() PRESERVA a capa + a tabela de revisao do proprio
+    # modelo; no 2S ele limpa o corpo e a capa/folha e montada por codigo.
+    doc = open_template_clean()
+    style_base(doc)
+
+    # Capa + Folha de Identificacao + Controle de Revisoes: SO no 2S.
+    # (No consorcio essas paginas vem do template preservado.) (Lucas 07/07)
+    if MODELO_MEMORIAL != "consorcio":
+        build_front_2s(doc)
 
     # ====================================================================
     # SUMARIO (TOC)
