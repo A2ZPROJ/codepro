@@ -172,6 +172,15 @@ window.electronAPI = {
     gerar:    (cfg)    => ipcRenderer.invoke('memorial:gerar', cfg),
     abrir:    (p)      => ipcRenderer.invoke('memorial:abrir', p),
   },
+  // Mapa Geral — a partir do Excel FlexTable do SewerGEMS gera SHAPE (PV c/ cotas
+  // + REDES) + DXF geral (blocos SES + MLEADER anti-colisão + rótulos de rede),
+  // via gerador Python (scripts/mapa-geral/gerar_mapa.py).
+  mapaGeral: {
+    pickExcel: ()    => ipcRenderer.invoke('mapa:pick-excel'),
+    pickDir:   (t)   => ipcRenderer.invoke('mapa:pick-dir', t),
+    gerar:     (cfg) => ipcRenderer.invoke('mapa:gerar', cfg),
+    abrir:     (p)   => ipcRenderer.invoke('mapa:abrir', p),
+  },
   // Monografia de Marco Topográfico — gera o .docx a partir do PDF do PPP-IBGE
   // (+ fotos opcionais), via pipeline Python (jarvis/gerar_monografia.py).
   monografia: {

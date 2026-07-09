@@ -2300,6 +2300,87 @@ ipcMain.handle('memorial:abrir', async (_e, p) => {
 });
 
 // ────────────────────────────────────────────────────────────────────
+// MAPA GERAL — do Excel FlexTable (SewerGEMS) gera SHAPE (PV c/ cotas +
+// REDES) + DXF geral (blocos SES-POÇO-DE-VISITA/SES-TL + MLEADER com
+// anti-colisão portado do AJUSTARTEXTOPV + rótulos de rede estilo
+// ROTULARALINHAMENTOS). Gerador Python scripts/mapa-geral/gerar_mapa.py,
+// dirigido por config.json. Reusa o resolvedor de Python do RCE.
+// ────────────────────────────────────────────────────────────────────
+function mapaResolveScript() {
+  const candidates = [
+    path.join(__dirname, '..', 'scripts', 'mapa-geral', 'gerar_mapa.py'),
+    path.join(process.resourcesPath || '', 'scripts', 'mapa-geral', 'gerar_mapa.py'),
+    path.join(app.getAppPath(), '..', 'scripts', 'mapa-geral', 'gerar_mapa.py'),
+  ];
+  for (const c of candidates) { try { if (c && fs.existsSync(c)) return c; } catch {} }
+  return null;
+}
+
+ipcMain.handle('mapa:pick-excel', async () => {
+  if (!mainWindow) return null;
+  const r = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecionar Excel FlexTable (SewerGEMS)',
+    properties: ['openFile'],
+    filters: [{ name: 'Excel', extensions: ['xlsx'] }, { name: 'Todos', extensions: ['*'] }],
+  });
+  return r.canceled ? null : r.filePaths[0];
+});
+
+ipcMain.handle('mapa:pick-dir', async (_e, titulo) => {
+  if (!mainWindow) return null;
+  const r = await dialog.showOpenDialog(mainWindow, {
+    title: titulo || 'Selecionar pasta', properties: ['openDirectory'],
+  });
+  return r.canceled ? null : r.filePaths[0];
+});
+
+ipcMain.handle('mapa:gerar', async (_e, cfg) => {
+  try {
+    cfg = cfg || {};
+    if (!cfg.excel)    return { ok: false, erro: 'Excel não informado.' };
+    if (!cfg.saidaDir) return { ok: false, erro: 'Pasta de saída não informada.' };
+
+    const script = mapaResolveScript();
+    if (!script) return { ok: false, erro: 'Gerador Python não encontrado (scripts/mapa-geral/gerar_mapa.py).' };
+    const py = orcRceResolvePython();
+    if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
+
+    const tmpJson = path.join(os.tmpdir(), `nexus_mapa_${Date.now()}.json`);
+    fs.writeFileSync(tmpJson, JSON.stringify(cfg, null, 2), 'utf8');
+
+    const { spawn } = require('child_process');
+    const args = [...py.args, script, '--config', tmpJson];
+    return await new Promise((resolve) => {
+      let out = '', err = '';
+      let proc;
+      try {
+        proc = spawn(py.cmd, args, { windowsHide: true, cwd: path.dirname(script),
+          env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+      } catch (e) {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        return resolve({ ok: false, erro: 'Falha ao iniciar o Python: ' + e.message });
+      }
+      proc.stdout.on('data', d => out += d.toString());
+      proc.stderr.on('data', d => err += d.toString());
+      proc.on('error', (e) => { try { fs.unlinkSync(tmpJson); } catch {} resolve({ ok: false, erro: 'Erro ao executar o Python: ' + e.message }); });
+      proc.on('close', (code) => {
+        try { fs.unlinkSync(tmpJson); } catch {}
+        const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        let parsed = null;
+        for (let i = lines.length - 1; i >= 0; i--) { try { parsed = JSON.parse(lines[i]); break; } catch {} }
+        if (parsed && typeof parsed === 'object') resolve(parsed);
+        else resolve({ ok: false, erro: (err || out || `Python saiu com código ${code} sem JSON.`).slice(-1500) });
+      });
+    });
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
+
+ipcMain.handle('mapa:abrir', async (_e, p) => {
+  try { const r = await shell.openPath(p); return { ok: !r, error: r || null }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ────────────────────────────────────────────────────────────────────
 // MONOGRAFIA DE MARCO TOPOGRÁFICO — gera o .docx (padrão 2S/ACCIONA/SANEPAR)
 // a partir do PDF do PPP-IBGE (+ fotos opcionais), chamando o pipeline Python
 // em ~/jarvis/gerar_monografia.py (parser PPP → geocoding → mapa → DOCX).
@@ -2468,6 +2549,9 @@ function c3dAutoInstallBundleOnStartup() {
     // vez. O bundle fica em pasta gravável (%APPDATA%) → o AutoCAD não confia
     // sozinho; só carrega sem prompt se o caminho estiver no TrustedPaths.
     try { c3dEnsureTrustedPath(); } catch {}
+    // Registra tb o auto-loader nativo (chave Applications) — o PackageContents
+    // do bundle NÃO auto-carrega no Civil 3D 2027; esta chave garante a carga.
+    try { c3dEnsureAppLoader(); } catch {}
 
     // Sempre chama c3dInstallBundleSync — ele compara byte-a-byte e faz skip se
     // a DLL no bundle já é idêntica. Comparar só pela versão deixa passar
@@ -2477,6 +2561,7 @@ function c3dAutoInstallBundleOnStartup() {
       logUpdate(`civil3d:bundle: auto-install ok v${r.version}`);
       _c3dNeedsCadRestart = false;
       try { c3dEnsureTrustedPath(); } catch {}
+      try { c3dEnsureAppLoader(); } catch {}
     }
     else if (r.restartCad) {
       logUpdate('civil3d:bundle: skip (CAD aberto) — bundle stale, flagged needs-cad-restart');
@@ -2565,6 +2650,60 @@ exit 0;
         logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}/${regVer}) OK em ${out.replace('OK:', '')} profile(s): ${trustedDir}`);
     } catch (e) {
       logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}) falhou: ` + e.message);
+    }
+  }
+}
+
+// Registra a DLL do bundle no AUTO-LOADER NATIVO do AutoCAD (chave "Applications"
+// do registro), por versão instalada. É o mecanismo confiável que NÃO depende do
+// matching do PackageContents — necessário no Civil 3D 2027 (R26.0), onde o
+// auto-load do bundle via PackageContents NÃO engata (a DLL nunca tenta carregar
+// no startup; comprovado 09/07 na Katia/Camila). O LOADER aponta pro DLL DENTRO
+// do bundle (que tem as dependências WebView2/Sentry ao lado) — carregar a cópia
+// "pelada" de %APPDATA%\Nexus\plugins quebra o Initialize por falta das libs.
+//   HKCU\Software\Autodesk\AutoCAD\<R25.1|R26.0>\<ProductKey>\Applications\Nexus<ver>
+//   LOADER (REG_SZ) = <bundle>\Contents\Civil3D\<ver>\GerarProjetoMND.dll
+//   MANAGED=1 (assembly .NET) · LOADCTRLS=2 (carrega no startup) · DESCRIPTION
+function c3dEnsureAppLoader() {
+  for (const t of C3D_TARGETS) {
+    const dllPath = c3dBundleDllPath(t.ver);
+    if (!fs.existsSync(dllPath)) continue;              // só registra versão instalada
+    const regVer = t.seriesMin;                         // 'R25.1' / 'R26.0'
+    try {
+      const { execSync } = require('child_process');
+      const ps = `
+$ErrorActionPreference = 'SilentlyContinue';
+$dll = '${dllPath.replace(/'/g, "''")}';
+$appName = 'Nexus${t.ver}';
+$baseRegPath = 'HKCU:\\Software\\Autodesk\\AutoCAD\\${regVer}';
+if (-not (Test-Path $baseRegPath)) { Write-Output 'NO_BRANCH'; exit 0; }
+$n = 0;
+Get-ChildItem $baseRegPath -ErrorAction SilentlyContinue | ForEach-Object {
+  $productKey = $_.PSChildName;
+  $appsPath = "$baseRegPath\\$productKey\\Applications";
+  if (-not (Test-Path $appsPath)) { New-Item -Path $appsPath -Force | Out-Null; }
+  $key = "$appsPath\\$appName";
+  if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null; }
+  New-ItemProperty -Path $key -Name 'DESCRIPTION' -Value 'Nexus Civil 3D Plugin (A2Z)' -PropertyType String -Force | Out-Null;
+  New-ItemProperty -Path $key -Name 'LOADCTRLS'   -Value 2   -PropertyType DWord  -Force | Out-Null;
+  New-ItemProperty -Path $key -Name 'MANAGED'     -Value 1   -PropertyType DWord  -Force | Out-Null;
+  New-ItemProperty -Path $key -Name 'LOADER'      -Value $dll -PropertyType String -Force | Out-Null;
+  $n++;
+};
+if ($n -eq 0) { Write-Output 'NO_PRODUCTKEY'; } else { Write-Output ('OK:' + $n); }
+exit 0;
+`.trim();
+      const out = execSync(`powershell.exe -NoProfile -NonInteractive -Command "${ps.replace(/"/g, '\\"')}"`, {
+        windowsHide: true, timeout: 8000, encoding: 'utf8',
+      }).trim();
+      if (out === 'NO_BRANCH')
+        logUpdate(`civil3d:bundle: AppLoader (${t.ver}/${regVer}) PULADO — Civil ${t.ver} nunca aberto (ramo ${regVer} inexistente).`);
+      else if (out === 'NO_PRODUCTKEY')
+        logUpdate(`civil3d:bundle: AppLoader (${t.ver}/${regVer}) sem ProductKey no registro.`);
+      else
+        logUpdate(`civil3d:bundle: AppLoader (${t.ver}/${regVer}) OK em ${out.replace('OK:', '')} ProductKey(s): ${dllPath}`);
+    } catch (e) {
+      logUpdate(`civil3d:bundle: AppLoader (${t.ver}) falhou: ` + e.message);
     }
   }
 }

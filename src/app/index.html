@@ -17384,6 +17384,9 @@ body.presenting #presentingBadge { display: flex; }
         <button id="rel-sub-monografia" class="rel-sub-btn" onclick="relSwitchSub('monografia')" style="padding:10px 18px;background:none;border:none;border-bottom:2.5px solid transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;margin-bottom:-1.5px;letter-spacing:-.01em">
           Monografia de Marco
         </button>
+        <button id="rel-sub-mapa" class="rel-sub-btn" onclick="relSwitchSub('mapa')" style="padding:10px 18px;background:none;border:none;border-bottom:2.5px solid transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;margin-bottom:-1.5px;letter-spacing:-.01em">
+          Mapa Geral
+        </button>
         <button class="rel-sub-btn" disabled style="padding:10px 18px;background:none;border:none;border-bottom:2.5px solid transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--text3);cursor:not-allowed;opacity:.5">
           As-Built <span style="font-size:9px;background:var(--surface2);padding:2px 6px;border-radius:3px;margin-left:4px">em breve</span>
         </button>
@@ -17885,6 +17888,49 @@ body.presenting #presentingBadge { display: flex; }
         </div>
 
       </div><!-- /rel-pane-monografia -->
+
+      <!-- Sub-aba: Mapa Geral (Excel FlexTable SewerGEMS → SHAPE + DXF) -->
+      <div id="rel-pane-mapa" style="display:none">
+
+        <!-- Card 1: entradas -->
+        <div class="gis-card" style="margin-bottom:14px">
+          <div class="gis-card-head">
+            <h3>Entradas</h3>
+            <span style="font-size:11px;color:var(--text3)">Excel FlexTable do SewerGEMS (abas Conduit + Manhole) · pasta SHP do projeto p/ o anti-colisão dos rótulos</span>
+          </div>
+          <div class="gis-card-body">
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+              <button onclick="window.mapaPickExcel()" style="background:var(--gray-900);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Selecionar Excel FlexTable (.xlsx)</button>
+              <span id="mapa-excel-path" style="font-size:12px;color:var(--text3)">Nenhum arquivo selecionado</span>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+              <button onclick="window.mapaPickShp()" style="background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Pasta SHP do projeto (opcional)</button>
+              <span id="mapa-shp-path" style="font-size:12px;color:var(--text3)">opcional — com MEIO_FIO.shp + ALINHAMENTO.shp joga os balões pro lote (fora da pista)</span>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+              <button onclick="window.mapaPickSaida()" style="background:var(--gray-900);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Pasta de saída</button>
+              <span id="mapa-saida-path" style="font-size:12px;color:var(--text3)">Nenhuma pasta selecionada</span>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <label style="font-size:12px;color:var(--text2);font-weight:600;min-width:70px">Nome base</label>
+              <input id="mapa-nome" value="MAPA_GERAL" style="flex:1;max-width:320px;padding:7px 12px;font-family:inherit;font-size:13px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none"/>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: gerar -->
+        <div class="gis-card" style="margin-bottom:14px">
+          <div class="gis-card-head">
+            <h3>Gerar mapa</h3>
+            <span id="mapa-status" style="font-size:11px;color:var(--text3);margin-left:auto"></span>
+          </div>
+          <div class="gis-card-body">
+            <button class="btn-accent" id="mapa-btn-gerar" onclick="window.mapaGerar()" style="padding:10px 22px;font-size:13px">Gerar Mapa (SHAPE + DXF)</button>
+            <div id="mapa-result" style="display:none;margin-top:12px"></div>
+          </div>
+        </div>
+
+      </div><!-- /rel-pane-mapa -->
     </div>
   </div>
 
@@ -25113,6 +25159,73 @@ body.presenting #presentingBadge { display: flex; }
       document.querySelectorAll('#tab-relatorios [id^="rel-pane-"]').forEach(p => p.style.display = 'none');
       const pane = document.getElementById('rel-pane-' + sub);
       if (pane) pane.style.display = '';
+    };
+
+    // ── Mapa Geral (Excel FlexTable SewerGEMS → SHAPE + DXF) ──
+    window._mapaExcel = null; window._mapaShp = null; window._mapaSaida = null;
+    window.mapaPickExcel = async function() {
+      const p = await window.electronAPI.mapaGeral.pickExcel();
+      if (!p) return;
+      window._mapaExcel = p;
+      document.getElementById('mapa-excel-path').textContent = p;
+      document.getElementById('mapa-excel-path').style.color = 'var(--text)';
+      // sugere pasta de saída = pasta do Excel, se ainda não escolhida
+      if (!window._mapaSaida) {
+        const dir = p.replace(/[\\/][^\\/]*$/, '');
+        window._mapaSaida = dir;
+        document.getElementById('mapa-saida-path').textContent = dir;
+        document.getElementById('mapa-saida-path').style.color = 'var(--text)';
+      }
+    };
+    window.mapaPickShp = async function() {
+      const p = await window.electronAPI.mapaGeral.pickDir('Selecionar pasta SHP do projeto (MEIO_FIO / ALINHAMENTO)');
+      if (!p) return;
+      window._mapaShp = p;
+      document.getElementById('mapa-shp-path').textContent = p;
+      document.getElementById('mapa-shp-path').style.color = 'var(--text)';
+    };
+    window.mapaPickSaida = async function() {
+      const p = await window.electronAPI.mapaGeral.pickDir('Selecionar pasta de saída');
+      if (!p) return;
+      window._mapaSaida = p;
+      document.getElementById('mapa-saida-path').textContent = p;
+      document.getElementById('mapa-saida-path').style.color = 'var(--text)';
+    };
+    window.mapaGerar = async function() {
+      const status = document.getElementById('mapa-status');
+      const result = document.getElementById('mapa-result');
+      const btn = document.getElementById('mapa-btn-gerar');
+      if (!window._mapaExcel) { status.textContent = 'Selecione o Excel FlexTable primeiro.'; status.style.color = 'var(--danger,#c0392b)'; return; }
+      if (!window._mapaSaida) { status.textContent = 'Selecione a pasta de saída.'; status.style.color = 'var(--danger,#c0392b)'; return; }
+      btn.disabled = true; btn.style.opacity = '.6';
+      status.style.color = 'var(--text3)'; status.textContent = 'Gerando (lê o Excel, roda o anti-colisão, monta o DXF)…';
+      result.style.display = 'none';
+      try {
+        const res = await window.electronAPI.mapaGeral.gerar({
+          excel: window._mapaExcel, shpDir: window._mapaShp || '',
+          saidaDir: window._mapaSaida, nomeBase: (document.getElementById('mapa-nome').value || 'MAPA_GERAL').trim(),
+        });
+        if (res && res.ok) {
+          status.style.color = 'var(--success,#1e8e3e)';
+          status.textContent = `OK — ${res.pvs} PV/TL · ${res.redes} redes${res.anticolisao ? ' · anti-colisão' : ''}`;
+          result.style.display = '';
+          result.innerHTML =
+            '<div style="display:flex;gap:10px;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">'
+            + '<span style="font-size:12px;color:var(--text2)">Gerado: SHAPE (PV c/ cotas + redes) + DXF geral.</span>'
+            + '<button onclick="window.electronAPI.mapaGeral.abrir(window._mapaDxf)" style="margin-left:auto;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Abrir DXF</button>'
+            + '<button onclick="window.electronAPI.mapaGeral.abrir(window._mapaSaida)" style="background:transparent;color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:7px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Abrir pasta</button>'
+            + '</div>';
+          window._mapaDxf = res.dxf;
+        } else {
+          status.style.color = 'var(--danger,#c0392b)';
+          status.textContent = 'Erro: ' + ((res && res.erro) || 'falha desconhecida');
+        }
+      } catch (e) {
+        status.style.color = 'var(--danger,#c0392b)';
+        status.textContent = 'Erro: ' + e.message;
+      } finally {
+        btn.disabled = false; btn.style.opacity = '1';
+      }
     };
 
     // ── Monografia de Marco Topográfico (PPP-IBGE → DOCX) ──
