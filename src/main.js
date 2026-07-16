@@ -1972,6 +1972,93 @@ function cotacoesSave(arr) {
   fs.writeFileSync(p, JSON.stringify(arr, null, 2), 'utf8');
   return { onServer: !!s, path: p };
 }
+
+// ── FORNECEDORES (contatos) — base COMPARTILHADA; qualquer um adiciona/vê ──
+// Mesmo padrão das cotações: arquivo único no servidor + fallback local (merge por id).
+const FORNECEDORES_SERVER_DIR = '\\\\2s-eng-servidor\\maringa\\_PROGRAMAS\\FORNECEDORES NEXUS';
+function fornecedoresServerPath() {
+  try {
+    if (!fs.existsSync(FORNECEDORES_SERVER_DIR)) fs.mkdirSync(FORNECEDORES_SERVER_DIR, { recursive: true });
+    fs.accessSync(FORNECEDORES_SERVER_DIR, fs.constants.W_OK);
+    return path.join(FORNECEDORES_SERVER_DIR, 'fornecedores.json');
+  } catch { return null; }
+}
+function fornecedoresLocalPath() { return path.join(app.getPath('userData'), 'fornecedores-eee.json'); }
+function fornecedoresReadFrom(p) {
+  try { if (p && fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8')) || []; } catch {}
+  return [];
+}
+function fornecedoresLoad() {
+  const s = fornecedoresServerPath();
+  const map = new Map();
+  for (const c of [...fornecedoresReadFrom(s), ...fornecedoresReadFrom(fornecedoresLocalPath())])
+    if (c && c.id) map.set(c.id, c);
+  return Array.from(map.values()).sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'));
+}
+function fornecedoresSave(arr) {
+  const s = fornecedoresServerPath();
+  const p = s || fornecedoresLocalPath();
+  fs.writeFileSync(p, JSON.stringify(arr, null, 2), 'utf8');
+  return { onServer: !!s, path: p };
+}
+ipcMain.handle('orc-elev:fornecedores-list', async () => {
+  try { const s = fornecedoresServerPath(); return { ok: true, fornecedores: fornecedoresLoad(), onServer: !!s, path: s || fornecedoresLocalPath() }; }
+  catch (e) { return { ok: false, erro: e.message, fornecedores: [] }; }
+});
+ipcMain.handle('orc-elev:fornecedores-add', async (_e, f) => {
+  try {
+    const now = new Date();
+    const rec = {
+      id: String(now.getTime()) + '-' + Math.random().toString(36).slice(2, 7),
+      nome: String((f && f.nome) || '').trim(),
+      telefone: String((f && f.telefone) || '').trim(),
+      email: String((f && f.email) || '').trim(),
+      fornece: String((f && f.fornece) || '').trim(),
+      homologado: String((f && f.homologado) || '').trim(),  // 'sim' | 'nao' | '' (a verificar)
+      criadoPor: String((f && f.criadoPor) || '').trim(),
+      criadoEm: now.toISOString(),
+    };
+    if (!rec.nome) return { ok: false, erro: 'Nome do fornecedor é obrigatório.' };
+    const arr = fornecedoresLoad(); arr.push(rec);
+    const info = fornecedoresSave(arr);
+    return { ok: true, fornecedores: fornecedoresLoad(), ...info };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
+ipcMain.handle('orc-elev:fornecedores-del', async (_e, id) => {
+  try {
+    const rest = fornecedoresLoad().filter(c => c.id !== id);
+    const info = fornecedoresSave(rest);
+    return { ok: true, fornecedores: rest, ...info };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
+ipcMain.handle('orc-elev:fornecedores-update', async (_e, id, f) => {
+  try {
+    const arr = fornecedoresLoad();
+    const idx = arr.findIndex(c => c.id === id);
+    if (idx < 0) return { ok: false, erro: 'fornecedor não encontrado' };
+    const cur = arr[idx];
+    const upd = {
+      ...cur,
+      nome: String((f && f.nome != null ? f.nome : cur.nome) || '').trim(),
+      telefone: String((f && f.telefone != null ? f.telefone : cur.telefone) || '').trim(),
+      email: String((f && f.email != null ? f.email : cur.email) || '').trim(),
+      fornece: String((f && f.fornece != null ? f.fornece : cur.fornece) || '').trim(),
+      homologado: String((f && f.homologado != null ? f.homologado : cur.homologado) || '').trim(),
+      editadoEm: new Date().toISOString(),
+    };
+    if (!upd.nome) return { ok: false, erro: 'Nome é obrigatório.' };
+    arr[idx] = upd;
+    const info = fornecedoresSave(arr);
+    return { ok: true, fornecedores: fornecedoresLoad(), ...info };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
+// Abre link externo (WhatsApp/e-mail) no app/navegador padrão. Só http(s)/mailto/tel.
+ipcMain.handle('orc-elev:open-external', async (_e, url) => {
+  try {
+    if (typeof url === 'string' && /^(https?:|mailto:|tel:)/i.test(url)) { await shell.openExternal(url); return { ok: true }; }
+    return { ok: false, erro: 'link inválido' };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
 ipcMain.handle('orc-elev:cotacoes-list', async () => {
   try { const s = cotacoesServerPath(); return { ok: true, cotacoes: cotacoesLoad(), onServer: !!s, path: s || cotacoesLocalPath() }; }
   catch (e) { return { ok: false, erro: e.message, cotacoes: [] }; }

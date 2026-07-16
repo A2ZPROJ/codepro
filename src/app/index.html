@@ -14974,7 +14974,25 @@ body.presenting #presentingBadge { display: flex; }
         <div style="font-size:18px;font-weight:700;color:var(--text)">Orçamento de Estação Elevatória (EEE)</div>
         <span style="font-size:11px;font-weight:700;background:rgba(13,148,136,.14);color:#0d9488;padding:3px 9px;border-radius:10px">2S / SANEPAR</span>
       </div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">Gera o orçamento (xlsx + 2 PDFs: orçamento e memorial) a partir do gabarito A2 + DADOS DE ENTRADA do projeto. Pré-preenchido com a família padronizada Altamira — ajuste por obra (leitura de PEST/PARQ/PHID/PELE). Requer Excel instalado.</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">Gera o orçamento (Excel + 2 PDFs: orçamento e memorial) a partir dos DADOS DE ENTRADA do projeto. Já vem pré-preenchido com valores padrão — ajuste por obra. Requer Excel instalado.</div>
+
+      <!-- Guia de passos (autoexplicativo) -->
+      <div id="oelev-steps" style="display:flex;align-items:stretch;gap:6px;margin-bottom:16px;flex-wrap:wrap">
+        <div class="oelev-step" data-step="1">
+          <span class="oelev-step-n">1</span>
+          <div><div style="font-size:12px;font-weight:700;color:var(--text)">Importar análise</div><div style="font-size:10px;color:var(--text3)">escolha na lista e clique Importar</div></div>
+        </div>
+        <div class="oelev-step-arrow">→</div>
+        <div class="oelev-step" data-step="2">
+          <span class="oelev-step-n">2</span>
+          <div><div style="font-size:12px;font-weight:700;color:var(--text)">Conferir os dados</div><div style="font-size:10px;color:var(--text3)">revise os campos em amarelo</div></div>
+        </div>
+        <div class="oelev-step-arrow">→</div>
+        <div class="oelev-step" data-step="3">
+          <span class="oelev-step-n">3</span>
+          <div><div style="font-size:12px;font-weight:700;color:var(--text)">Gerar orçamento</div><div style="font-size:10px;color:var(--text3)">sai o Excel + 2 PDFs</div></div>
+        </div>
+      </div>
 
       <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:18px 20px;display:flex;flex-direction:column;gap:18px">
 
@@ -14982,69 +15000,68 @@ body.presenting #presentingBadge { display: flex; }
         <div style="background:linear-gradient(90deg,rgba(13,148,136,.10),transparent);border:1px solid rgba(13,148,136,.35);border-radius:8px;padding:11px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <span style="font-size:16px;flex-shrink:0">🤖</span>
           <div style="flex:1;min-width:160px">
-            <div style="font-size:12px;font-weight:700;color:var(--text)">Análise automática dos projetos</div>
-            <div style="font-size:10px;color:var(--text3)">Suba os projetos no chat com o Claude; ele grava a análise e aqui você importa pré-preenchido (revise antes de gerar).</div>
+            <div style="font-size:13px;font-weight:800;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap">1. Análise automática dos projetos <span style="font-size:9px;font-weight:800;letter-spacing:.5px;background:#0d9488;color:#fff;padding:2px 7px;border-radius:8px">COMECE AQUI</span></div>
+            <div style="font-size:10px;color:var(--text3)">Suba os projetos no chat com o Claude; ele grava a análise e aqui você <b>importa pré-preenchido</b> — depois é só conferir os dados abaixo e gerar.</div>
           </div>
-          <select id="oelev-analise-sel" class="oelev-inp" style="max-width:280px;flex:1;min-width:150px"><option value="">— nenhuma análise —</option></select>
-          <button id="oelev-analise-refresh" type="button" title="atualizar lista" style="background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">↻</button>
+          <select id="oelev-analise-sel" class="oelev-inp" style="flex:2;min-width:260px"><option value="">— nenhuma análise —</option></select>
+          <button id="oelev-analise-refresh" type="button" title="atualizar a lista de análises" style="background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">↻ Atualizar</button>
           <button id="oelev-analise-load" type="button" style="background:#0d9488;color:white;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Importar</button>
           <div id="oelev-analise-status" style="flex-basis:100%;font-size:11px;color:var(--text3)"></div>
+          <div id="oelev-empty-hint" style="flex-basis:100%;font-size:11px;color:#0d9488;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">👆 Comece aqui: escolha uma análise na lista acima e clique <span style="background:#0d9488;color:#fff;padding:1px 7px;border-radius:6px">Importar</span></div>
         </div>
 
         <!-- 1) Identificação -->
         <div>
-          <div class="oelev-sec">1. Identificação</div>
+          <div class="oelev-sec">2. Identificação <span style="font-weight:400;color:var(--text3)">— confira</span><span class="oelev-help" title="Dados que vão pro carimbo e pro nome do arquivo. Normalmente já vêm preenchidos pela análise importada — só confira.">?</span></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
-            <label class="oelev-flbl">SB <span style="color:var(--red,#A11312)">*</span>
+            <label class="oelev-flbl">SB <span style="color:var(--red,#A11312)">*</span><span class="oelev-help" title="Sub-bacia / trecho da elevatória (ex.: SB-A5). Campo obrigatório — aparece no carimbo e no nome do arquivo gerado.">?</span>
               <input id="oelev-sb" class="oelev-inp" type="text" placeholder="ex.: SB-A5"/></label>
-            <label class="oelev-flbl">Cidade / UF
+            <label class="oelev-flbl">Cidade / UF <span style="color:var(--red,#A11312)">*</span><span class="oelev-help" title="Município e estado da obra, ex.: ALTAMIRA DO PARANÁ/PR. Campo obrigatório.">?</span>
               <input id="oelev-cidade" class="oelev-inp" type="text" placeholder="ex.: ALTAMIRA DO PARANÁ/PR"/></label>
-            <label class="oelev-flbl">Contrato
+            <label class="oelev-flbl">Contrato <span class="oelev-help" title="Número do contrato Acciona/Sanepar, ex.: 61670/2024.">?</span>
               <input id="oelev-contrato" class="oelev-inp" type="text" placeholder="ex.: 61670/2024"/></label>
-            <label class="oelev-flbl">Responsável
+            <label class="oelev-flbl">Responsável <span class="oelev-help" title="Quem está gerando o orçamento. Já vem preenchido com o seu nome (usuário logado) — troque se for outra pessoa.">?</span>
               <input id="oelev-responsavel" class="oelev-inp" type="text" placeholder="quem está gerando o orçamento"/></label>
           </div>
         </div>
 
-        <!-- 2) Gabarito A2 -->
-        <div>
-          <div class="oelev-sec">2. Gabarito A2 (planilha-base)</div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button id="oelev-pick-a2" style="background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0">Trocar gabarito…</button>
-            <input id="oelev-a2-path" readonly placeholder="(gabarito padrão embutido)" style="flex:1;padding:7px 10px;font-family:inherit;font-size:11px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
-          </div>
-          <div style="font-size:10px;color:var(--text3);margin-top:5px">Por padrão usa o gabarito A2 embutido no app. Só troque se for usar outra planilha-base.</div>
-        </div>
-
-        <!-- 3) Projetos de referência (opcional) -->
-        <div>
-          <div class="oelev-sec">3. Projetos de referência <span style="font-weight:400;color:var(--text3)">(opcional — anexa o caminho p/ registro / leitura futura)</span></div>
-          <div id="oelev-refs" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px"></div>
-        </div>
-
-        <!-- 4) Dados de entrada -->
+        <!-- 2) Dados de entrada -->
         <div>
           <div class="oelev-sec" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <span>4. Dados de entrada (DADOS do projeto) <span style="font-weight:400;color:var(--text3)">— amarelos no memorial; <b>qty</b> = quantidade, e nos materiais (cotação) também <b>preço</b> + <b>fonte</b></span></span>
-            <span style="margin-left:auto;display:flex;gap:6px;flex-shrink:0">
+            <span>3. Dados de entrada (DADOS do projeto) <span style="font-weight:400;color:var(--text3)">— confira</span><span class="oelev-help" title="Quantidades do projeto, agrupadas por área (clique numa área pra abrir). 'qty' = quantidade; nos materiais de cotação também entra preço + fonte. Os campos em amarelo já vêm preenchidos pela análise importada — só confira/ajuste.">?</span></span>
+            <span style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap">
+              <span class="oelev-legenda"><i></i> Amarelo = preenchido pela análise — só confira</span>
               <button id="oelev-expand-all" type="button" style="background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:4px 10px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">▾ Expandir tudo</button>
               <button id="oelev-collapse-all" type="button" style="background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:4px 10px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">▸ Recolher tudo</button>
             </span>
           </div>
           <div id="oelev-form" style="display:flex;flex-direction:column;gap:6px"></div>
+          <!-- Linha de recalque (vem da análise em EXTRA_BLOCK; editável aqui) -->
+          <div id="oelev-recalque" style="margin-top:8px"></div>
         </div>
 
-        <!-- 5) Ajustes avançados -->
+        <!-- 3) Ajustes avançados (inclui o gabarito A2, raramente trocado) -->
         <details style="border:1px dashed var(--border);border-radius:8px;padding:10px 12px">
-          <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text2)">Ajustes avançados (JSON) — opcional</summary>
-          <div style="font-size:10px;color:var(--text3);margin:8px 0">Cole overrides do config: <code>PRICE_UPD</code>, <code>QTY_UPD</code>, <code>CODE_UPD</code>, <code>AREA_INSERTS</code>, <code>EXTRA_BLOCK</code>, <code>MEMO_FONTES</code>. Ex.: <code>{"PRICE_UPD":{"81":118259.86},"EXTRA_BLOCK":{"titulo":"PAVIMENTAÇÃO ASFÁLTICA","itens":[["PAV-01","Pintura de ligação","MO","Sanepar",9,"m²",12.02]]}}</code></div>
+          <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text2)">Ajustes avançados — opcional (gabarito A2 · overrides JSON)</summary>
+
+          <!-- Gabarito A2 (planilha-base) — trabalha no automático com o modelo embutido -->
+          <div style="margin-top:10px">
+            <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">Gabarito A2 (planilha-base)</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button id="oelev-pick-a2" style="background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0">Trocar gabarito…</button>
+              <input id="oelev-a2-path" readonly placeholder="(gabarito padrão embutido)" style="flex:1;padding:7px 10px;font-family:inherit;font-size:11px;border:1.5px solid var(--border);border-radius:6px;color:var(--text2);background:var(--surface2);outline:none;min-width:0"/>
+            </div>
+            <div style="font-size:10px;color:var(--text3);margin-top:5px">Por padrão usa o gabarito A2 embutido no app. Só troque se for usar outra planilha-base.</div>
+          </div>
+
+          <div style="font-size:10px;color:var(--text3);margin:14px 0 8px">Cole overrides do config: <code>PRICE_UPD</code>, <code>QTY_UPD</code>, <code>CODE_UPD</code>, <code>AREA_INSERTS</code>, <code>EXTRA_BLOCK</code>, <code>MEMO_FONTES</code>. Ex.: <code>{"PRICE_UPD":{"81":118259.86},"EXTRA_BLOCK":{"titulo":"PAVIMENTAÇÃO ASFÁLTICA","itens":[["PAV-01","Pintura de ligação","MO","Sanepar",9,"m²",12.02]]}}</code></div>
           <textarea id="oelev-adv" rows="4" placeholder="{ }" style="width:100%;font-family:ui-monospace,Consolas,monospace;font-size:11px;border:1.5px solid var(--border);border-radius:6px;padding:8px;color:var(--text);background:var(--surface);outline:none;resize:vertical"></textarea>
           <div id="oelev-adv-err" style="font-size:10px;color:var(--red,#A11312);margin-top:4px"></div>
         </details>
 
-        <!-- 6) Gerar -->
-        <div style="display:flex;align-items:center;gap:12px;border-top:1px solid var(--border);padding-top:14px">
-          <button id="oelev-gerar" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:10px 20px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Gerar orçamento</button>
+        <!-- 6) Gerar (barra fixa no rodapé) -->
+        <div style="display:flex;align-items:center;gap:12px;border-top:1px solid var(--border);padding-top:14px;padding-bottom:14px;position:sticky;bottom:0;background:var(--surface);z-index:5;box-shadow:0 -8px 14px -10px rgba(0,0,0,.20)">
+          <button id="oelev-gerar" style="background:#0d9488;color:white;border:none;border-radius:6px;padding:10px 22px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Gerar orçamento (Excel + 2 PDFs)</button>
           <div id="oelev-status" style="font-size:12px;color:var(--text3)"></div>
         </div>
 
@@ -15062,6 +15079,36 @@ body.presenting #presentingBadge { display: flex; }
           </div>
           <div id="oelev-history" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
         </div>
+
+        <!-- 7b) Fornecedores (contatos) — base COMPARTILHADA, qualquer um adiciona -->
+        <details id="oelev-forn-box" style="border-top:1px solid var(--border);padding-top:14px">
+          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px">
+            <span class="oelev-sec" style="margin-bottom:0">Fornecedores (contatos)</span>
+            <span id="oelev-forn-count" style="font-size:11px;font-weight:700;color:#0d9488;background:rgba(13,148,136,.14);padding:2px 8px;border-radius:9px"></span>
+            <span style="margin-left:auto;font-size:10px;color:var(--text3)">lista compartilhada — qualquer um pode adicionar</span>
+          </summary>
+          <div style="margin-top:12px">
+            <div id="oelev-forn-list" style="display:flex;flex-direction:column;gap:6px"></div>
+            <div style="margin-top:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+              <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px">Adicionar fornecedor</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+                <input id="oelev-forn-nome" class="oelev-inp" type="text" placeholder="Nome *"/>
+                <input id="oelev-forn-tel" class="oelev-inp" type="text" placeholder="Telefone / WhatsApp"/>
+                <input id="oelev-forn-email" class="oelev-inp" type="text" placeholder="E-mail"/>
+                <input id="oelev-forn-fornece" class="oelev-inp" type="text" placeholder="O que fornece (ex.: tubos, painel)"/>
+                <select id="oelev-forn-homo" class="oelev-inp" title="Homologação SANEPAR (por empresa)">
+                  <option value="">Homologação SANEPAR: a verificar</option>
+                  <option value="sim">Homologado SANEPAR</option>
+                  <option value="nao">Não homologado SANEPAR</option>
+                </select>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+                <button id="oelev-forn-add" type="button" style="background:#0d9488;color:white;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">Adicionar</button>
+                <div id="oelev-forn-status" style="font-size:11px;color:var(--text3)"></div>
+              </div>
+            </div>
+          </div>
+        </details>
 
         <!-- 8) Banco de Cotações (acumulável, compartilhado) -->
         <details id="oelev-cot-box" style="border-top:1px solid var(--border);padding-top:14px">
@@ -15120,6 +15167,20 @@ body.presenting #presentingBadge { display: flex; }
     #tab-orcamento-elevatoria .oelev-nota { color:var(--text3);font-size:10px; }
     #tab-orcamento-elevatoria .oelev-un { font-size:10px;color:var(--text3); }
     #tab-orcamento-elevatoria .oelev-row .oelev-inp { padding:5px 8px;font-size:11px; }
+    /* Guia de passos (autoexplicativo) */
+    #tab-orcamento-elevatoria .oelev-step { flex:1;min-width:150px;display:flex;align-items:center;gap:10px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:9px 12px; }
+    #tab-orcamento-elevatoria .oelev-step-n { flex-shrink:0;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:var(--surface2);color:var(--text3);border:1.5px solid var(--border); }
+    #tab-orcamento-elevatoria .oelev-step.active { border-color:#0d9488;box-shadow:0 0 0 1px #0d9488 inset; }
+    #tab-orcamento-elevatoria .oelev-step.active .oelev-step-n,
+    #tab-orcamento-elevatoria .oelev-step.done .oelev-step-n { background:#0d9488;color:#fff;border-color:#0d9488; }
+    #tab-orcamento-elevatoria .oelev-step.done .oelev-step-n { }
+    #tab-orcamento-elevatoria .oelev-step-arrow { display:flex;align-items:center;color:var(--text3);font-size:16px;flex-shrink:0; }
+    /* Ícone de ajuda (?) — tooltip nativo via title */
+    #tab-orcamento-elevatoria .oelev-help { display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:help;margin-left:4px;vertical-align:middle;line-height:1; }
+    #tab-orcamento-elevatoria .oelev-help:hover { background:#0d9488;color:#fff;border-color:#0d9488; }
+    /* Legenda do amarelo */
+    #tab-orcamento-elevatoria .oelev-legenda { display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:2px 8px; }
+    #tab-orcamento-elevatoria .oelev-legenda i { width:11px;height:11px;border-radius:3px;background:#FFF7DB;border:1px solid #E0B000;display:inline-block; }
   </style>
   <script>
   (function(){
@@ -15129,11 +15190,9 @@ body.presenting #presentingBadge { display: flex; }
     const $ = (id) => document.getElementById(id);
     let _busy = false, _a2Path = null, _inited = false, _unsub = null;
     let SCHEMA = [], DEF_DATA = {}, DEF_CP = {};
-    const REFS = [
-      { k:'pest', lbl:'PEST (estrutural)' }, { k:'parq', lbl:'PARQ (arquitetônico)' },
-      { k:'phid', lbl:'PHID (hidráulico)' }, { k:'pele', lbl:'PELE (elétrico)' },
-    ];
-    const _refPaths = {};
+    // Linha de recalque: vem da análise em EXTRA_BLOCK (dict {titulo, itens[]}), editável aqui.
+    // Cada item é uma tupla: [cod, desc, tipo, origem, quant, un, valor_cd, memoria?]
+    let _recalqueTitulo = '', _recalqueItens = [];
 
     function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
     function escA(s){ return esc(s).replace(/"/g,'&quot;'); }
@@ -15169,7 +15228,7 @@ body.presenting #presentingBadge { display: flex; }
     function renderForm(){
       let html='', inArea=false;
       SCHEMA.forEach(s => {
-        if (s.t === 'area') { if (inArea) html+='</div></details>'; html += `<details class="oelev-area" open><summary>${esc(s.label)}</summary><div class="oelev-area-body">`; inArea=true; }
+        if (s.t === 'area') { if (inArea) html+='</div></details>'; html += `<details class="oelev-area"><summary>${esc(s.label)}</summary><div class="oelev-area-body">`; inArea=true; }
         else if (s.t === 'sub') { html += `<div class="oelev-sub">${esc(s.label)}</div>`; }
         else { html += fieldRow(s); }
       });
@@ -15177,43 +15236,50 @@ body.presenting #presentingBadge { display: flex; }
       const box=$('oelev-form'); if (box) box.innerHTML = html;
     }
 
-    function baseName(p){ return String(p||'').split(/[\\/]/).pop(); }
-
-    // Re-renderiza a lista de PDFs de UMA categoria (cada um com botão de excluir).
-    function renderRefList(k){
-      const box=$('oelev-reflist-'+k); if(!box) return;
-      const arr = Array.isArray(_refPaths[k]) ? _refPaths[k] : [];
-      if (!arr.length){ box.innerHTML = `<span style="font-size:10px;color:var(--text3)">nenhum PDF</span>`; return; }
-      box.innerHTML = arr.map((p,i) =>
-        `<div style="display:flex;gap:6px;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:3px 4px 3px 8px">`
-        + `<span title="${escA(p)}" style="flex:1;font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">${esc(baseName(p))}</span>`
-        + `<button class="oelev-ref-del" data-k="${escA(k)}" data-i="${i}" title="excluir" style="background:none;border:none;color:var(--red,#A11312);cursor:pointer;font-size:14px;font-weight:700;line-height:1;padding:0 4px;flex-shrink:0">×</button>`
-        + `</div>`
-      ).join('');
-      box.querySelectorAll('.oelev-ref-del').forEach(b => b.addEventListener('click', () => {
-        const kk=b.dataset.k, ii=+b.dataset.i;
-        if (Array.isArray(_refPaths[kk])) { _refPaths[kk].splice(ii,1); renderRefList(kk); }
-      }));
+    // Guia de passos (1 Importar → 2 Conferir → 3 Gerar): destaca o passo atual.
+    // Também esconde a dica de "comece aqui" assim que sai do passo 1.
+    function setStep(n){
+      document.querySelectorAll('#oelev-steps .oelev-step').forEach(s => {
+        const k = +s.dataset.step;
+        s.classList.toggle('active', k === n);
+        s.classList.toggle('done', k < n);
+      });
+      const hint = $('oelev-empty-hint'); if (hint) hint.style.display = (n > 1) ? 'none' : '';
     }
 
-    function renderRefs(){
-      const box=$('oelev-refs'); if(!box) return;
-      box.innerHTML = REFS.map(r =>
-        `<div style="border:1px solid var(--border);border-radius:7px;padding:8px;display:flex;flex-direction:column;gap:6px">`
-        + `<div style="display:flex;gap:6px;align-items:center">`
-        + `<span style="flex:1;font-size:11px;font-weight:600;color:var(--text2)">${esc(r.lbl)}</span>`
-        + `<button class="oelev-ref-add" data-k="${r.k}" style="background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:6px;padding:5px 11px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">+ PDF</button>`
-        + `</div>`
-        + `<div id="oelev-reflist-${r.k}" style="display:flex;flex-direction:column;gap:3px"></div>`
-        + `</div>`
-      ).join('');
-      REFS.forEach(r => { if(!Array.isArray(_refPaths[r.k])) _refPaths[r.k]=[]; renderRefList(r.k); });
-      box.querySelectorAll('.oelev-ref-add').forEach(b => b.addEventListener('click', async () => {
-        const k=b.dataset.k;
-        const res = await window.electronAPI.orcElev.pickPdf();      // array (multi) ou string/null (compat)
-        const add = Array.isArray(res) ? res : (res ? [res] : []);
-        if (add.length){ if(!Array.isArray(_refPaths[k])) _refPaths[k]=[]; _refPaths[k].push(...add); renderRefList(k); }
-      }));
+    // Renderiza a LINHA DE RECALQUE (itens que vieram da análise) — visível e editável
+    // dentro do item 3. Quant e valor são editáveis; descrição/unidade só leitura.
+    function renderRecalque(){
+      const box=$('oelev-recalque'); if(!box) return;
+      // numera na sequência das áreas do formulário (ex.: 5 áreas -> recalque = 6),
+      // e começa RECOLHIDO igual às outras. A seção aparece SEMPRE (vazia até importar).
+      const num = document.querySelectorAll('#oelev-form .oelev-area').length + 1;
+      const tit = _recalqueTitulo || 'LINHA DE RECALQUE';
+      let body;
+      if(!_recalqueItens.length){
+        body = `<div style="font-size:11px;color:var(--text3);padding:4px 0">Sem itens ainda — <b>importe uma análise</b> com linha de recalque (item 1) e os itens (tubo, curvas, PVs, tampões…) aparecem aqui, editáveis.</div>`;
+      } else {
+        const rows = _recalqueItens.map((it,i)=>{
+          const desc = it[1]!=null?it[1]:'';
+          const un   = it[5]!=null?it[5]:'';
+          const q    = it[4]!=null?String(it[4]).replace('.',','):'';
+          const val  = it[6]!=null?String(it[6]).replace('.',','):'';
+          return `<div class="oelev-row oelev-row-cp" style="border-bottom:1px solid var(--border)">`
+            + `<div class="oelev-lbl">${esc(desc)}</div>`
+            + `<input class="oelev-inp oelev-rq-qty" data-i="${i}" type="text" inputmode="decimal" value="${escA(q)}" title="quantidade"/>`
+            + `<span class="oelev-un">${esc(un)}</span>`
+            + `<input class="oelev-inp oelev-rq-val" data-i="${i}" type="text" inputmode="decimal" value="${escA(val)}" placeholder="valor unit. R$" title="valor unitário"/>`
+            + `<span></span>`
+            + `</div>`;
+        }).join('');
+        body = `<div style="font-size:10px;color:var(--text3);margin:2px 0 8px">Itens do recalque trazidos da análise. Ajuste quantidade/valor se precisar; entram no orçamento e no memorial.</div>` + rows;
+      }
+      box.innerHTML =
+        `<details class="oelev-area">`
+        + `<summary>${num}. ${esc(tit)}</summary>`
+        + `<div class="oelev-area-body">`
+        + body
+        + `</div></details>`;
     }
 
     function buildCfg(saida){
@@ -15235,7 +15301,6 @@ body.presenting #presentingBadge { display: flex; }
         A2_PATH: _a2Path,
         OUT_XLSX: saida,
         DATA, CP,
-        PROJETOS: { ..._refPaths },
       };
       // ajustes avançados (JSON) — merge dos overrides opcionais
       const advRaw = ($('oelev-adv').value||'').trim();
@@ -15245,6 +15310,20 @@ body.presenting #presentingBadge { display: flex; }
           if (adv[key] != null) cfg[key] = adv[key];
         }
       }
+      // LINHA DE RECALQUE (item 3) — reconstrói o EXTRA_BLOCK a partir da tabela editável,
+      // preservando a tupla original e sobrescrevendo só quant (idx 4) e valor (idx 6).
+      // Tem precedência sobre um EXTRA_BLOCK que porventura viesse do JSON avançado.
+      if (_recalqueItens.length) {
+        const itens = _recalqueItens.map((it,i) => {
+          const t = it.slice();
+          const qEl = document.querySelector('#oelev-recalque .oelev-rq-qty[data-i="'+i+'"]');
+          const vEl = document.querySelector('#oelev-recalque .oelev-rq-val[data-i="'+i+'"]');
+          if (qEl){ const q=numBR(qEl.value); t[4] = (q==null?0:q); }
+          if (vEl){ const v=numBR(vEl.value); t[6] = (v==null?0:v); }
+          return t;
+        });
+        cfg.EXTRA_BLOCK = { titulo: _recalqueTitulo || 'LINHA DE RECALQUE', itens };
+      }
       return cfg;
     }
 
@@ -15252,8 +15331,19 @@ body.presenting #presentingBadge { display: flex; }
       if (_busy) return;
       if (!window.electronAPI || !window.electronAPI.orcElev) { setStatus('IPC indisponível (rode pelo app Electron).','var(--red,#A11312)'); return; }
       const sb = ($('oelev-sb').value||'').trim();
-      if (!sb) { setStatus('Informe o SB (identificação).','var(--red,#A11312)'); $('oelev-sb').focus(); return; }
-      if (!_a2Path) { setStatus('Gabarito A2 não disponível — selecione um.','var(--red,#A11312)'); return; }
+      const cidade = ($('oelev-cidade').value||'').trim();
+      // Checklist amigável — diz exatamente o que falta
+      const faltas = [];
+      if (!sb) faltas.push('informar o SB (item 2 · Identificação)');
+      if (!cidade) faltas.push('informar a Cidade / UF (item 2 · Identificação)');
+      if (!_a2Path) faltas.push('ter um gabarito A2 (fica em Ajustes avançados)');
+      if (faltas.length) {
+        setStatus('Falta: ' + faltas.join(' · '), 'var(--red,#A11312)');
+        const el = !sb ? $('oelev-sb') : (!cidade ? $('oelev-cidade') : null);
+        if (el) el.focus();
+        return;
+      }
+      setStep(3);
       // valida JSON avançado antes do save dialog
       $('oelev-adv-err').textContent = '';
       const advRaw = ($('oelev-adv').value||'').trim();
@@ -15374,10 +15464,15 @@ body.presenting #presentingBadge { display: flex; }
         if (s && s.ok && s.data) { SCHEMA = s.data.schema||[]; DEF_DATA = s.data.defData||{}; DEF_CP = s.data.defCp||{}; }
         else { setStatus('Falha ao carregar o formulário: '+((s&&s.erro)||'?'),'var(--red,#A11312)'); }
       } catch(e){ setStatus('Falha ao inicializar: '+(e&&e.message||e),'var(--red,#A11312)'); }
-      renderRefs();
+      // Responsável: pré-preenche com o usuário logado (só se estiver vazio)
+      const respEl = $('oelev-responsavel');
+      if (respEl && !respEl.value.trim()) { const nome = window._currentUserData && window._currentUserData.nome; if (nome) respEl.value = nome; }
       renderForm();
+      renderRecalque();   // seção "6. LINHA DE RECALQUE" aparece sempre (vazia até importar)
+      setStep(1);         // guia de passos: começa no 1 (Importar)
       renderHistory();
       renderCotacoes();
+      carregarFornecedores();
       carregarAnalises();
       // progresso do engine
       if (window.electronAPI.orcElev.onProgresso && !_unsub) _unsub = window.electronAPI.orcElev.onProgresso(logLine);
@@ -15385,7 +15480,7 @@ body.presenting #presentingBadge { display: flex; }
       if (a2btn) a2btn.addEventListener('click', async () => { const p = await window.electronAPI.orcElev.pickA2(); if(p){ _a2Path=p; const inp=$('oelev-a2-path'); if(inp) inp.value=p; } });
       const gbtn=$('oelev-gerar'); if (gbtn) gbtn.addEventListener('click', gerar);
       // minimizar/maximizar todas as áreas do formulário
-      const setAllAreas = (op) => document.querySelectorAll('#oelev-form .oelev-area').forEach(d => { d.open = op; });
+      const setAllAreas = (op) => document.querySelectorAll('#oelev-form .oelev-area, #oelev-recalque .oelev-area').forEach(d => { d.open = op; });
       $('oelev-expand-all')?.addEventListener('click', () => setAllAreas(true));
       $('oelev-collapse-all')?.addEventListener('click', () => setAllAreas(false));
       $('oelev-hist-clear')?.addEventListener('click', () => { if(confirm('Limpar todo o histórico de orçamentos gerados?')){ saveHist([]); renderHistory(); } });
@@ -15393,19 +15488,23 @@ body.presenting #presentingBadge { display: flex; }
       $('cot-pick')?.addEventListener('click', pickCotFile);
       $('oelev-analise-refresh')?.addEventListener('click', carregarAnalises);
       $('oelev-analise-load')?.addEventListener('click', importarAnalise);
+      $('oelev-forn-add')?.addEventListener('click', adicionarFornecedor);
+      $('oelev-forn-fornece')?.addEventListener('keydown', (e)=>{ if(e.key==='Enter') adicionarFornecedor(); });
     };
 
     // ── Análise automática dos projetos (Fase 2): importa o JSON que o Claude gravou ──
     async function carregarAnalises(){
       const sel=$('oelev-analise-sel'); if(!sel) return;
       let r; try { r = await window.electronAPI.orcElev.analisesList(); } catch(e){ r=null; }
-      const arr=(r&&r.analises)||[];
+      const arr=((r&&r.analises)||[]).slice().sort((a,b)=>(b.mtime||0)-(a.mtime||0)); // mais recente primeiro
       const cur=sel.value;
-      sel.innerHTML = '<option value="">— nenhuma análise —</option>' + arr.map(a=>{
+      sel.innerHTML = '<option value="">— escolha uma análise —</option>' + arr.map(a=>{
         const _d=a.mtime?new Date(a.mtime):null;
         const _p2=x=>('0'+x).slice(-2);
-        const _dtxt=_d?(_p2(_d.getDate())+'/'+_p2(_d.getMonth()+1)+'/'+_d.getFullYear()+' '+_p2(_d.getHours())+':'+_p2(_d.getMinutes())):'';
-        const lbl=[a.cidade||'(sem cidade)', a.sb||a.obra||a.file, _dtxt&&('subiu '+_dtxt)].filter(Boolean).join(' · ');
+        const _dtxt=_d?(_p2(_d.getDate())+'/'+_p2(_d.getMonth()+1)+' '+_p2(_d.getHours())+':'+_p2(_d.getMinutes())):'';
+        const _sb=a.sb||a.obra||a.file;
+        const _cid=a.cidade||'(sem cidade)';
+        const lbl=[_sb, _cid, _dtxt&&('· '+_dtxt)].filter(Boolean).join('  ·  ').replace('  ·  ·','  ·');
         return `<option value="${escA(a.file)}">${esc(lbl)}</option>`;
       }).join('');
       if(cur) sel.value=cur;
@@ -15421,6 +15520,7 @@ body.presenting #presentingBadge { display: flex; }
       let r; try { r = await window.electronAPI.orcElev.analisesLoad(file); } catch(e){ r={ok:false,erro:e.message}; }
       if(!r||!r.ok){ if(st){st.style.color='var(--red,#A11312)';st.textContent='Erro: '+((r&&r.erro)||'?');} return; }
       const n = await aplicarAnalise(r.analise||{});
+      setStep(2);  // avança o guia de passos: importou -> conferir os dados
       if(st){ st.style.color='#0d9488'; st.innerHTML = `<b>${n} campo(s)</b> pré-preenchido(s) (em amarelo, incluindo preços de cotação do banco) — <b>revise</b> antes de gerar.`; }
     }
     async function aplicarAnalise(a){
@@ -15447,18 +15547,119 @@ body.presenting #presentingBadge { display: flex; }
         const cr = await window.electronAPI.orcElev.catalogoAplicar({ cidade:a.cidade, sb:a.sb });
         if(cr && cr.ok) Object.entries(cr.precos||{}).forEach(([k,pf])=>{ if(Array.isArray(pf)) setPreco(k, pf[0], pf[1]); });
       } catch(e){}
-      // overrides avançados que vieram na análise (PRICE_UPD/QTY_UPD/DESC_UPD/...) -> caixa de Ajustes
-      // avançados. Sem isto o Nexus geraria com os preços do gabarito (ex.: ventosa 13.838 em vez da
-      // reconciliada 6.333) e sem o item painel+bomba unificado. Preenche p/ a geração bater c/ a análise.
+      // LINHA DE RECALQUE (EXTRA_BLOCK) -> tabela editável VISÍVEL no item 3 (não vai mais
+      // escondida no JSON avançado). Aceita dict {titulo,itens} ou lista de dicts.
+      _recalqueTitulo=''; _recalqueItens=[];
+      if(a.EXTRA_BLOCK){
+        const blocks = Array.isArray(a.EXTRA_BLOCK) ? a.EXTRA_BLOCK : [a.EXTRA_BLOCK];
+        blocks.forEach(b=>{ if(b && Array.isArray(b.itens)){ if(!_recalqueTitulo && b.titulo) _recalqueTitulo=b.titulo; _recalqueItens.push(...b.itens); } });
+      }
+      renderRecalque();
+      if(_recalqueItens.length) n++;
+      // demais overrides avançados que vieram na análise (PRICE_UPD/QTY_UPD/DESC_UPD/...) -> caixa de
+      // Ajustes avançados. Sem isto o Nexus geraria com os preços do gabarito (ex.: ventosa 13.838 em vez
+      // da reconciliada 6.333) e sem o painel+bomba unificado. O EXTRA_BLOCK NÃO entra aqui (vai na tabela
+      // de recalque acima). Preenche p/ a geração bater c/ a análise.
       const advEl=$('oelev-adv');
       if(advEl){
         const adv={};
-        for(const key of ['PRICE_UPD','QTY_UPD','CODE_UPD','DESC_UPD','AREA_INSERTS','EXTRA_BLOCK','MEMO_FONTES'])
+        for(const key of ['PRICE_UPD','QTY_UPD','CODE_UPD','DESC_UPD','AREA_INSERTS','MEMO_FONTES'])
           if(a[key]!=null) adv[key]=a[key];
         if(Object.keys(adv).length){ advEl.value=JSON.stringify(adv,null,2); mark(advEl); n++; }
       }
-      document.querySelectorAll('#oelev-form .oelev-area').forEach(d=>{ d.open=true; });
+      document.querySelectorAll('#oelev-form .oelev-area, #oelev-recalque .oelev-area').forEach(d=>{ d.open=true; });
       return n;
+    }
+
+    // ── Fornecedores (contatos) — base COMPARTILHADA; qualquer um adiciona/edita/vê ──
+    let _fornList = [];
+    // Homologação SANEPAR (por EMPRESA): 'sim' | 'nao' | '' (a verificar)
+    function homoBadge(h){
+      if(h==='sim') return `<span style="font-size:9px;font-weight:700;background:rgba(13,148,136,.14);color:#0d9488;padding:2px 7px;border-radius:8px;white-space:nowrap">✔ Homologado SANEPAR</span>`;
+      if(h==='nao') return `<span style="font-size:9px;font-weight:700;background:rgba(220,38,38,.10);color:#dc2626;padding:2px 7px;border-radius:8px;white-space:nowrap">✕ Não homologado SANEPAR</span>`;
+      return `<span style="font-size:9px;font-weight:700;background:var(--surface);color:var(--text3);border:1px solid var(--border);padding:2px 7px;border-radius:8px;white-space:nowrap">Homologação SANEPAR: a verificar</span>`;
+    }
+    function fornTel(t){ return String(t||'').replace(/\D/g,''); }
+    function fornWaLink(t){ const d=fornTel(t); if(!d) return ''; return 'https://wa.me/' + (d.length<=11 ? '55'+d : d); }
+    async function carregarFornecedores(){
+      const list=$('oelev-forn-list'); if(!list) return;
+      let r; try { r = await window.electronAPI.orcElev.fornecedoresList(); } catch(e){ r=null; }
+      const arr=(r&&r.fornecedores)||[];
+      _fornList = arr;
+      const cnt=$('oelev-forn-count'); if(cnt) cnt.textContent = arr.length + (arr.length===1?' cotação':' cotações');
+      if(!arr.length){ list.innerHTML = `<div style="font-size:11px;color:var(--text3);padding:4px 0">Nenhum fornecedor ainda — adicione o primeiro no formulário abaixo.</div>`; return; }
+      list.innerHTML = arr.map(f=>{
+        const wa=fornWaLink(f.telefone);
+        const tel = f.telefone ? (wa
+          ? `<a href="#" class="oelev-forn-link" data-url="${escA(wa)}" title="abrir no WhatsApp" style="color:#0d9488;text-decoration:none;font-weight:600">📱 ${esc(f.telefone)}</a>`
+          : `<span style="color:var(--text2)">📱 ${esc(f.telefone)}</span>`) : '';
+        const mail = f.email ? `<a href="#" class="oelev-forn-link" data-url="mailto:${escA(f.email)}" title="enviar e-mail" style="color:#0d9488;text-decoration:none">✉ ${esc(f.email)}</a>` : '';
+        const forn = f.fornece ? `<div style="font-size:10px;color:var(--text3)">${esc(f.fornece)}</div>` : '';
+        const copyTxt = [f.nome, f.telefone, f.email, f.fornece].filter(Boolean).join(' · ');
+        return `<div class="oelev-forn-row" data-id="${escA(f.id)}" style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:8px 10px;flex-wrap:wrap">`
+          + `<div style="flex:1;min-width:140px"><div style="font-size:12px;font-weight:700;color:var(--text)">${esc(f.nome)}</div>${forn}<div style="margin-top:4px">${homoBadge(f.homologado)}</div></div>`
+          + `<div style="display:flex;flex-direction:column;gap:2px;font-size:11px;align-items:flex-start;min-width:120px">${tel}${mail}</div>`
+          + `<button class="oelev-forn-edit" data-id="${escA(f.id)}" title="editar" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;color:var(--text2)">✎ Editar</button>`
+          + `<button class="oelev-forn-copy" data-t="${escA(copyTxt)}" title="copiar contato" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;color:var(--text2)">Copiar</button>`
+          + `<button class="oelev-forn-del" data-id="${escA(f.id)}" title="excluir da lista" style="background:none;border:none;color:var(--red,#A11312);cursor:pointer;font-size:16px;font-weight:700;line-height:1;padding:0 4px">×</button>`
+          + `</div>`;
+      }).join('');
+      list.querySelectorAll('.oelev-forn-link').forEach(a=>a.addEventListener('click',(e)=>{ e.preventDefault(); try{ window.electronAPI.orcElev.abrirLink(a.dataset.url); }catch(_){} }));
+      list.querySelectorAll('.oelev-forn-copy').forEach(b=>b.addEventListener('click',()=>{ try{ navigator.clipboard.writeText(b.dataset.t||''); const o=b.textContent; b.textContent='Copiado!'; setTimeout(()=>b.textContent=o,1200);}catch(e){} }));
+      list.querySelectorAll('.oelev-forn-edit').forEach(b=>b.addEventListener('click', ()=> editarFornecedorRow(b.dataset.id)));
+      list.querySelectorAll('.oelev-forn-del').forEach(b=>b.addEventListener('click', async ()=>{ if(!confirm('Excluir este fornecedor da lista compartilhada?')) return; try{ await window.electronAPI.orcElev.fornecedoresDel(b.dataset.id); }catch(e){} carregarFornecedores(); }));
+    }
+    // Edição inline de um fornecedor (corrigir telefone/e-mail/etc.) — salva pra todos.
+    function editarFornecedorRow(id){
+      const f=_fornList.find(x=>x.id===id); if(!f) return;
+      const row=document.querySelector('#oelev-forn-list .oelev-forn-row[data-id="'+CSS.escape(id)+'"]'); if(!row) return;
+      row.style.flexDirection='column'; row.style.alignItems='stretch';
+      row.innerHTML =
+        `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px;width:100%">`
+        + `<input class="oelev-inp fe-nome" value="${escA(f.nome||'')}" placeholder="Nome *"/>`
+        + `<input class="oelev-inp fe-tel" value="${escA(f.telefone||'')}" placeholder="Telefone / WhatsApp"/>`
+        + `<input class="oelev-inp fe-email" value="${escA(f.email||'')}" placeholder="E-mail"/>`
+        + `<input class="oelev-inp fe-fornece" value="${escA(f.fornece||'')}" placeholder="O que fornece"/>`
+        + `<select class="oelev-inp fe-homo" title="Homologação SANEPAR (por empresa)">`
+        +   `<option value=""${!f.homologado?' selected':''}>Homologação SANEPAR: a verificar</option>`
+        +   `<option value="sim"${f.homologado==='sim'?' selected':''}>Homologado SANEPAR</option>`
+        +   `<option value="nao"${f.homologado==='nao'?' selected':''}>Não homologado SANEPAR</option>`
+        + `</select>`
+        + `</div>`
+        + `<div style="display:flex;gap:6px;margin-top:7px">`
+        + `<button class="fe-save" style="background:#0d9488;color:#fff;border:none;border-radius:6px;padding:6px 16px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer">Salvar</button>`
+        + `<button class="fe-cancel" style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:inherit;font-size:11px;cursor:pointer;color:var(--text2)">Cancelar</button>`
+        + `<span class="fe-msg" style="font-size:10px;color:var(--text3);align-self:center"></span>`
+        + `</div>`;
+      row.querySelector('.fe-cancel').addEventListener('click', carregarFornecedores);
+      row.querySelector('.fe-nome').focus();
+      row.querySelector('.fe-save').addEventListener('click', async ()=>{
+        const payload={
+          nome: row.querySelector('.fe-nome').value.trim(),
+          telefone: row.querySelector('.fe-tel').value.trim(),
+          email: row.querySelector('.fe-email').value.trim(),
+          fornece: row.querySelector('.fe-fornece').value.trim(),
+          homologado: row.querySelector('.fe-homo').value,
+        };
+        if(!payload.nome){ row.querySelector('.fe-nome').focus(); return; }
+        const msg=row.querySelector('.fe-msg'); if(msg) msg.textContent='Salvando…';
+        let r; try{ r=await window.electronAPI.orcElev.fornecedoresUpdate(id, payload); }catch(e){ r={ok:false,erro:e.message}; }
+        if(!r||!r.ok){ if(msg){ msg.style.color='var(--red,#A11312)'; msg.textContent='Erro: '+((r&&r.erro)||'?'); } return; }
+        carregarFornecedores();
+      });
+    }
+    async function adicionarFornecedor(){
+      const st=$('oelev-forn-status');
+      const nome=($('oelev-forn-nome').value||'').trim();
+      if(!nome){ if(st){st.style.color='var(--red,#A11312)';st.textContent='Informe o nome do fornecedor.';} $('oelev-forn-nome').focus(); return; }
+      const payload={ nome, telefone:($('oelev-forn-tel').value||'').trim(), email:($('oelev-forn-email').value||'').trim(), fornece:($('oelev-forn-fornece').value||'').trim(), homologado:($('oelev-forn-homo')&&$('oelev-forn-homo').value)||'', criadoPor:(window._currentUserData&&window._currentUserData.nome)||'' };
+      if(st){st.style.color='var(--text3)';st.textContent='Salvando…';}
+      let r; try{ r=await window.electronAPI.orcElev.fornecedoresAdd(payload); }catch(e){ r={ok:false,erro:e.message}; }
+      if(!r||!r.ok){ if(st){st.style.color='var(--red,#A11312)';st.textContent='Erro: '+((r&&r.erro)||'?');} return; }
+      ['oelev-forn-nome','oelev-forn-tel','oelev-forn-email','oelev-forn-fornece'].forEach(id=>{ const el=$(id); if(el) el.value=''; });
+      if($('oelev-forn-homo')) $('oelev-forn-homo').value='';
+      if(st){ st.style.color='#0d9488'; st.textContent = r.onServer ? 'Adicionado — compartilhado com todos.' : 'Adicionado (local — servidor indisponível no momento).'; }
+      carregarFornecedores();
     }
 
     // ── Banco de Cotações (anexa o PDF do fornecedor; o Claude lê os valores) ──
