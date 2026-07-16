@@ -493,7 +493,7 @@
       if (uErr) { nexusAlert('Tenant criado mas erro no usuário: ' + uErr.message); return; }
 
       // 4) Mostra o código + copia clipboard
-      try { navigator.clipboard?.writeText(accessCode); } catch {}
+      try { window.nexusCopy?.(accessCode); } catch {}
       nexusAlert(
         '✅ Test user criado!\n\n' +
         `Plano: ${plano}\n` +
@@ -549,7 +549,7 @@
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
               <button onclick='window.labViewAs(${tInfoJson})' style="background:#7c3aed;color:#fff;border:none;padding:5px 10px;border-radius:5px;font-size:11px;cursor:pointer;font-weight:600">👁 Visualizar como</button>
-              ${u ? `<button onclick="navigator.clipboard?.writeText('${window.esc(u.access_code)}');window.toastSuccess?.('Código copiado')" style="background:var(--accent);color:#fff;border:none;padding:5px 10px;border-radius:5px;font-size:11px;cursor:pointer">Copiar code</button>` : ''}
+              ${u ? `<button onclick="window.nexusCopy('${window.esc(u.access_code)}').then(ok=>ok&&window.toastSuccess?.('Código copiado'))" style="background:var(--accent);color:#fff;border:none;padding:5px 10px;border-radius:5px;font-size:11px;cursor:pointer">Copiar code</button>` : ''}
               <button onclick="window.labRemover('${t.id}')" style="background:none;border:1px solid var(--red);color:var(--red);padding:5px 10px;border-radius:5px;font-size:11px;cursor:pointer">Remover</button>
             </div>
           </div>`;
@@ -4204,8 +4204,8 @@
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       errEl.textContent='E-mail inválido.'; errEl.style.display='block'; return;
     }
-    if (!telefone || telefone.length < 10) {
-      errEl.textContent='Informe um telefone válido (DDD + número).'; errEl.style.display='block'; return;
+    if (telefone && telefone.length < 10) {
+      errEl.textContent='Telefone inválido (DDD + número) — ou deixe em branco.'; errEl.style.display='block'; return;
     }
 
     const btn = document.getElementById('createUserBtn');
@@ -4220,7 +4220,7 @@
       ativo: true,
       allowed_tabs: allowedTabs.length ? allowedTabs : null,
       is_trial_user: isTrialUser,
-      telefone,
+      telefone: telefone || null,
       cpf_cnpj: cpfCnpj || null,
       cep: cep || null,
       endereco_rua: endRua || null,
@@ -4260,13 +4260,14 @@
     window.loadAdminPanel();
   };
 
-  window.copyAccessCode = () => {
+  window.copyAccessCode = async () => {
     const code = document.getElementById('newUserCodeValue').textContent;
-    navigator.clipboard.writeText(code).then(()=>{
-      const btn = document.getElementById('copyCodeBtn');
-      btn.textContent='✓ Copiado!';
+    const btn = document.getElementById('copyCodeBtn');
+    const ok = await window.nexusCopy(code);
+    if (btn) {
+      btn.textContent = ok ? '✓ Copiado!' : '✗ copie manual';
       setTimeout(()=>btn.textContent='Copiar código',1500);
-    });
+    }
   };
 
   // === EQUIPE & LICENÇAS (Gestor gerencia usuários da própria empresa) ===
@@ -4335,7 +4336,7 @@
   };
 
   window._lastTeamCode = '';
-  window.copyTeamCode = () => { try { navigator.clipboard.writeText(window._lastTeamCode || ''); } catch (_) {} };
+  window.copyTeamCode = () => { window.nexusCopy?.(window._lastTeamCode || ''); };
 
   window.addTeamUser = async () => {
     const g = (id) => document.getElementById(id);
@@ -16378,7 +16379,7 @@ body.presenting #presentingBadge { display: flex; }
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div>
-              <label style="display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">Telefone *</label>
+              <label style="display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">Telefone</label>
               <input id="profileTelefone" type="tel" maxlength="16" style="width:100%;padding:9px 12px;font-family:inherit;font-size:14px;border:1.5px solid var(--border2);border-radius:6px;color:var(--text);outline:none;background:var(--surface)" placeholder="(44) 99999-9999"/>
             </div>
             <div>
@@ -33487,7 +33488,22 @@ function resetAll(){
   ['projProjetistaGen','projCadistaGen','projCoordenadorGen','projEmpProjetistaGen','projClienteGen'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   filterMuns(); updatePre(); upProg();
 }
-window.cpyH=(c,btn)=>navigator.clipboard.writeText(c).then(()=>{btn.textContent='✓';setTimeout(()=>btn.textContent='Copiar',1500);});
+// Copiar robusto: no Electron (nodeIntegration on) o navigator.clipboard falha calado
+// em file:// sem foco -> usa o clipboard NATIVO do Electron, com fallbacks.
+window.nexusCopy = async (text) => {
+  text = String(text ?? '');
+  try { const { clipboard } = require('electron'); if (clipboard) { clipboard.writeText(text); return true; } } catch {}
+  try { if (navigator.clipboard) { await navigator.clipboard.writeText(text); return true; } } catch {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position='fixed'; ta.style.top='0'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    const ok = document.execCommand('copy'); document.body.removeChild(ta);
+    return ok;
+  } catch {}
+  return false;
+};
+window.cpyH=async (c,btn)=>{ const ok=await window.nexusCopy(c); if(btn){ btn.textContent=ok?'✓':'!'; setTimeout(()=>btn.textContent='Copiar',1500);} };
 window.copyPublicLink=()=>{
   const url=document.getElementById('publicLinkInput')?.value||'https://a2zproj.github.io/codepro/';
   navigator.clipboard.writeText(url).then(()=>{

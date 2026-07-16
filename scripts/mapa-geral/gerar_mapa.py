@@ -75,9 +75,85 @@ def carregar_excel(path):
                               mat=(str(row[CONDUIT['mat']]).strip() if row[CONDUIT['mat']] else ''), dn=numf(row[CONDUIT['dn']])))
     return node, tubes
 
+def carregar_shapes(shpDir, manter_sentido=False):
+    """Fonte alternativa: shapes do traçado ajustado (PVS.shp + REDES.shp) em vez do Excel FlexTable.
+    PVS: LABEL, ELEV_GND(=CT), ELEV_INV(=CF), STRCTDPTH(=h/prof). REDES: LABEL(=OSE), MATERIAL, D(=DN mm),
+    S(=i), START_/STOP_. L = comprimento planimétrico da própria geometria. EEEs_ETEs.shp = fronteira."""
+    def rd(name):
+        p = os.path.join(shpDir, name)
+        r = shapefile.Reader(p)
+        f = [x[0] for x in r.fields[1:]]
+        gi = lambda n: (f.index(n) if n in f else None)
+        return r, gi
+    node = {}
+    rp, gi = rd('PVS')
+    iL, iG, iI, iD = gi('LABEL'), gi('ELEV_GND'), gi('ELEV_INV'), gi('STRCTDPTH')
+    for sh, rec in zip(rp.shapes(), rp.records()):
+        if iL is None or not sh.points: continue
+        lab = str(rec[iL]).strip()
+        if not lab: continue
+        x, y = sh.points[0][0], sh.points[0][1]
+        node[lab] = dict(x=x, y=y, kind='TL' if lab.upper().startswith('TL') else 'PV',
+                         ground=numf(rec[iG]) if iG is not None else None,
+                         invert=numf(rec[iI]) if iI is not None else None,
+                         depth=numf(rec[iD]) if iD is not None else None)
+    # fronteira EEE/ETE (opcional)
+    if os.path.exists(os.path.join(shpDir, 'EEEs_ETEs.shp')):
+        re_, gie = rd('EEEs_ETEs')
+        idd = gie('DESCRIC')
+        for k, (sh, rec) in enumerate(zip(re_.shapes(), re_.records())):
+            if not sh.points: continue
+            desc = (str(rec[idd]).strip() if idd is not None and rec[idd] else 'EEE')
+            up = desc.upper()
+            if 'PV' in up: continue  # PV-EX etc: não é fronteira
+            kind = 'ETE' if 'ETE' in up else 'EEE'
+            nm = '%s#%d' % (desc, k)
+            node[nm] = dict(x=sh.points[0][0], y=sh.points[0][1], kind=kind, ground=None, invert=None, depth=None, disp=desc)
+    # tubes
+    rr, git = rd('REDES')
+    iLab, iMat, iDN, iS, iSt, iSp = git('LABEL'), git('MATERIAL'), git('D'), git('S'), git('START_'), git('STOP_')
+    iIvS, iIvP = git('INV_STRT'), git('INV_STP')  # cota de fundo (invert) em cada ponta → orienta o fluxo
+    tubes = []
+    def synth(name, pt):  # nó externo (EEE/PV-EX) que não está em PVS.shp → cria terminal a partir da geometria
+        if name and name not in node:
+            node[name] = dict(x=pt[0], y=pt[1], kind='EXT', ground=None, invert=None, depth=None)
+    for sh, rec in zip(rr.shapes(), rr.records()):
+        s = str(rec[iSt]).strip() if iSt is not None and rec[iSt] else None
+        t = str(rec[iSp]).strip() if iSp is not None and rec[iSp] else None
+        # FLUXO POR GRAVIDADE: montante = ponta com a cota de fundo (invert) MAIOR. Se o STOP tiver invert
+        # maior que o START, o START/STOP está guardado ao contrário do caimento → inverte (mantém o fluxo real).
+        ivs = numf(rec[iIvS]) if iIvS is not None else None
+        ivp = numf(rec[iIvP]) if iIvP is not None else None
+        if not manter_sentido and ivs is not None and ivp is not None and ivp > ivs + 1e-6:
+            s, t = t, s  # reorienta pela invert (fonte com START/STOP não confiável). manter_sentido=True preserva o START/STOP da origem (ex. modelo SewerGEMS)
+        g = sh.points
+        if g and len(g) >= 2:  # sintetiza a ponta faltante pelo extremo da geometria mais distante do nó conhecido
+            A, B = g[0], g[-1]
+            def far(ref):
+                da = (A[0] - ref['x']) ** 2 + (A[1] - ref['y']) ** 2
+                db = (B[0] - ref['x']) ** 2 + (B[1] - ref['y']) ** 2
+                return A if da > db else B
+            if s in node and t not in node: synth(t, far(node[s]))
+            elif t in node and s not in node: synth(s, far(node[t]))
+            elif s not in node and t not in node: synth(s, A); synth(t, B)
+        if s not in node or t not in node: continue
+        L = None
+        if g and len(g) >= 2:
+            L = sum(math.hypot(g[k + 1][0] - g[k][0], g[k + 1][1] - g[k][1]) for k in range(len(g) - 1))
+        ose = str(rec[iLab]).strip() if iLab is not None and rec[iLab] else ''
+        tubes.append(dict(label=ose, s=s, t=t, L=L, i=numf(rec[iS]) if iS is not None else None,
+                          mat=(str(rec[iMat]).strip() if iMat is not None and rec[iMat] else ''),
+                          dn=numf(rec[iDN]) if iDN is not None else None,
+                          geom=[(p[0], p[1]) for p in g] if g and len(g) >= 2 else None))
+    return node, tubes
+
 def segs_shp(path):
     r = shapefile.Reader(path); out = []
-    for sh in r.shapes():
+    for i in range(len(r)):  # shape-a-shape (r.shapes() em massa quebra em alguns .shp type 13 de CAD)
+        try:
+            sh = r.shape(i)
+        except Exception:
+            continue
         pts = sh.points; parts = list(sh.parts) + [len(pts)]
         for k in range(len(parts) - 1):
             seg = pts[parts[k]:parts[k + 1]]
@@ -101,13 +177,16 @@ def pv_lines(lab, d):
     prof = d['depth']
     if prof is None and d['ground'] is not None and d['invert'] is not None:
         prof = d['ground'] - d['invert']
-    return ["%s | %s" % (lab, br(prof, 2)), br(d['ground'], 2), br(d['invert'], 2)]
+    return ["%s | h: %sm" % (lab, br(prof, 2)), "CT: %s" % br(d['ground'], 3), "CF: %s" % br(d['invert'], 3)]
 
 def gerar(cfg):
-    excel = cfg['excel']; saida = cfg['saidaDir']; base = cfg.get('nomeBase') or 'MAPA_GERAL'
+    excel = cfg.get('excel'); saida = cfg['saidaDir']; base = cfg.get('nomeBase') or 'MAPA_GERAL'
     shpDir = cfg.get('shpDir') or ''
     os.makedirs(saida, exist_ok=True)
-    node, tubes = carregar_excel(excel)
+    if (cfg.get('fonte') or '').lower() == 'shapes':
+        node, tubes = carregar_shapes(cfg.get('fonteShapes') or shpDir, bool(cfg.get('manter_sentido')))
+    else:
+        node, tubes = carregar_excel(excel)
     pvs = [(l, d) for l, d in node.items() if d['kind'] in ('PV', 'TL')]
     downstream = {}
     for tb in tubes:
@@ -132,7 +211,8 @@ def gerar(cfg):
     wt.field('L_M', 'F', 19, 2); wt.field('DECLIV', 'F', 19, 4); wt.field('MATERIAL', 'C', 40); wt.field('DN_MM', 'F', 19, 1)
     for tb in tubes:
         a, b = node[tb['s']], node[tb['t']]
-        wt.line([[(a['x'], a['y']), (b['x'], b['y'])]])
+        poly = tb.get('geom') or [(a['x'], a['y']), (b['x'], b['y'])]  # geometria fiel do original (sem deslocar)
+        wt.line([[(p[0], p[1]) for p in poly]])
         wt.record(tb['label'], tb['s'], tb['t'], tb['L'], tb['i'], tb['mat'], tb['dn'])
     wt.close()
     for f in (fpv, fre):
@@ -166,7 +246,7 @@ def gerar(cfg):
     for lab, d in node.items():
         if d['kind'] in ('ETE', 'EEE'):
             msp.add_circle((d['x'], d['y']), RAIO * 1.6, dxfattribs={'layer': 'EEE-ETE'})
-            msp.add_text(lab, dxfattribs={'layer': 'EEE-ETE', 'height': HPV, 'style': '2SE-ARIAL'}).set_placement((d['x'] + 2, d['y'] + 2))
+            msp.add_text(d.get('disp', lab), dxfattribs={'layer': 'EEE-ETE', 'height': HPV, 'style': '2SE-ARIAL'}).set_placement((d['x'] + 2, d['y'] + 2))
     for (lab, d), r in zip(pvs, res):
         nx, ny = d['x'], d['y']
         if d['kind'] == 'TL':
@@ -176,21 +256,35 @@ def gerar(cfg):
         else:
             msp.add_blockref('SES-POÇO-DE-VISITA', (nx, ny), dxfattribs={'layer': 'ALL-MOBI'})
         box = r['box']; cx = (box[0] + box[2]) / 2; cy = (box[1] + box[3]) / 2; dx, dy = r['dir']
-        if abs(dx) >= abs(dy): side = mleader.ConnectionSide.left if dx >= 0 else mleader.ConnectionSide.right
-        else: side = mleader.ConnectionSide.bottom if dy >= 0 else mleader.ConnectionSide.top
+        side = mleader.ConnectionSide.left if dx >= 0 else mleader.ConnectionSide.right  # attachment HORIZONTAL (só esquerda/direita)
         ml = msp.add_multileader_mtext('Standard')
         ml.set_content("\n".join(pv_lines(lab, d)), color=colors.BLUE, char_height=HPV,
-                       alignment=mleader.TextAlignment.center, style='2SE-ARIAL')
+                       alignment=mleader.TextAlignment.left, style='2SE-ARIAL')
+        # attachment type horizontal + left/right = "Underline Top Line" (bottom_of_top_line_underline = 6)
+        ml.set_connection_types(left=mleader.HorizontalConnection.bottom_of_top_line_underline,
+                                right=mleader.HorizontalConnection.bottom_of_top_line_underline)
         ml.set_arrow_properties(size=0.02)
         ml.add_leader_line(side, [Vec2(nx, ny)])
         ml.build(insert=Vec2(cx, cy))
+        ml.multileader.dxf.text_attachment_direction = 0  # 0 = horizontal
     for tb in tubes:
-        a, c = node[tb['s']], node[tb['t']]
-        x1, y1, x2, y2 = a['x'], a['y'], c['x'], c['y']
-        msp.add_lwpolyline([(x1, y1), (x2, y2)], dxfattribs={'layer': 'REDE'})
-        dx, dy = x2 - x1, y2 - y1; ln = math.hypot(dx, dy)
+        a, c = node[tb['s']], node[tb['t']]  # montante, jusante (orientado pela invert em carregar_shapes)
+        poly = tb.get('geom') or [(a['x'], a['y']), (c['x'], c['y'])]  # geometria REAL da rede (fiel, sem deslocar)
+        msp.add_lwpolyline(poly, dxfattribs={'layer': 'REDE'})
+        segd = [math.hypot(poly[k + 1][0] - poly[k][0], poly[k + 1][1] - poly[k][1]) for k in range(len(poly) - 1)]
+        tot = sum(segd)
+        if tot < 1e-6: continue
+        half = tot / 2.0; acc = 0.0; mx, my = poly[0]
+        for k in range(len(poly) - 1):
+            if acc + segd[k] >= half:
+                rr2 = (half - acc) / segd[k] if segd[k] > 1e-9 else 0.0
+                mx = poly[k][0] + (poly[k + 1][0] - poly[k][0]) * rr2
+                my = poly[k][1] + (poly[k + 1][1] - poly[k][1]) * rr2
+                break
+            acc += segd[k]
+        dx, dy = c['x'] - a['x'], c['y'] - a['y']; ln = math.hypot(dx, dy)  # sentido da SETA = fluxo montante->jusante
         if ln < 1e-6: continue
-        ux, uy = dx / ln, dy / ln; px, py = -uy, ux; mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+        ux, uy = dx / ln, dy / ln; px, py = -uy, ux
         tip = (mx + ux * 0.8, my + uy * 0.8); bl = (mx - ux * 0.8 + px * 0.45, my - uy * 0.8 + py * 0.45); bb = (mx - ux * 0.8 - px * 0.45, my - uy * 0.8 - py * 0.45)
         h = msp.add_hatch(color=3, dxfattribs={'layer': 'REDE-SETA'}); h.paths.add_polyline_path([tip, bl, bb], is_closed=True)
         ang = math.degrees(math.atan2(dy, dx))
@@ -218,10 +312,16 @@ def main():
         cfg = json.load(open(a.config, encoding='utf-8'))
     except Exception as e:
         emit(dict(ok=False, erro="Config inválido: %s" % e)); return
-    for k in ('excel', 'saidaDir'):
+    is_shapes = (cfg.get('fonte') or '').lower() == 'shapes'
+    req = ('saidaDir',) if is_shapes else ('excel', 'saidaDir')
+    for k in req:
         if not cfg.get(k):
             emit(dict(ok=False, erro="Falta '%s' no config." % k)); return
-    if not os.path.exists(cfg['excel']):
+    if is_shapes:
+        sd = cfg.get('fonteShapes') or cfg.get('shpDir') or ''
+        if not os.path.exists(os.path.join(sd, 'PVS.shp')) or not os.path.exists(os.path.join(sd, 'REDES.shp')):
+            emit(dict(ok=False, erro="PVS.shp/REDES.shp não encontrados em: %s" % sd)); return
+    elif not os.path.exists(cfg['excel']):
         emit(dict(ok=False, erro="Excel não encontrado: %s" % cfg['excel'])); return
     try:
         emit(gerar(cfg))
