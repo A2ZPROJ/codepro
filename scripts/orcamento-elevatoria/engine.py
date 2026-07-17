@@ -538,7 +538,7 @@ def area_inserts(xl, ws, cfg):
             retry(lambda b=b: ws.Rows(b+1).Insert(xlDown))
         xl.CutCopyMode = False
         for k, it in enumerate(items):
-            cod, desc, tipo, orig, q, un, val = it
+            cod, desc, tipo, orig, q, un, val = it[:7]   # tolera 8º campo (memória de cálculo) vindo da análise
             r = b+1+k
             retry(lambda r=r: setattr(ws.Cells(r,2), 'NumberFormat', '@'))  # código como TEXTO
             for col, value in [(2,cod),(5,desc),(7,tipo),(8,_origem_curta(orig)),(9,q),(10,un),(11,val)]:
@@ -615,7 +615,7 @@ def add_extra_block(xl, ws, cfg):
     retry(lambda: setattr(ws.Cells(hr,15), 'Formula', '=SUM(O%d:O%d)' % (vt+1, vt+n)))
     retry(lambda: setattr(ws.Cells(hr,16), 'Formula', '=SUM(P%d:P%d)' % (vt+1, vt+n)))
     for k, it in enumerate(itens):
-        cod, desc, tipo, orig, q, un, val = it
+        cod, desc, tipo, orig, q, un, val = it[:7]   # itens da análise trazem 8º campo (memória de cálculo) — ignora aqui
         r = vt+1+k
         retry(lambda r=r: setattr(ws.Cells(r,2), 'NumberFormat', '@'))  # código como TEXTO (preserva zero à esquerda do SANEPAR)
         for col, value in [(2,cod),(5,desc),(7,tipo),(8,_origem_curta(orig)),(9,q),(10,un),(11,val)]:
