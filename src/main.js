@@ -1946,7 +1946,47 @@ ipcMain.handle('orc-elev:abrir', async (_e, p) => {
 // o servidor estiver indisponível; na leitura une os dois (dedup por id)
 // p/ não perder o que foi cadastrado offline.
 // ────────────────────────────────────────────────────────────────────
-const COTACOES_SERVER_DIR = '\\\\2s-eng-servidor\\maringa\\_PROGRAMAS\\COTACOES NEXUS';
+// ────────────────────────────────────────────────────────────────────
+// PASTA DE DADOS COMPARTILHADOS DO NEXUS (análises/cotações/fornecedores).
+// Migrado do servidor Maringá (SMB \\2s-eng-servidor, exigia Tailscale/VPN)
+// para o OneDrive da 2S, que sincroniza sozinho em toda máquina — resolve o
+// acesso p/ quem não está na rede. Resolve o root do OneDrive "2S ENGENHARIA"
+// em qualquer PC (env override → registro do OneDrive → %USERPROFILE%) e cai
+// no servidor SMB antigo só por compatibilidade se o OneDrive não existir.
+// Override manual: variável de ambiente NEXUS_ONEDRIVE_2S.
+// ────────────────────────────────────────────────────────────────────
+const NEXUS_DADOS_REL = path.join('001. SERVIDOR PARANÁ', '002. ACCIONA', '001. BLOCO 02', '_APOIO', 'NEXUS-DADOS');
+const NEXUS_DADOS_SERVER_LEGACY = '\\\\2s-eng-servidor\\maringa\\_PROGRAMAS';
+function oneDrive2SRoot() {
+  if (process.env.NEXUS_ONEDRIVE_2S && fs.existsSync(process.env.NEXUS_ONEDRIVE_2S)) return process.env.NEXUS_ONEDRIVE_2S;
+  try {
+    const { execFileSync } = require('child_process');
+    const out = execFileSync('reg', ['query', 'HKCU\\Software\\Microsoft\\OneDrive\\Accounts', '/s'], { encoding: 'utf8', windowsHide: true });
+    for (const b of out.split(/\r?\n\s*\r?\n/)) {
+      if (/2S ENGENHARIA/i.test(b)) {
+        const m = b.match(/UserFolder\s+REG_SZ\s+(.+?)\s*$/mi);
+        if (m && fs.existsSync(m[1].trim())) return m[1].trim();
+      }
+    }
+  } catch {}
+  const guess = path.join(os.homedir(), 'OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA');
+  if (fs.existsSync(guess)) return guess;
+  return null;
+}
+function nexusDadosBase() {
+  const root = oneDrive2SRoot();
+  if (root) {
+    const p = path.join(root, NEXUS_DADOS_REL);
+    try { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); } catch {}
+    return p;
+  }
+  try { fs.accessSync(NEXUS_DADOS_SERVER_LEGACY, fs.constants.R_OK); return NEXUS_DADOS_SERVER_LEGACY; } catch {}
+  return null;
+}
+const _NEXUS_DADOS = nexusDadosBase();
+function _dadosSub(sub) { return path.join(_NEXUS_DADOS || NEXUS_DADOS_SERVER_LEGACY, sub); }
+
+const COTACOES_SERVER_DIR = _dadosSub('COTACOES NEXUS');
 function cotacoesServerPath() {
   try {
     if (!fs.existsSync(COTACOES_SERVER_DIR)) fs.mkdirSync(COTACOES_SERVER_DIR, { recursive: true });
@@ -1975,7 +2015,7 @@ function cotacoesSave(arr) {
 
 // ── FORNECEDORES (contatos) — base COMPARTILHADA; qualquer um adiciona/vê ──
 // Mesmo padrão das cotações: arquivo único no servidor + fallback local (merge por id).
-const FORNECEDORES_SERVER_DIR = '\\\\2s-eng-servidor\\maringa\\_PROGRAMAS\\FORNECEDORES NEXUS';
+const FORNECEDORES_SERVER_DIR = _dadosSub('FORNECEDORES NEXUS');
 function fornecedoresServerPath() {
   try {
     if (!fs.existsSync(FORNECEDORES_SERVER_DIR)) fs.mkdirSync(FORNECEDORES_SERVER_DIR, { recursive: true });
@@ -2147,7 +2187,7 @@ ipcMain.handle('orc-elev:cotacoes-abrir', async (_e, id) => {
 // JSON aqui; o Nexus lista e importa p/ pré-preencher o form (o usuário revisa).
 // Formato do JSON: { obra, sb, cidade, contrato, data:{key:val}, cp:{key:[preco,fonte]}, meta:{...} }
 // ────────────────────────────────────────────────────────────────────
-const ANALISES_SERVER_DIR = '\\\\2s-eng-servidor\\maringa\\_PROGRAMAS\\NEXUS-ANALISES';
+const ANALISES_SERVER_DIR = _dadosSub('NEXUS-ANALISES');
 function analisesDir() {
   try {
     if (!fs.existsSync(ANALISES_SERVER_DIR)) fs.mkdirSync(ANALISES_SERVER_DIR, { recursive: true });
@@ -2181,7 +2221,7 @@ ipcMain.handle('orc-elev:analises-load', async (_e, file) => {
 });
 // Aplica o catálogo de preços de cotação (precos.json) por CIDADE/SB -> {key:[preço,fonte]}.
 // Usado no Importar da análise p/ já trazer os preços CP (ex.: painel) preenchidos.
-const PRECOS_CATALOGO_PATH = '\\\\2s-eng-servidor\\maringa\\_PROGRAMAS\\COTACOES NEXUS\\precos.json';
+const PRECOS_CATALOGO_PATH = path.join(_dadosSub('COTACOES NEXUS'), 'precos.json');
 function _normTxt(s) { return String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toUpperCase().trim(); }
 ipcMain.handle('orc-elev:catalogo-aplicar', async (_e, ctx) => {
   try {

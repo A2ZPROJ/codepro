@@ -48,9 +48,42 @@ def build_cfg(d):
 
 
 # ── BANCO DE COTAÇÕES: catálogo de preços que o Claude preenche lendo os PDFs ──
-# precos.json no servidor mapeia key-do-item-do-engine -> preço por SB. O gerador
-# injeta esses preços nos itens CP cujo preço está pendente, casando pelo SB da obra.
-CATALOGO_PATH = r"\\2s-eng-servidor\maringa\_PROGRAMAS\COTACOES NEXUS\precos.json"
+# precos.json mapeia key-do-item-do-engine -> preço por SB. O gerador injeta esses
+# preços nos itens CP cujo preço está pendente, casando pelo SB da obra.
+# Fica na pasta compartilhada NEXUS-DADOS do OneDrive da 2S (migrado do servidor
+# Maringá 20/07/26; sincroniza sem VPN). Resolve o OneDrive em qualquer PC; cai no
+# servidor antigo só por compat. Override: env NEXUS_PRECOS_CATALOGO / NEXUS_ONEDRIVE_2S.
+_CATALOGO_LEGACY = r"\\2s-eng-servidor\maringa\_PROGRAMAS\COTACOES NEXUS\precos.json"
+_DADOS_REL = os.path.join('001. SERVIDOR PARANÁ', '002. ACCIONA', '001. BLOCO 02', '_APOIO', 'NEXUS-DADOS')
+
+def _onedrive_2s_root():
+    env = os.environ.get('NEXUS_ONEDRIVE_2S')
+    if env and os.path.isdir(env): return env
+    try:
+        import subprocess
+        out = subprocess.run(['reg', 'query', r'HKCU\Software\Microsoft\OneDrive\Accounts', '/s'],
+                             capture_output=True, text=True, encoding='utf-8', errors='ignore').stdout or ''
+        for part in out.split('\n\n'):
+            if '2S ENGENHARIA' in part.upper():
+                for line in part.splitlines():
+                    if 'UserFolder' in line and 'REG_SZ' in line:
+                        v = line.split('REG_SZ', 1)[1].strip()
+                        if os.path.isdir(v): return v
+    except Exception:
+        pass
+    guess = os.path.join(os.path.expanduser('~'), 'OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA')
+    return guess if os.path.isdir(guess) else None
+
+def _catalogo_path():
+    env = os.environ.get('NEXUS_PRECOS_CATALOGO')
+    if env and os.path.exists(env): return env
+    root = _onedrive_2s_root()
+    if root:
+        p = os.path.join(root, _DADOS_REL, 'COTACOES NEXUS', 'precos.json')
+        if os.path.exists(p): return p
+    return _CATALOGO_LEGACY
+
+CATALOGO_PATH = _catalogo_path()   # compat: alguns pontos ainda referenciam a constante
 
 
 def _norm(s):
@@ -85,7 +118,7 @@ def aplicar_catalogo_cotacoes(cfg):
     Só injeta em itens cujo preço está pendente (não sobrescreve valor já dado).
     Devolve a lista de (key, preco) aplicados."""
     try:
-        with open(CATALOGO_PATH, 'r', encoding='utf-8') as f:
+        with open(_catalogo_path(), 'r', encoding='utf-8') as f:
             cat = json.load(f)
     except Exception:
         return []
