@@ -1961,38 +1961,93 @@ ipcMain.handle('orc-elev:abrir', async (_e, p) => {
 // inteiro — procuramos este sufixo debaixo de qualquer pasta de 1º nível do OneDrive 2S.
 const NEXUS_DADOS_TAIL = path.join('002. ACCIONA', '001. BLOCO 02', '_APOIO', 'NEXUS-DADOS');
 const NEXUS_DADOS_SERVER_LEGACY = '\\\\2s-eng-servidor\\maringa\\_PROGRAMAS';
-function oneDrive2SRoot() {
-  if (process.env.NEXUS_ONEDRIVE_2S && fs.existsSync(process.env.NEXUS_ONEDRIVE_2S)) return process.env.NEXUS_ONEDRIVE_2S;
+// TODAS as raízes de OneDrive da máquina. NÃO exige "2S ENGENHARIA" no nome da conta
+// (o rótulo do tenant varia); só ordena colocando as que citam 2S na frente.
+function oneDriveRoots() {
+  const roots = [];
+  const add = p => { try { if (p && fs.existsSync(p) && !roots.includes(p)) roots.push(p); } catch {} };
+  add(process.env.NEXUS_ONEDRIVE_2S);
   try {
     const { execFileSync } = require('child_process');
     const out = execFileSync('reg', ['query', 'HKCU\\Software\\Microsoft\\OneDrive\\Accounts', '/s'], { encoding: 'utf8', windowsHide: true });
-    for (const b of out.split(/\r?\n\s*\r?\n/)) {
-      if (/2S ENGENHARIA/i.test(b)) {
+    const blocos = out.split(/\r?\n\s*\r?\n/);
+    for (const preferido of [true, false]) {
+      for (const b of blocos) {
+        if (/2S ENGENHARIA/i.test(b) !== preferido) continue;
         const m = b.match(/UserFolder\s+REG_SZ\s+(.+?)\s*$/mi);
-        if (m && fs.existsSync(m[1].trim())) return m[1].trim();
+        if (m) add(m[1].trim());
       }
     }
   } catch {}
-  const guess = path.join(os.homedir(), 'OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA');
-  if (fs.existsSync(guess)) return guess;
+  try {
+    const home = os.homedir();
+    for (const n of fs.readdirSync(home)) if (/^OneDrive/i.test(n)) add(path.join(home, n));
+  } catch {}
+  return roots;
+}
+function oneDrive2SRoot() { return oneDriveRoots()[0] || null; }   // compat
+
+// A pasta é reconhecida pelo CONTEÚDO, não pelo caminho.
+function ehPastaDados(p) {
+  try {
+    return fs.existsSync(path.join(p, 'NEXUS-ANALISES'))
+        || fs.existsSync(path.join(p, 'COTACOES NEXUS'))
+        || fs.existsSync(path.join(p, 'FORNECEDORES NEXUS'));
+  } catch { return false; }
+}
+// Busca em largura, com profundidade e nº de pastas limitados, priorizando os nomes do
+// caminho conhecido. Assim funciona seja qual for o ponto de sincronização do usuário:
+// a biblioteca inteira, só "002. ACCIONA", só "001. BLOCO 02" ou até direto no _APOIO.
+const DADOS_DIRNAME = 'NEXUS-DADOS';
+const PISTAS = /(ACCIONA|BLOCO|_APOIO|APOIO|SERVIDOR|ENGENHARIA|PARAN)/i;
+function buscarPastaDados(root, maxDepth = 6, maxDirs = 4000) {
+  let visitados = 0;
+  const fila = [[root, 0]];
+  while (fila.length) {
+    const [dir, d] = fila.shift();
+    if (++visitados > maxDirs) break;
+    let itens;
+    try { itens = fs.readdirSync(dir); } catch { continue; }
+    const filhos = [];
+    for (const nome of itens) {
+      if (nome.startsWith('.') || /^(node_modules|\$RECYCLE\.BIN|System Volume Information)$/i.test(nome)) continue;
+      const p = path.join(dir, nome);
+      if (nome.toLowerCase() === DADOS_DIRNAME.toLowerCase() && ehPastaDados(p)) return p;
+      if (d < maxDepth) filhos.push([p, d + 1, PISTAS.test(nome) ? 0 : 1]);
+    }
+    filhos.sort((a, b) => a[2] - b[2]);           // nomes do caminho conhecido primeiro
+    for (const [p, nd] of filhos) fila.push([p, nd]);
+  }
   return null;
 }
-// Acha a pasta NEXUS-DADOS dentro do OneDrive 2S tolerando o nome variável da biblioteca.
+// Acha a pasta de dados. Tenta os caminhos diretos (rápido) e só então varre.
+let _dadosCache = { v: undefined, t: 0 };
 function oneDriveDadosDir() {
-  const root = oneDrive2SRoot();
-  if (!root) return null;
-  const direct = path.join(root, '001. SERVIDOR PARANÁ', NEXUS_DADOS_TAIL);   // caminho canônico (Lucas)
-  if (fs.existsSync(direct)) return direct;
-  // senão varre o 1º nível e testa o sufixo. NÃO filtrar por isDirectory(): pastas do
-  // OneDrive "online-only" (Files On-Demand) são reparse points e o readdir reporta elas
-  // como symlink/reparse, não como dir — o filtro pulava a biblioteca do Gustavo.
-  try {
-    for (const name of fs.readdirSync(root)) {
-      const p = path.join(root, name, NEXUS_DADOS_TAIL);
-      try { if (fs.existsSync(p)) return p; } catch {}
+  if (_dadosCache.v !== undefined && Date.now() - _dadosCache.t < 5 * 60 * 1000
+      && (_dadosCache.v === null || fs.existsSync(_dadosCache.v))) return _dadosCache.v;
+  let achado = null;
+  const roots = oneDriveRoots();
+  // 1) tentativas diretas: raiz + (nome variável da biblioteca) + sufixos progressivos
+  const sufixos = [
+    NEXUS_DADOS_TAIL,                                                            // 002. ACCIONA\...
+    path.join('001. BLOCO 02', '_APOIO', DADOS_DIRNAME),                         // sync a partir de 002. ACCIONA
+    path.join('_APOIO', DADOS_DIRNAME),                                          // sync a partir de 001. BLOCO 02
+    DADOS_DIRNAME,                                                               // sync a partir do _APOIO
+  ];
+  for (const root of roots) {
+    const bases = [root];
+    try { for (const n of fs.readdirSync(root)) bases.push(path.join(root, n)); } catch {}
+    for (const b of bases) for (const s of sufixos) {
+      const p = path.join(b, s);
+      try { if (fs.existsSync(p) && ehPastaDados(p)) { achado = p; break; } } catch {}
+      if (achado) break;
     }
-  } catch {}
-  return null;
+    if (achado) break;
+  }
+  // 2) último recurso: varredura guiada
+  if (!achado) for (const root of roots) { achado = buscarPastaDados(root); if (achado) break; }
+  _dadosCache = { v: achado, t: Date.now() };
+  return achado;
 }
 // TODAS as bases de dados que EXISTEM (OneDrive → servidor). NUNCA cria pasta vazia na
 // LEITURA (bug 2.84.88). Override manual: env NEXUS_DADOS_DIR (aponta direto p/ a pasta).
