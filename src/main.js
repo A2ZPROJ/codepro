@@ -1999,8 +1999,10 @@ function ehPastaDados(p) {
 // caminho conhecido. Assim funciona seja qual for o ponto de sincronização do usuário:
 // a biblioteca inteira, só "002. ACCIONA", só "001. BLOCO 02" ou até direto no _APOIO.
 const DADOS_DIRNAME = 'NEXUS-DADOS';
-const PISTAS = /(ACCIONA|BLOCO|_APOIO|APOIO|SERVIDOR|ENGENHARIA|PARAN)/i;
-function buscarPastaDados(root, maxDepth = 6, maxDirs = 4000) {
+const ORC_EEE_SUBS = ['NEXUS', '_UPDATE_NEXUS', 'COTAÇÕES', 'PREÇOS SANEPAR'];
+const PISTAS = /(ACCIONA|BLOCO|_APOIO|APOIO|SERVIDOR|ENGENHARIA|PARAN|OR[ÇC]AMENTO)/i;
+function buscarPasta(root, nomePasta, valida, maxDepth = 6, maxDirs = 4000) {
+  const alvo = nomePasta.toLowerCase();
   let visitados = 0;
   const fila = [[root, 0]];
   while (fila.length) {
@@ -2012,7 +2014,7 @@ function buscarPastaDados(root, maxDepth = 6, maxDirs = 4000) {
     for (const nome of itens) {
       if (nome.startsWith('.') || /^(node_modules|\$RECYCLE\.BIN|System Volume Information)$/i.test(nome)) continue;
       const p = path.join(dir, nome);
-      if (nome.toLowerCase() === DADOS_DIRNAME.toLowerCase() && ehPastaDados(p)) return p;
+      if (nome.toLowerCase() === alvo && valida(p)) return p;
       if (d < maxDepth) filhos.push([p, d + 1, PISTAS.test(nome) ? 0 : 1]);
     }
     filhos.sort((a, b) => a[2] - b[2]);           // nomes do caminho conhecido primeiro
@@ -2020,45 +2022,61 @@ function buscarPastaDados(root, maxDepth = 6, maxDirs = 4000) {
   }
   return null;
 }
-// Acha a pasta de dados. Tenta os caminhos diretos (rápido) e só então varre.
-let _dadosCache = { v: undefined, t: 0 };
-function oneDriveDadosDir() {
-  if (_dadosCache.v !== undefined && Date.now() - _dadosCache.t < 5 * 60 * 1000
-      && (_dadosCache.v === null || fs.existsSync(_dadosCache.v))) return _dadosCache.v;
+// Acha uma pasta de dados pelo NOME dela. Tenta os caminhos diretos (rápido) e só então varre.
+const _pastaCache = new Map();
+function acharPastaNoOneDrive(nomePasta, valida) {
+  const c = _pastaCache.get(nomePasta);
+  if (c && Date.now() - c.t < 5 * 60 * 1000 && (c.v === null || fs.existsSync(c.v))) return c.v;
   let achado = null;
   const roots = oneDriveRoots();
   // 1) tentativas diretas: raiz + (nome variável da biblioteca) + sufixos progressivos
   const sufixos = [
-    NEXUS_DADOS_TAIL,                                                            // 002. ACCIONA\...
-    path.join('001. BLOCO 02', '_APOIO', DADOS_DIRNAME),                         // sync a partir de 002. ACCIONA
-    path.join('_APOIO', DADOS_DIRNAME),                                          // sync a partir de 001. BLOCO 02
-    DADOS_DIRNAME,                                                               // sync a partir do _APOIO
+    path.join('002. ACCIONA', '001. BLOCO 02', '_APOIO', nomePasta),
+    path.join('001. BLOCO 02', '_APOIO', nomePasta),                             // sync a partir de 002. ACCIONA
+    path.join('_APOIO', nomePasta),                                              // sync a partir de 001. BLOCO 02
+    nomePasta,                                                                   // sync a partir do _APOIO
   ];
   for (const root of roots) {
     const bases = [root];
     try { for (const n of fs.readdirSync(root)) bases.push(path.join(root, n)); } catch {}
-    for (const b of bases) for (const s of sufixos) {
+    for (const b of bases) { for (const s of sufixos) {
       const p = path.join(b, s);
-      try { if (fs.existsSync(p) && ehPastaDados(p)) { achado = p; break; } } catch {}
-      if (achado) break;
-    }
+      try { if (fs.existsSync(p) && valida(p)) { achado = p; break; } } catch {}
+    } if (achado) break; }
     if (achado) break;
   }
   // 2) último recurso: varredura guiada
-  if (!achado) for (const root of roots) { achado = buscarPastaDados(root); if (achado) break; }
-  _dadosCache = { v: achado, t: Date.now() };
+  if (!achado) for (const root of roots) { achado = buscarPasta(root, nomePasta, valida); if (achado) break; }
+  _pastaCache.set(nomePasta, { v: achado, t: Date.now() });
   return achado;
 }
+function oneDriveDadosDir() { return acharPastaNoOneDrive(DADOS_DIRNAME, ehPastaDados); }
+// 2ª pasta oficial (decisão do Lucas 20/07): "_APOIO\ORÇAMENTO EEE" CONVIVE com a
+// NEXUS-DADOS — as duas ficam separadas e o app procura nas duas.
+const ORC_EEE_DIRNAME = 'ORÇAMENTO EEE';
+const ehPastaOrcEee = p => {
+  try { return ORC_EEE_SUBS.some(s => fs.existsSync(path.join(p, s))); } catch { return false; }
+};
+function oneDriveOrcEeeDir() { return acharPastaNoOneDrive(ORC_EEE_DIRNAME, ehPastaOrcEee); }
 // TODAS as bases de dados que EXISTEM (OneDrive → servidor). NUNCA cria pasta vazia na
 // LEITURA (bug 2.84.88). Override manual: env NEXUS_DADOS_DIR (aponta direto p/ a pasta).
 function nexusDadosBases() {
   const bases = [];
-  if (process.env.NEXUS_DADOS_DIR && fs.existsSync(process.env.NEXUS_DADOS_DIR)) bases.push(process.env.NEXUS_DADOS_DIR);
-  const od = oneDriveDadosDir();
-  if (od && !bases.includes(od)) bases.push(od);
-  try { fs.accessSync(NEXUS_DADOS_SERVER_LEGACY, fs.constants.R_OK); if (!bases.includes(NEXUS_DADOS_SERVER_LEGACY)) bases.push(NEXUS_DADOS_SERVER_LEGACY); } catch {}
+  const add = p => { if (p && !bases.includes(p)) bases.push(p); };
+  if (process.env.NEXUS_DADOS_DIR && fs.existsSync(process.env.NEXUS_DADOS_DIR)) add(process.env.NEXUS_DADOS_DIR);
+  add(oneDriveDadosDir());        // _APOIO\NEXUS-DADOS   (base do app)
+  add(oneDriveOrcEeeDir());       // _APOIO\ORÇAMENTO EEE (a do Lucas — as duas valem)
+  if (process.env.NEXUS_ORC_EEE_DIR && fs.existsSync(process.env.NEXUS_ORC_EEE_DIR)) add(process.env.NEXUS_ORC_EEE_DIR);
+  try { fs.accessSync(NEXUS_DADOS_SERVER_LEGACY, fs.constants.R_OK); add(NEXUS_DADOS_SERVER_LEGACY); } catch {}
   return bases;
 }
+// Cada "sub" que o app pede tem apelidos, porque a ORÇAMENTO EEE guarda as mesmas coisas
+// com outros nomes de pasta (as análises ficam em NEXUS\ e _UPDATE_NEXUS\, etc.).
+const SUB_APELIDOS = {
+  'NEXUS-ANALISES':     ['NEXUS-ANALISES', 'NEXUS', '_UPDATE_NEXUS'],
+  'COTACOES NEXUS':     ['COTACOES NEXUS', 'COTAÇÕES', 'COTACOES'],
+  'FORNECEDORES NEXUS': ['FORNECEDORES NEXUS', 'FORNECEDORES'],
+};
 // base preferida p/ ESCRITA: override → OneDrive (acha ou cria no canônico) → servidor.
 function nexusDadosWriteBase() {
   if (process.env.NEXUS_DADOS_DIR) { try { fs.mkdirSync(process.env.NEXUS_DADOS_DIR, { recursive: true }); return process.env.NEXUS_DADOS_DIR; } catch {} }
@@ -2069,7 +2087,16 @@ function nexusDadosWriteBase() {
   try { fs.accessSync(NEXUS_DADOS_SERVER_LEGACY, fs.constants.W_OK); return NEXUS_DADOS_SERVER_LEGACY; } catch {}
   return null;
 }
-function dadosReadDirs(sub) { return nexusDadosBases().map(b => path.join(b, sub)); }       // leitura: todas as fontes
+// leitura: todas as fontes × todos os apelidos da subpasta (só o que existe de verdade)
+function dadosReadDirs(sub) {
+  const nomes = SUB_APELIDOS[sub] || [sub];
+  const dirs = [];
+  for (const b of nexusDadosBases()) for (const n of nomes) {
+    const p = path.join(b, n);
+    try { if (fs.existsSync(p) && !dirs.includes(p)) dirs.push(p); } catch {}
+  }
+  return dirs;
+}
 function dadosWriteDir(sub) { const b = nexusDadosWriteBase(); return b ? path.join(b, sub) : null; } // escrita: a preferida
 
 function cotacoesServerPath() {
