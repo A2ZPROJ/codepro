@@ -1955,7 +1955,11 @@ ipcMain.handle('orc-elev:abrir', async (_e, p) => {
 // no servidor SMB antigo só por compatibilidade se o OneDrive não existir.
 // Override manual: variável de ambiente NEXUS_ONEDRIVE_2S.
 // ────────────────────────────────────────────────────────────────────
-const NEXUS_DADOS_REL = path.join('001. SERVIDOR PARANÁ', '002. ACCIONA', '001. BLOCO 02', '_APOIO', 'NEXUS-DADOS');
+// Sufixo constante dos dados dentro da biblioteca do SharePoint. O 1º segmento (nome da
+// biblioteca) VARIA por usuário: no Lucas é "001. SERVIDOR PARANÁ"; no Gustavo é
+// "01 - Arquivos Engenharia - 001. SERVIDOR PARANÁ". Por isso NÃO dá p/ fixar o caminho
+// inteiro — procuramos este sufixo debaixo de qualquer pasta de 1º nível do OneDrive 2S.
+const NEXUS_DADOS_TAIL = path.join('002. ACCIONA', '001. BLOCO 02', '_APOIO', 'NEXUS-DADOS');
 const NEXUS_DADOS_SERVER_LEGACY = '\\\\2s-eng-servidor\\maringa\\_PROGRAMAS';
 function oneDrive2SRoot() {
   if (process.env.NEXUS_ONEDRIVE_2S && fs.existsSync(process.env.NEXUS_ONEDRIVE_2S)) return process.env.NEXUS_ONEDRIVE_2S;
@@ -1973,20 +1977,38 @@ function oneDrive2SRoot() {
   if (fs.existsSync(guess)) return guess;
   return null;
 }
-// TODAS as bases de dados que EXISTEM, em ordem de preferência (OneDrive → servidor).
-// NUNCA cria pasta vazia na LEITURA: uma pasta OneDrive vazia (biblioteca do usuário
-// ainda não sincronizada) mascarava o servidor e a lista vinha VAZIA p/ todos (bug 2.84.88).
+// Acha a pasta NEXUS-DADOS dentro do OneDrive 2S tolerando o nome variável da biblioteca.
+function oneDriveDadosDir() {
+  const root = oneDrive2SRoot();
+  if (!root) return null;
+  const direct = path.join(root, '001. SERVIDOR PARANÁ', NEXUS_DADOS_TAIL);   // caminho canônico (Lucas)
+  if (fs.existsSync(direct)) return direct;
+  try {                                                                        // senão varre 1º nível e testa o sufixo
+    for (const e of fs.readdirSync(root, { withFileTypes: true })) {
+      if (!e.isDirectory()) continue;
+      const p = path.join(root, e.name, NEXUS_DADOS_TAIL);
+      if (fs.existsSync(p)) return p;
+    }
+  } catch {}
+  return null;
+}
+// TODAS as bases de dados que EXISTEM (OneDrive → servidor). NUNCA cria pasta vazia na
+// LEITURA (bug 2.84.88). Override manual: env NEXUS_DADOS_DIR (aponta direto p/ a pasta).
 function nexusDadosBases() {
   const bases = [];
-  const root = oneDrive2SRoot();
-  if (root) { const p = path.join(root, NEXUS_DADOS_REL); try { if (fs.existsSync(p)) bases.push(p); } catch {} }
-  try { fs.accessSync(NEXUS_DADOS_SERVER_LEGACY, fs.constants.R_OK); bases.push(NEXUS_DADOS_SERVER_LEGACY); } catch {}
+  if (process.env.NEXUS_DADOS_DIR && fs.existsSync(process.env.NEXUS_DADOS_DIR)) bases.push(process.env.NEXUS_DADOS_DIR);
+  const od = oneDriveDadosDir();
+  if (od && !bases.includes(od)) bases.push(od);
+  try { fs.accessSync(NEXUS_DADOS_SERVER_LEGACY, fs.constants.R_OK); if (!bases.includes(NEXUS_DADOS_SERVER_LEGACY)) bases.push(NEXUS_DADOS_SERVER_LEGACY); } catch {}
   return bases;
 }
-// base preferida p/ ESCRITA: cria no OneDrive se possível; senão servidor; senão null.
+// base preferida p/ ESCRITA: override → OneDrive (acha ou cria no canônico) → servidor.
 function nexusDadosWriteBase() {
+  if (process.env.NEXUS_DADOS_DIR) { try { fs.mkdirSync(process.env.NEXUS_DADOS_DIR, { recursive: true }); return process.env.NEXUS_DADOS_DIR; } catch {} }
+  const od = oneDriveDadosDir();
+  if (od) return od;
   const root = oneDrive2SRoot();
-  if (root) { const p = path.join(root, NEXUS_DADOS_REL); try { fs.mkdirSync(p, { recursive: true }); return p; } catch {} }
+  if (root) { const p = path.join(root, '001. SERVIDOR PARANÁ', NEXUS_DADOS_TAIL); try { fs.mkdirSync(p, { recursive: true }); return p; } catch {} }
   try { fs.accessSync(NEXUS_DADOS_SERVER_LEGACY, fs.constants.W_OK); return NEXUS_DADOS_SERVER_LEGACY; } catch {}
   return null;
 }

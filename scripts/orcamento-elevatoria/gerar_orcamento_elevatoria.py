@@ -54,7 +54,8 @@ def build_cfg(d):
 # Maringá 20/07/26; sincroniza sem VPN). Resolve o OneDrive em qualquer PC; cai no
 # servidor antigo só por compat. Override: env NEXUS_PRECOS_CATALOGO / NEXUS_ONEDRIVE_2S.
 _CATALOGO_LEGACY = r"\\2s-eng-servidor\maringa\_PROGRAMAS\COTACOES NEXUS\precos.json"
-_DADOS_REL = os.path.join('001. SERVIDOR PARANÁ', '002. ACCIONA', '001. BLOCO 02', '_APOIO', 'NEXUS-DADOS')
+# 1º segmento (nome da biblioteca) varia por usuário -> só fixamos o sufixo e varremos.
+_DADOS_TAIL = os.path.join('002. ACCIONA', '001. BLOCO 02', '_APOIO', 'NEXUS-DADOS')
 
 def _onedrive_2s_root():
     env = os.environ.get('NEXUS_ONEDRIVE_2S')
@@ -74,12 +75,29 @@ def _onedrive_2s_root():
     guess = os.path.join(os.path.expanduser('~'), 'OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA')
     return guess if os.path.isdir(guess) else None
 
+def _onedrive_dados_dir():
+    root = _onedrive_2s_root()
+    if not root: return None
+    direct = os.path.join(root, '001. SERVIDOR PARANÁ', _DADOS_TAIL)
+    if os.path.isdir(direct): return direct
+    try:
+        for name in os.listdir(root):
+            p = os.path.join(root, name, _DADOS_TAIL)
+            if os.path.isdir(p): return p
+    except Exception:
+        pass
+    return None
+
 def _catalogo_path():
     env = os.environ.get('NEXUS_PRECOS_CATALOGO')
     if env and os.path.exists(env): return env
-    root = _onedrive_2s_root()
-    if root:
-        p = os.path.join(root, _DADOS_REL, 'COTACOES NEXUS', 'precos.json')
+    d = os.environ.get('NEXUS_DADOS_DIR')
+    if d:
+        p = os.path.join(d, 'COTACOES NEXUS', 'precos.json')
+        if os.path.exists(p): return p
+    od = _onedrive_dados_dir()
+    if od:
+        p = os.path.join(od, 'COTACOES NEXUS', 'precos.json')
         if os.path.exists(p): return p
     return _CATALOGO_LEGACY
 
