@@ -1983,11 +1983,13 @@ function oneDriveDadosDir() {
   if (!root) return null;
   const direct = path.join(root, '001. SERVIDOR PARANÁ', NEXUS_DADOS_TAIL);   // caminho canônico (Lucas)
   if (fs.existsSync(direct)) return direct;
-  try {                                                                        // senão varre 1º nível e testa o sufixo
-    for (const e of fs.readdirSync(root, { withFileTypes: true })) {
-      if (!e.isDirectory()) continue;
-      const p = path.join(root, e.name, NEXUS_DADOS_TAIL);
-      if (fs.existsSync(p)) return p;
+  // senão varre o 1º nível e testa o sufixo. NÃO filtrar por isDirectory(): pastas do
+  // OneDrive "online-only" (Files On-Demand) são reparse points e o readdir reporta elas
+  // como symlink/reparse, não como dir — o filtro pulava a biblioteca do Gustavo.
+  try {
+    for (const name of fs.readdirSync(root)) {
+      const p = path.join(root, name, NEXUS_DADOS_TAIL);
+      try { if (fs.existsSync(p)) return p; } catch {}
     }
   } catch {}
   return null;
