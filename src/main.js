@@ -1973,26 +1973,31 @@ function oneDrive2SRoot() {
   if (fs.existsSync(guess)) return guess;
   return null;
 }
-function nexusDadosBase() {
+// TODAS as bases de dados que EXISTEM, em ordem de preferência (OneDrive → servidor).
+// NUNCA cria pasta vazia na LEITURA: uma pasta OneDrive vazia (biblioteca do usuário
+// ainda não sincronizada) mascarava o servidor e a lista vinha VAZIA p/ todos (bug 2.84.88).
+function nexusDadosBases() {
+  const bases = [];
   const root = oneDrive2SRoot();
-  if (root) {
-    const p = path.join(root, NEXUS_DADOS_REL);
-    try { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); } catch {}
-    return p;
-  }
-  try { fs.accessSync(NEXUS_DADOS_SERVER_LEGACY, fs.constants.R_OK); return NEXUS_DADOS_SERVER_LEGACY; } catch {}
+  if (root) { const p = path.join(root, NEXUS_DADOS_REL); try { if (fs.existsSync(p)) bases.push(p); } catch {} }
+  try { fs.accessSync(NEXUS_DADOS_SERVER_LEGACY, fs.constants.R_OK); bases.push(NEXUS_DADOS_SERVER_LEGACY); } catch {}
+  return bases;
+}
+// base preferida p/ ESCRITA: cria no OneDrive se possível; senão servidor; senão null.
+function nexusDadosWriteBase() {
+  const root = oneDrive2SRoot();
+  if (root) { const p = path.join(root, NEXUS_DADOS_REL); try { fs.mkdirSync(p, { recursive: true }); return p; } catch {} }
+  try { fs.accessSync(NEXUS_DADOS_SERVER_LEGACY, fs.constants.W_OK); return NEXUS_DADOS_SERVER_LEGACY; } catch {}
   return null;
 }
-const _NEXUS_DADOS = nexusDadosBase();
-function _dadosSub(sub) { return path.join(_NEXUS_DADOS || NEXUS_DADOS_SERVER_LEGACY, sub); }
+function dadosReadDirs(sub) { return nexusDadosBases().map(b => path.join(b, sub)); }       // leitura: todas as fontes
+function dadosWriteDir(sub) { const b = nexusDadosWriteBase(); return b ? path.join(b, sub) : null; } // escrita: a preferida
 
-const COTACOES_SERVER_DIR = _dadosSub('COTACOES NEXUS');
 function cotacoesServerPath() {
-  try {
-    if (!fs.existsSync(COTACOES_SERVER_DIR)) fs.mkdirSync(COTACOES_SERVER_DIR, { recursive: true });
-    fs.accessSync(COTACOES_SERVER_DIR, fs.constants.W_OK);
-    return path.join(COTACOES_SERVER_DIR, 'cotacoes.json');
-  } catch { return null; }
+  const d = dadosWriteDir('COTACOES NEXUS');
+  if (!d) return null;
+  try { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); fs.accessSync(d, fs.constants.W_OK); return path.join(d, 'cotacoes.json'); }
+  catch { return null; }
 }
 function cotacoesLocalPath() { return path.join(app.getPath('userData'), 'cotacoes-eee.json'); }
 function cotacoesReadFrom(p) {
@@ -2000,10 +2005,9 @@ function cotacoesReadFrom(p) {
   return [];
 }
 function cotacoesLoad() {
-  const s = cotacoesServerPath();
   const map = new Map();
-  for (const c of [...cotacoesReadFrom(s), ...cotacoesReadFrom(cotacoesLocalPath())])
-    if (c && c.id) map.set(c.id, c);
+  const fontes = [...dadosReadDirs('COTACOES NEXUS').map(d => path.join(d, 'cotacoes.json')), cotacoesLocalPath()];
+  for (const p of fontes) for (const c of cotacoesReadFrom(p)) if (c && c.id) map.set(c.id, c);
   return Array.from(map.values()).sort((a, b) => String(b.criadoEm || '').localeCompare(String(a.criadoEm || '')));
 }
 function cotacoesSave(arr) {
@@ -2015,13 +2019,11 @@ function cotacoesSave(arr) {
 
 // ── FORNECEDORES (contatos) — base COMPARTILHADA; qualquer um adiciona/vê ──
 // Mesmo padrão das cotações: arquivo único no servidor + fallback local (merge por id).
-const FORNECEDORES_SERVER_DIR = _dadosSub('FORNECEDORES NEXUS');
 function fornecedoresServerPath() {
-  try {
-    if (!fs.existsSync(FORNECEDORES_SERVER_DIR)) fs.mkdirSync(FORNECEDORES_SERVER_DIR, { recursive: true });
-    fs.accessSync(FORNECEDORES_SERVER_DIR, fs.constants.W_OK);
-    return path.join(FORNECEDORES_SERVER_DIR, 'fornecedores.json');
-  } catch { return null; }
+  const d = dadosWriteDir('FORNECEDORES NEXUS');
+  if (!d) return null;
+  try { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); fs.accessSync(d, fs.constants.W_OK); return path.join(d, 'fornecedores.json'); }
+  catch { return null; }
 }
 function fornecedoresLocalPath() { return path.join(app.getPath('userData'), 'fornecedores-eee.json'); }
 function fornecedoresReadFrom(p) {
@@ -2029,10 +2031,9 @@ function fornecedoresReadFrom(p) {
   return [];
 }
 function fornecedoresLoad() {
-  const s = fornecedoresServerPath();
   const map = new Map();
-  for (const c of [...fornecedoresReadFrom(s), ...fornecedoresReadFrom(fornecedoresLocalPath())])
-    if (c && c.id) map.set(c.id, c);
+  const fontes = [...dadosReadDirs('FORNECEDORES NEXUS').map(d => path.join(d, 'fornecedores.json')), fornecedoresLocalPath()];
+  for (const p of fontes) for (const c of fornecedoresReadFrom(p)) if (c && c.id) map.set(c.id, c);
   return Array.from(map.values()).sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'));
 }
 function fornecedoresSave(arr) {
@@ -2187,45 +2188,46 @@ ipcMain.handle('orc-elev:cotacoes-abrir', async (_e, id) => {
 // JSON aqui; o Nexus lista e importa p/ pré-preencher o form (o usuário revisa).
 // Formato do JSON: { obra, sb, cidade, contrato, data:{key:val}, cp:{key:[preco,fonte]}, meta:{...} }
 // ────────────────────────────────────────────────────────────────────
-const ANALISES_SERVER_DIR = _dadosSub('NEXUS-ANALISES');
-function analisesDir() {
-  try {
-    if (!fs.existsSync(ANALISES_SERVER_DIR)) fs.mkdirSync(ANALISES_SERVER_DIR, { recursive: true });
-    fs.accessSync(ANALISES_SERVER_DIR, fs.constants.R_OK);
-    return ANALISES_SERVER_DIR;
-  } catch { return null; }
-}
 ipcMain.handle('orc-elev:analises-list', async () => {
   try {
-    const dir = analisesDir();
-    if (!dir) return { ok: true, analises: [], onServer: false };
-    const files = fs.readdirSync(dir).filter(f => /\.json$/i.test(f));
-    const analises = files.map(f => {
-      const full = path.join(dir, f);
-      let meta = {};
-      try { const j = JSON.parse(fs.readFileSync(full, 'utf8')); meta = { obra: j.obra, sb: j.sb, cidade: j.cidade, ncampos: Object.keys(j.data || {}).length }; } catch {}
-      let mtime = 0; try { mtime = fs.statSync(full).mtimeMs; } catch {}
-      return { file: f, ...meta, mtime };
-    }).sort((a, b) => b.mtime - a.mtime);
-    return { ok: true, analises, onServer: true };
+    const dirs = dadosReadDirs('NEXUS-ANALISES');           // OneDrive + servidor (o que existir)
+    const byFile = new Map();                                // dedup por nome (1ª fonte = preferida)
+    for (const dir of dirs) {
+      let files = [];
+      try { files = fs.readdirSync(dir).filter(f => /\.json$/i.test(f)); } catch { continue; }
+      for (const f of files) {
+        if (byFile.has(f)) continue;
+        const full = path.join(dir, f);
+        let meta = {};
+        try { const j = JSON.parse(fs.readFileSync(full, 'utf8')); meta = { obra: j.obra, sb: j.sb, cidade: j.cidade, ncampos: Object.keys(j.data || {}).length }; } catch {}
+        let mtime = 0; try { mtime = fs.statSync(full).mtimeMs; } catch {}
+        byFile.set(f, { file: f, ...meta, mtime });
+      }
+    }
+    const analises = Array.from(byFile.values()).sort((a, b) => b.mtime - a.mtime);
+    return { ok: true, analises, onServer: dirs.length > 0 };
   } catch (e) { return { ok: false, erro: e.message, analises: [] }; }
 });
 ipcMain.handle('orc-elev:analises-load', async (_e, file) => {
   try {
-    const dir = analisesDir();
-    if (!dir) return { ok: false, erro: 'Pasta de análises indisponível.' };
-    const full = path.join(dir, path.basename(String(file || '')));
-    if (!fs.existsSync(full)) return { ok: false, erro: 'Análise não encontrada.' };
-    return { ok: true, analise: JSON.parse(fs.readFileSync(full, 'utf8')) };
+    const base = path.basename(String(file || ''));
+    for (const dir of dadosReadDirs('NEXUS-ANALISES')) {
+      const full = path.join(dir, base);
+      if (fs.existsSync(full)) return { ok: true, analise: JSON.parse(fs.readFileSync(full, 'utf8')) };
+    }
+    return { ok: false, erro: 'Análise não encontrada.' };
   } catch (e) { return { ok: false, erro: e.message }; }
 });
 // Aplica o catálogo de preços de cotação (precos.json) por CIDADE/SB -> {key:[preço,fonte]}.
 // Usado no Importar da análise p/ já trazer os preços CP (ex.: painel) preenchidos.
-const PRECOS_CATALOGO_PATH = path.join(_dadosSub('COTACOES NEXUS'), 'precos.json');
+function precosCatalogoPath() {
+  for (const d of dadosReadDirs('COTACOES NEXUS')) { const p = path.join(d, 'precos.json'); if (fs.existsSync(p)) return p; }
+  return path.join(NEXUS_DADOS_SERVER_LEGACY, 'COTACOES NEXUS', 'precos.json');
+}
 function _normTxt(s) { return String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toUpperCase().trim(); }
 ipcMain.handle('orc-elev:catalogo-aplicar', async (_e, ctx) => {
   try {
-    const cat = JSON.parse(fs.readFileSync(PRECOS_CATALOGO_PATH, 'utf8'));
+    const cat = JSON.parse(fs.readFileSync(precosCatalogoPath(), 'utf8'));
     const itens = (cat && cat.itens) || {};
     const cidade = _normTxt(ctx && ctx.cidade);
     const sb = _normTxt(ctx && ctx.sb).replace(/^SB[-\s]*/, '');
