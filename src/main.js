@@ -553,6 +553,11 @@ app.whenReady().then(()=>{
   // Civil 3D carrega a DLL automaticamente do %APPDATA%\Autodesk\
   // ApplicationPlugins\Nexus.bundle\ — Lucas só precisa abrir o CAD.
   setTimeout(() => { try { c3dAutoInstallBundleOnStartup(); } catch {} }, 500);
+
+  // Espelho do Supabase (NEXUS-DADOS): baixa em 2º plano logo depois do boot e
+  // reforça a cada 30 min. Nunca bloqueia a UI nem quebra se estiver sem rede.
+  setTimeout(() => { atualizarCacheDadosSupabase().catch(() => {}); }, 3000);
+  setInterval(() => { atualizarCacheDadosSupabase().catch(() => {}); }, 30 * 60 * 1000);
   app.on('activate',()=>{
     if(!mainWindow && !splashWindow) createSplash();
   });
@@ -2088,16 +2093,85 @@ function nexusDadosWriteBase() {
   return null;
 }
 // leitura: todas as fontes × todos os apelidos da subpasta (só o que existe de verdade)
-function dadosReadDirs(sub) {
+//
+// `posCache` diz ONDE entra o espelho do Supabase, e isso NÃO é detalhe: os leitores
+// têm precedências OPOSTAS.
+//   'fim'    → p/ quem usa o PRIMEIRO que achar (analises-list/load, precosCatalogoPath):
+//              o cache fica com a MENOR prioridade, só completa o que falta.
+//   'inicio' → p/ quem MESCLA sobrescrevendo (cotacoesLoad/fornecedoresLoad fazem
+//              map.set(id) → o ÚLTIMO vence): o cache tem que vir ANTES pra pasta
+//              local sobrescrever ele, senão um cache velho (o sync roda 2x/dia)
+//              apagaria uma cotação recém-editada.
+//   'nao'    → sem cache.
+function dadosReadDirs(sub, posCache = 'fim') {
   const nomes = SUB_APELIDOS[sub] || [sub];
   const dirs = [];
-  for (const b of nexusDadosBases()) for (const n of nomes) {
-    const p = path.join(b, n);
-    try { if (fs.existsSync(p) && !dirs.includes(p)) dirs.push(p); } catch {}
-  }
-  return dirs;
+  const push = p => { try { if (fs.existsSync(p) && !dirs.includes(p)) dirs.push(p); } catch {} };
+  for (const b of nexusDadosBases()) for (const n of nomes) push(path.join(b, n));
+
+  if (posCache === 'nao') return dirs;
+  let cache = null;
+  try { const c = path.join(nexusDadosCacheDir(), sub); if (fs.existsSync(c)) cache = c; } catch {}
+  if (!cache || dirs.includes(cache)) return dirs;
+  return posCache === 'inicio' ? [cache, ...dirs] : [...dirs, cache];
 }
 function dadosWriteDir(sub) { const b = nexusDadosWriteBase(); return b ? path.join(b, sub) : null; } // escrita: a preferida
+
+// ── ESPELHO DO SUPABASE (tabela nexus_dados) ─────────────────────────────────
+// Quem não tem a biblioteca do SharePoint sincronizada (ex.: Gustavo) ficava com
+// lista VAZIA. O agente `scripts/nexus-dados-sync/sync.js` sobe os JSONs pro banco;
+// aqui a gente baixa pra um cache LOCAL e registra esse cache como mais uma base.
+// Assim TODO o código de leitura (dadosReadDirs/cotacoesLoad/analises-list/...) passa
+// a enxergar os dados sem precisar mudar — e continua funcionando offline.
+// O cache entra por ÚLTIMO: pasta local/servidor tem prioridade (é onde se escreve).
+function nexusDadosCacheDir() { return path.join(app.getPath('userData'), 'nexus-dados-cache'); }
+function _cacheManifestPath() { return path.join(nexusDadosCacheDir(), '_manifest.json'); }
+function _cacheManifest() {
+  try { return JSON.parse(fs.readFileSync(_cacheManifestPath(), 'utf8')) || {}; } catch { return {}; }
+}
+const DADOS_SUBS_CANON = ['NEXUS-ANALISES', 'COTACOES NEXUS', 'FORNECEDORES NEXUS'];
+
+// Baixa o que mudou (compara sha256 do banco com o manifesto local). Silencioso:
+// sem rede / sem tabela / anon sem permissão → mantém o cache que já existe.
+async function atualizarCacheDadosSupabase() {
+  try {
+    const { data, error } = await supabase
+      .from('nexus_dados')
+      .select('pasta,nome,conteudo,sha256');
+    if (error) { logUpdate('nexus-dados cache: ' + error.message); return { ok: false, erro: error.message }; }
+    if (!Array.isArray(data)) return { ok: false, erro: 'resposta inesperada' };
+
+    const base = nexusDadosCacheDir();
+    const man = _cacheManifest();
+    let gravados = 0, iguais = 0;
+    for (const r of data) {
+      if (!r || !r.pasta || !r.nome) continue;
+      if (!DADOS_SUBS_CANON.includes(r.pasta)) continue;          // só as 3 conhecidas
+      const nome = path.basename(String(r.nome));                  // nunca sair da pasta
+      if (!/\.json$/i.test(nome)) continue;
+      const chave = r.pasta + '|' + nome;
+      const dir = path.join(base, r.pasta);
+      const alvo = path.join(dir, nome);
+      if (man[chave] && man[chave] === r.sha256 && fs.existsSync(alvo)) { iguais++; continue; }
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(alvo, JSON.stringify(r.conteudo, null, 2), 'utf8');
+        man[chave] = r.sha256;
+        gravados++;
+      } catch (e) { logUpdate('nexus-dados cache write ' + chave + ': ' + e.message); }
+    }
+    try {
+      fs.mkdirSync(base, { recursive: true });
+      fs.writeFileSync(_cacheManifestPath(), JSON.stringify(man, null, 1), 'utf8');
+    } catch {}
+    logUpdate(`nexus-dados cache: ${data.length} no banco, ${gravados} atualizados, ${iguais} iguais`);
+    return { ok: true, total: data.length, gravados, iguais };
+  } catch (e) {
+    logUpdate('nexus-dados cache exception: ' + e.message);
+    return { ok: false, erro: e.message };
+  }
+}
+ipcMain.handle('nexus-dados:atualizar-cache', async () => atualizarCacheDadosSupabase());
 
 function cotacoesServerPath() {
   const d = dadosWriteDir('COTACOES NEXUS');
@@ -2112,7 +2186,8 @@ function cotacoesReadFrom(p) {
 }
 function cotacoesLoad() {
   const map = new Map();
-  const fontes = [...dadosReadDirs('COTACOES NEXUS').map(d => path.join(d, 'cotacoes.json')), cotacoesLocalPath()];
+  // 'inicio': mescla por id sobrescrevendo → a pasta local tem que vir DEPOIS do cache
+  const fontes = [...dadosReadDirs('COTACOES NEXUS', 'inicio').map(d => path.join(d, 'cotacoes.json')), cotacoesLocalPath()];
   for (const p of fontes) for (const c of cotacoesReadFrom(p)) if (c && c.id) map.set(c.id, c);
   return Array.from(map.values()).sort((a, b) => String(b.criadoEm || '').localeCompare(String(a.criadoEm || '')));
 }
@@ -2138,7 +2213,8 @@ function fornecedoresReadFrom(p) {
 }
 function fornecedoresLoad() {
   const map = new Map();
-  const fontes = [...dadosReadDirs('FORNECEDORES NEXUS').map(d => path.join(d, 'fornecedores.json')), fornecedoresLocalPath()];
+  // 'inicio': mesmo motivo das cotações — o último da lista vence na mesclagem
+  const fontes = [...dadosReadDirs('FORNECEDORES NEXUS', 'inicio').map(d => path.join(d, 'fornecedores.json')), fornecedoresLocalPath()];
   for (const p of fontes) for (const c of fornecedoresReadFrom(p)) if (c && c.id) map.set(c.id, c);
   return Array.from(map.values()).sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'));
 }
@@ -2296,7 +2372,8 @@ ipcMain.handle('orc-elev:cotacoes-abrir', async (_e, id) => {
 // ────────────────────────────────────────────────────────────────────
 ipcMain.handle('orc-elev:analises-list', async () => {
   try {
-    const dirs = dadosReadDirs('NEXUS-ANALISES');           // OneDrive + servidor (o que existir)
+    const dirs = dadosReadDirs('NEXUS-ANALISES');           // OneDrive + servidor + cache do banco
+    const locais = dadosReadDirs('NEXUS-ANALISES', 'nao');  // só pasta/servidor — p/ o flag onServer não mentir
     const byFile = new Map();                                // dedup por nome (1ª fonte = preferida)
     for (const dir of dirs) {
       let files = [];
@@ -2311,7 +2388,7 @@ ipcMain.handle('orc-elev:analises-list', async () => {
       }
     }
     const analises = Array.from(byFile.values()).sort((a, b) => b.mtime - a.mtime);
-    return { ok: true, analises, onServer: dirs.length > 0 };
+    return { ok: true, analises, onServer: locais.length > 0, doBanco: dirs.length > locais.length };
   } catch (e) { return { ok: false, erro: e.message, analises: [] }; }
 });
 ipcMain.handle('orc-elev:analises-load', async (_e, file) => {

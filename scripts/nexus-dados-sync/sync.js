@@ -22,9 +22,24 @@ const os = require('os');
 const crypto = require('crypto');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://xszpzsmdpbgaiodeqcpi.supabase.co';
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASTAS = ['NEXUS-ANALISES', 'COTACOES NEXUS', 'FORNECEDORES NEXUS'];
 const DRY = process.argv.includes('--dry');
+
+// ── chave de serviço ──────────────────────────────────────────────────────────
+// Ordem: env (útil em CI) → arquivo local. O arquivo é o modo recomendado: a chave
+// nunca passa por linha de comando (não vai pro histórico do shell nem pro log da
+// tarefa agendada) e sobrevive a reboot, ao contrário de `set` de sessão.
+const KEY_FILE = process.env.NEXUS_SYNC_KEY_FILE
+  || path.join(os.homedir(), '.nexus-sync', 'service-key.txt');
+function lerChave() {
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) return process.env.SUPABASE_SERVICE_ROLE_KEY.trim();
+  try {
+    const t = fs.readFileSync(KEY_FILE, 'utf8').trim();
+    if (t) return t;
+  } catch { /* sem arquivo */ }
+  return null;
+}
+const SERVICE_KEY = lerChave();
 
 function log(...a) { console.log(new Date().toISOString().slice(0, 19).replace('T', ' '), ...a); }
 
@@ -89,7 +104,22 @@ async function rest(metodo, caminho, corpo, extraHeaders) {
 }
 
 (async () => {
-  if (!SERVICE_KEY) { console.error('ERRO: defina SUPABASE_SERVICE_ROLE_KEY no ambiente.'); process.exit(2); }
+  if (!SERVICE_KEY) {
+    console.error('ERRO: chave de serviço não encontrada.');
+    console.error('Grave a service_role key em: ' + KEY_FILE);
+    console.error('(ou defina SUPABASE_SERVICE_ROLE_KEY no ambiente)');
+    process.exit(2);
+  }
+  if (/^ey/.test(SERVICE_KEY)) {
+    // JWT: dá pra conferir o papel sem expor a chave — evita rodar com a anon por engano
+    try {
+      const p = JSON.parse(Buffer.from(SERVICE_KEY.split('.')[1], 'base64').toString());
+      if (p.role && p.role !== 'service_role') {
+        console.error(`ERRO: essa chave é "${p.role}", não service_role. A anon não grava (RLS sem policy de insert).`);
+        process.exit(2);
+      }
+    } catch { /* formato novo (sb_secret_...), segue */ }
+  }
   const dir = acharPasta();
   if (!dir) { console.error('ERRO: não achei a pasta NEXUS-DADOS nesta máquina.'); process.exit(3); }
   log('pasta:', dir);
