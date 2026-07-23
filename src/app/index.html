@@ -358,11 +358,16 @@
       'obras-diario': 'Diário de Obra', 'obras-medicao': 'Boletim de Medição', 'obras-nc': 'Não-Conformidades',
       'rh-funcionarios': 'Funcionários', 'rh-folha': 'Folha & Pagamentos',
       'reunioes': 'Reuniões', 'lembretes': 'Lembretes',
+      'proposta-comercial': 'Proposta Comercial',
     };
     window._TAB_MAP = TAB_MAP;
     const allTabKeys = Object.keys(TAB_MAP);
     const userTabs = currentUser.allowed_tabs;
     window._userAllowedTabs = userTabs; // exposto pro renderModulosGrid usar
+    // A2Z (Lucas + Matheus) — mesmo critério do Financeiro. Usado pra liberar o
+    // módulo "A2Z Projetos" (Proposta Comercial) por padrão só pros sócios A2Z.
+    window._ehA2Z = (currentUser.tenant_id === 'd5e83240-786d-416d-b289-c9ca510b396d'
+      || currentUser.access_code === 'A2ZP-MSTR' || currentUser.access_code === 'S8LO-AATC');
 
     // ── Tab gating por plano (decisão produto 2026-05-04) ──
     // Tier do plano determina quais abas o tenant tem acesso.
@@ -383,6 +388,8 @@
       'rh-funcionarios': 2, 'rh-folha': 2,
       'reunioes': 2, 'lembretes': 2,
       conferencia: 3, diretoria: 3, verificar: 3,
+      // 99 = nenhum plano concede; só via allowed_tabs ou tenant A2Z (gate especial abaixo)
+      'proposta-comercial': 99,
     };
     // Busca plano do tenant via tabela tenants (RLS permite self-read)
     let tenantPlano = 'trial';
@@ -773,6 +780,8 @@
         if (btn.id === 'equipeSbBtn') { btn.style.display = 'none'; btn.dataset.allowedView = '0'; return; }
         // Financeiro: só tenant A2Z (Daniel é super_admin da 2S → não pode ver).
         if (btn.id === 'finSbBtn') { btn.style.display = ehA2Z ? '' : 'none'; btn.dataset.allowedView = ehA2Z ? '1' : '0'; return; }
+        // A2Z Projetos (Proposta Comercial): sócios A2Z veem por padrão; outros só se liberado via allowed_tabs.
+        if (btn.id === 'propostaSbBtn') { const g = ehA2Z || (userTabs||[]).includes('proposta-comercial'); btn.style.display = g ? '' : 'none'; btn.dataset.allowedView = g ? '1' : '0'; return; }
         btn.style.display = '';
         btn.dataset.allowedView = '1';  // super_admin tem acesso a tudo
       });
@@ -788,6 +797,8 @@
         }
         // Financeiro: só tenant A2Z (mesmo não-super_admin: Matheus é A2Z).
         if (btn.id === 'finSbBtn') { btn.style.display = ehA2Z ? '' : 'none'; btn.dataset.allowedView = ehA2Z ? '1' : '0'; return; }
+        // A2Z Projetos (Proposta Comercial): sócios A2Z veem por padrão; outros só se liberado via allowed_tabs.
+        if (btn.id === 'propostaSbBtn') { const g = ehA2Z || (userTabs||[]).includes('proposta-comercial'); btn.style.display = g ? '' : 'none'; btn.dataset.allowedView = g ? '1' : '0'; return; }
         // Equipe: só o Gestor da empresa vê.
         if (btn.id === 'equipeSbBtn') {
           const showEq = (currentUser.role === 'gestor');
@@ -7828,6 +7839,11 @@ body.presenting #presentingBadge { display: flex; }
         <button class="sb-item" data-tab="relatorios" data-label="Relatórios Técnicos" onclick="switchTab('relatorios',this)">
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
           <span class="sb-label">Relatórios Técnicos</span>
+        </button>
+        <!-- A2Z Projetos — Proposta Comercial (módulo a2z_projetos) -->
+        <button class="sb-item" id="propostaSbBtn" data-tab="proposta-comercial" data-label="Proposta Comercial" style="display:none" onclick="switchTab('proposta-comercial',this);setTimeout(()=>window.propostaInit&&window.propostaInit(),40);">
+          <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 13h6M9 17h4M9 9h1"/></svg>
+          <span class="sb-label">Proposta Comercial</span>
         </button>
         <!-- 10. Dashboard Contrato -->
         <button class="sb-item" data-tab="diretoria" data-label="Dashboard Contrato" id="diretoriaSbBtn" data-requires-online="1" onclick="switchTab('diretoria',this);setTimeout(()=>window.ddashInit&&window.ddashInit(),60);">
@@ -33131,6 +33147,13 @@ window.MODULES = {
     iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/><circle cx="18" cy="6" r="2.5" fill="currentColor" stroke="none"/></svg>',
     tabs: ['reunioes','lembretes'],
   },
+  a2z_projetos: {
+    name: 'A2Z Projetos',
+    desc: 'Ferramentas internas da A2Z Projetos: geração de Proposta Comercial (modelos profissionais em PDF, já assinadas)',
+    color: '#161616',
+    iconSvg: '<img src="assets/a2z-logo.png" alt="A2Z" style="width:100%;height:100%;object-fit:contain">',
+    tabs: ['proposta-comercial'],
+  },
 };
 
 // Tabs sempre acessíveis (não pertencem a módulo específico)
@@ -33241,8 +33264,9 @@ function renderModulosGrid() {
     'obras-vistorias':2, 'obras-diario':2, 'obras-medicao':2, 'obras-nc':2,
     'rh-funcionarios':2, 'rh-folha':2,
     'reunioes':2, 'lembretes':2,
-    conferencia:3, diretoria:3, verificar:3 };
+    conferencia:3, diretoria:3, verificar:3, 'proposta-comercial':99 };
   const isSuper = !!window._isSuperAdmin;
+  const isA2Z = !!window._ehA2Z;
 
   // allowed_tabs do user, se preenchido, é whitelist absoluta (override do plano)
   const userTabs = window._userAllowedTabs;
@@ -33250,10 +33274,15 @@ function renderModulosGrid() {
   grid.innerHTML = Object.entries(window.MODULES).map(([id, m]) => {
     const isSoon = !!m.soon;
     // Verifica quantas abas do módulo o user tem acesso (super_admin tem tudo)
-    const accessibleTabs = isSuper ? m.tabs : m.tabs.filter(t => {
+    const accessibleTabs = m.tabs.filter(t => {
+      // Proposta Comercial: sócios A2Z por padrão; outros só se liberado via allowed_tabs.
+      if (t === 'proposta-comercial') return isA2Z || (userTabs||[]).includes('proposta-comercial');
+      if (isSuper) return true;
       if (hasAllowedTabs) return userTabs.includes(t);
       const req = TAB_REQUIRES[t]; return !req || tier >= req;
     });
+    // Módulo A2Z Projetos: esconde totalmente o card pra quem não é A2Z nem foi liberado.
+    if (id === 'a2z_projetos' && accessibleTabs.length === 0) return '';
     const noAccess = !isSoon && m.tabs.length > 0 && accessibleTabs.length === 0;
     const subtitle = isSoon ? '<span style="display:inline-block;font-size:10px;font-weight:700;background:rgba(245,158,11,.15);color:#d97706;padding:3px 9px;border-radius:10px;margin-top:8px">EM DESENVOLVIMENTO</span>'
       : noAccess ? '<span style="display:inline-block;font-size:10px;font-weight:700;background:rgba(220,38,38,.12);color:#dc2626;padding:3px 9px;border-radius:10px;margin-top:8px">SEU PLANO NÃO INCLUI</span>'
@@ -45300,6 +45329,105 @@ window.deleteFromBucket = async function(bucketName, path) {
     <div id="fin-root"></div>
   </div>
   <script src="./js/financeiro.js"></script>
+
+  <!-- ════════════ A2Z PROJETOS — PROPOSTA COMERCIAL ════════════ -->
+  <div class="tab-content" id="tab-proposta-comercial">
+    <div class="pc-wrap" style="max-width:1080px;margin:0 auto;padding:8px 4px 40px">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">
+        <img src="assets/a2z-logo.png" alt="A2Z" style="height:38px;width:auto">
+        <div>
+          <h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.3px;color:var(--text)">Proposta Comercial</h2>
+          <div style="font-size:12px;color:var(--text2)">Gere a proposta A2Z em PDF — já assinada por Matheus e Lucas.</div>
+        </div>
+      </div>
+
+      <!-- Escolha do modelo -->
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin:18px 0 8px">Modelo</div>
+      <div id="pcModelos" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <label class="pc-modelo" data-modelo="v3" style="cursor:pointer;border:2px solid var(--accent);border-radius:12px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start;background:var(--surface)">
+          <input type="radio" name="pcModelo" value="v3" checked style="margin-top:3px;accent-color:var(--accent)">
+          <div><div style="font-weight:700;color:var(--text)">Opção A · Barra lateral</div><div style="font-size:12px;color:var(--text2);line-height:1.5">Modelo 3 — coluna grafite lateral, seções numeradas. Sóbrio e moderno.</div></div>
+        </label>
+        <label class="pc-modelo" data-modelo="v5" style="cursor:pointer;border:2px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start;background:var(--surface)">
+          <input type="radio" name="pcModelo" value="v5" style="margin-top:3px;accent-color:var(--accent)">
+          <div><div style="font-weight:700;color:var(--text)">Opção B · Faixa no topo</div><div style="font-size:12px;color:var(--text2);line-height:1.5">Modelo 5 — faixa grafite no topo, cabeçalhos em barra. Clássico e limpo.</div></div>
+        </label>
+      </div>
+
+      <!-- Dados -->
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin:22px 0 8px">Dados da proposta</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
+        <label class="pc-f"><span>Contratante / Cliente</span><input id="pcCliente" type="text" placeholder="Ex.: Rodrigo Solberg"></label>
+        <label class="pc-f"><span>Nº da proposta</span><input id="pcNum" type="text" placeholder="Ex.: PRO-A2Z-SOLBERG-00"></label>
+        <label class="pc-f" style="grid-column:1/3"><span>Empreendimento / Endereço da obra</span><textarea id="pcEmp" rows="2" placeholder="Ex.: Vila localizada em Bangu, entre a Rua Janarite, a Rua Luis Rodrigues de Paixão e a Estrada da Água Branca — Rio de Janeiro/RJ."></textarea></label>
+        <label class="pc-f"><span>Empreendimento (resumido, p/ capa)</span><input id="pcEmpCurto" type="text" placeholder="Ex.: Vila em Bangu — Rio de Janeiro/RJ"></label>
+        <label class="pc-f"><span>Referência (assunto)</span><input id="pcRef" type="text" placeholder="Ex.: Projeto de Esgotamento Sanitário e Abastecimento de Água"></label>
+        <label class="pc-f"><span>Cidade de emissão</span><input id="pcCidade" type="text" value="Rio de Janeiro"></label>
+        <label class="pc-f"><span>Data de emissão</span><input id="pcData" type="date"></label>
+        <label class="pc-f"><span>Validade (dias corridos)</span><input id="pcValidade" type="number" value="15" min="1"></label>
+        <label class="pc-f"><span>Arquivo de referência p/ orçamento</span><input id="pcArquivo" type="text" placeholder="Ex.: 2026_VM-DREN-DE-001_R00.dwg"></label>
+      </div>
+
+      <!-- Itens -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:24px 0 8px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3)">Itens (serviços)</div>
+        <button id="pcAddItem" class="action-btn" style="font-size:12px">+ Adicionar item</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table id="pcItensTable" style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.4px">
+              <th style="padding:6px 8px;width:34px">#</th>
+              <th style="padding:6px 8px">Descrição</th>
+              <th style="padding:6px 8px;width:120px">Prazo (dias úteis)</th>
+              <th style="padding:6px 8px;width:150px">Valor (R$)</th>
+              <th style="padding:6px 8px;width:40px"></th>
+            </tr>
+          </thead>
+          <tbody id="pcItensBody"></tbody>
+          <tfoot>
+            <tr style="border-top:2px solid var(--border2)">
+              <td></td><td></td>
+              <td style="padding:10px 8px;text-align:right;font-weight:700;color:var(--text)">TOTAL</td>
+              <td style="padding:10px 8px;font-weight:800;color:var(--text);font-size:15px" id="pcTotal">R$ 0,00</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- Ações -->
+      <div style="display:flex;gap:10px;margin-top:26px;flex-wrap:wrap">
+        <button id="pcPreview" class="action-btn" style="font-size:13px;padding:9px 18px">👁 Pré-visualizar</button>
+        <button id="pcGerar" style="font-size:13px;padding:9px 22px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">📄 Gerar PDF</button>
+        <span id="pcStatus" style="align-self:center;font-size:12px;color:var(--text2)"></span>
+      </div>
+    </div>
+
+    <!-- Modal de pré-visualização -->
+    <div id="pcModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);align-items:center;justify-content:center">
+      <div style="background:#fff;width:min(920px,94vw);height:92vh;border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:#161616;color:#fff">
+          <span style="font-size:13px;letter-spacing:.5px">Pré-visualização — Proposta Comercial</span>
+          <div style="display:flex;gap:8px">
+            <button id="pcModalGerar" style="font-size:12px;padding:6px 14px;background:#fff;color:#161616;border:none;border-radius:6px;font-weight:700;cursor:pointer">📄 Gerar PDF</button>
+            <button id="pcModalClose" style="font-size:16px;padding:2px 10px;background:transparent;color:#fff;border:none;cursor:pointer">✕</button>
+          </div>
+        </div>
+        <iframe id="pcFrame" style="flex:1;border:none;width:100%;background:#666"></iframe>
+      </div>
+    </div>
+  </div>
+  <style>
+    .pc-f{display:flex;flex-direction:column;gap:5px}
+    .pc-f>span{font-size:12px;color:var(--text2);font-weight:600}
+    .pc-f input,.pc-f textarea{padding:8px 10px;border:1px solid var(--border2);border-radius:7px;background:var(--surface);color:var(--text);font-family:inherit;font-size:13px}
+    .pc-f textarea{resize:vertical}
+    #pcItensBody td{padding:5px 8px;border-bottom:1px solid var(--border)}
+    #pcItensBody input{width:100%;padding:7px 9px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-family:inherit;font-size:13px}
+    .pc-del{background:transparent;border:none;color:#dc2626;cursor:pointer;font-size:16px;line-height:1}
+  </style>
+  <script src="./js/proposta.js"></script>
   <script>
   // Gate de visibilidade: a aba Financeiro é RESTRITA aos SÓCIOS DA A2Z.
   // Critério = pertencer ao TENANT da A2Z (Lucas + Matheus), NÃO super_admin

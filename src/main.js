@@ -853,6 +853,39 @@ ipcMain.handle('export-cronograma-xlsx', async (event, { rows, params, fileName 
   return true;
 });
 
+// ── A2Z Projetos · Proposta Comercial: renderiza HTML (modelo) → PDF A4 ──
+// Abre uma janela oculta, carrega o HTML da proposta e usa printToPDF do
+// Chromium (respeita @page A4 e print-color). Salva onde o user escolher.
+ipcMain.handle('proposta:gerar-pdf', async (_e, { html, defaultName }) => {
+  if (!mainWindow) return { ok: false, erro: 'sem janela principal' };
+  const result = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: (defaultName || 'Proposta_A2Z') + '.pdf',
+    filters: [{ name: 'PDF', extensions: ['pdf'] }],
+  });
+  if (result.canceled) return { ok: false, canceled: true };
+  let win = null;
+  try {
+    win = new BrowserWindow({
+      show: false, width: 900, height: 1300,
+      webPreferences: { offscreen: false, javascript: false },
+    });
+    await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    await new Promise(r => setTimeout(r, 400)); // deixa fontes/logo assentarem
+    const pdf = await win.webContents.printToPDF({
+      printBackground: true,
+      preferCSSPageSize: true,
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
+    });
+    require('fs').writeFileSync(result.filePath, pdf);
+    try { shell.openPath(result.filePath); } catch {}
+    return { ok: true, path: result.filePath };
+  } catch (err) {
+    return { ok: false, erro: String((err && err.message) || err) };
+  } finally {
+    if (win) { try { win.destroy(); } catch {} }
+  }
+});
+
 // ── DASHBOARD DIRETORIA ──
 const { resolveXlsxPath, parseXlsxFile } = require('./dashboardParser');
 
@@ -1686,12 +1719,56 @@ ipcMain.handle('topografia:abrir-pasta', async (_e, p) => {
 // >>> PONTO ÚNICO DE CONFIGURAÇÃO DO PYTHON <<<
 // Ordem de tentativa: 1) candidatos abaixo (1º que existir/responder), 2) "python"
 // no PATH, 3) "py -3" (launcher Windows). Edite/adicione caminhos aqui se mudar.
-const ORC_RCE_PYTHON_CANDIDATES = [
-  process.env.NEXUS_PYTHON || '',
-  'C:\\Users\\lcabd\\AppData\\Local\\Programs\\Python\\Python312\\python.exe',
-  'C:\\Users\\lcabd\\AppData\\Local\\Programs\\Python\\Python313\\python.exe',
-  'C:\\Users\\lcabd\\AppData\\Local\\Programs\\Python\\Python311\\python.exe',
-].filter(Boolean);
+// ⚠ ANTES daqui os caminhos eram FIXOS em C:\Users\lcabd\... — só funcionava na máquina
+// do Lucas. Na do Gustavo (usuário diferente) nada era encontrado e o app pedia
+// "Instale o Python 3", mesmo com o Python instalado: o instalador oficial NÃO marca
+// "Add to PATH" por padrão, então o fallback do PATH também falhava.
+// Agora a busca é dinâmica: env → pastas padrão (por usuário e por máquina) → registro.
+function _pyCandidatos() {
+  const out = [];
+  const add = p => { if (p && !out.includes(p)) out.push(p); };
+  add(process.env.NEXUS_PYTHON || '');
+
+  // pastas onde o instalador oficial põe o Python, do mais novo pro mais antigo
+  const raizes = [
+    path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python'),
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs', 'Python') : '',
+    process.env.ProgramFiles || 'C:\\Program Files',
+    process.env['ProgramFiles(x86)'] || '',
+    'C:\\',
+  ].filter(Boolean);
+  for (const r of raizes) {
+    let nomes = [];
+    try { nomes = fs.readdirSync(r).filter(n => /^Python\s?3[\d.]*$/i.test(n)); } catch { continue; }
+    nomes.sort().reverse();                        // Python313 antes de Python311
+    for (const n of nomes) add(path.join(r, n, 'python.exe'));
+  }
+
+  // registro: pega instalações que não estão nas pastas padrão
+  try {
+    const { execFileSync } = require('child_process');
+    for (const hive of ['HKCU', 'HKLM']) {
+      let saida = '';
+      try {
+        saida = execFileSync('reg', ['query', `${hive}\\Software\\Python\\PythonCore`, '/s', '/v', 'ExecutablePath'],
+                             { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+      } catch { continue; }
+      for (const m of saida.matchAll(/ExecutablePath\s+REG_SZ\s+(.+?)\s*$/gmi)) add(m[1].trim());
+    }
+  } catch {}
+
+  return out;
+}
+// O stub do WindowsApps é um reparse point de 0 byte que só abre a Microsoft Store —
+// se entrar como "python válido", o app trava esperando um processo que não faz nada.
+function _pyUtilizavel(p) {
+  try {
+    if (!p || !fs.existsSync(p)) return false;
+    if (/[\\/]WindowsApps[\\/]/i.test(p)) return false;
+    const st = fs.statSync(p);
+    return st.isFile() && st.size > 0;
+  } catch { return false; }
+}
 
 function orcRceResolveScript() {
   // dev: <repo>/scripts/orcamento ; packaged: extraResources -> resourcesPath/scripts/orcamento
@@ -1706,25 +1783,36 @@ function orcRceResolveScript() {
   return null;
 }
 
+let _pyCache;
 function orcRceResolvePython() {
-  // 1) candidatos absolutos existentes
-  for (const c of ORC_RCE_PYTHON_CANDIDATES) {
-    try { if (c && fs.existsSync(c)) return { cmd: c, args: [] }; } catch {}
+  if (_pyCache !== undefined) return _pyCache;
+  const { execFileSync } = require('child_process');
+  const testa = (cmd, args) => {
+    try {
+      execFileSync(cmd, [...args, '--version'], { stdio: 'ignore', windowsHide: true, timeout: 8000 });
+      return true;
+    } catch { return false; }
+  };
+
+  // 1) caminhos absolutos (env → pastas padrão → registro); confirma que EXECUTA mesmo
+  for (const c of _pyCandidatos()) {
+    if (_pyUtilizavel(c) && testa(c, [])) { _pyCache = { cmd: c, args: [] }; break; }
   }
-  // 2) "python" no PATH
-  try {
-    const { execFileSync } = require('child_process');
-    execFileSync('python', ['--version'], { stdio: 'ignore', windowsHide: true });
-    return { cmd: 'python', args: [] };
-  } catch {}
-  // 3) launcher do Windows "py -3"
-  try {
-    const { execFileSync } = require('child_process');
-    execFileSync('py', ['-3', '--version'], { stdio: 'ignore', windowsHide: true });
-    return { cmd: 'py', args: ['-3'] };
-  } catch {}
-  return null;
+  // 2) launcher "py -3" (existe mesmo sem PATH; é o mais confiável no Windows)
+  if (!_pyCache && testa('py', ['-3'])) _pyCache = { cmd: 'py', args: ['-3'] };
+  // 3) "python" do PATH, por último (pode ser o stub da Store)
+  if (!_pyCache && testa('python', [])) _pyCache = { cmd: 'python', args: [] };
+
+  if (_pyCache) logUpdate('python: usando ' + _pyCache.cmd + ' ' + _pyCache.args.join(' '));
+  else { logUpdate('python: NAO encontrado'); _pyCache = null; }
+  return _pyCache;
 }
+// permite reavaliar sem reiniciar o app (ex.: usuário acabou de instalar o Python)
+ipcMain.handle('nexus:python-redetectar', async () => {
+  _pyCache = undefined;
+  const r = orcRceResolvePython();
+  return { ok: !!r, python: r ? `${r.cmd} ${r.args.join(' ')}`.trim() : null, candidatos: _pyCandidatos() };
+});
 
 ipcMain.handle('orc-rce:select-oses', async () => {
   if (!mainWindow) return null;
