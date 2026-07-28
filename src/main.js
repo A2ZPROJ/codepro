@@ -1313,14 +1313,22 @@ function c3dInstallBundleSync() {
     for (const { t, dll } of pending) {
       const dir = c3dBundleDllDir(t.ver);
       fs.mkdirSync(dir, { recursive: true });
+      let dllOk = true;
       try {
         fs.writeFileSync(c3dBundleDllPath(t.ver), dll);
       } catch (e) {
-        if (e.code === 'EBUSY' || e.code === 'EPERM') { busy = true; continue; }
-        throw e;
+        if (e.code === 'EBUSY' || e.code === 'EPERM') { busy = true; dllOk = false; }
+        else throw e;
       }
+      // As DEPS são copiadas SEMPRE, mesmo com o CAD aberto travando a DLL
+      // principal. Elas só ficam travadas se já tiverem sido carregadas — e o
+      // caso que interessa é justamente quando FALTAM. Antes o `continue` no
+      // EBUSY pulava esta linha: em máquina onde o Nexus só sobe a partir do
+      // Civil (o plugin abre o app), o CAD estava SEMPRE aberto na hora da
+      // instalação → as DLLs do SQLite nunca chegavam e o import do modelo
+      // quebrava pra sempre. Caso Camila, 28/07. NÃO voltar a pular.
       c3dCopyDepsSync(c3dGetDepsSrcDir(t.ver), dir);
-      installedVers.push(t.ver);
+      if (dllOk) installedVers.push(t.ver);
     }
 
     if (installedVers.length === 0) {

@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "2.84.102",
+  "version": "2.84.103",
   "description": "Nexus â€” GestÃ£o Integrada A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
@@ -95,7 +95,7 @@
       "allowElevation": true,
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
-      "createDesktopShortcut": true,
+      "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "Nexus",
       "runAfterFinish": true,
