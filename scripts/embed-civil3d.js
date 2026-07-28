@@ -53,6 +53,17 @@ const PUBLIC_DEPS = [
   // segredo — vai em claro junto da DLL principal. Sem deps transitivas
   // (System.Text.Json etc. são in-box no .NET 8/10).
   'Sentry.dll',
+  // SQLite — o IMPORTAREDEMODELO / MAPAMODELO leem o banco do SewerGEMS (.sqlite)
+  // direto. SEM estas 5 o comando de importar o modelo QUEBRA na maquina do usuario
+  // (o resto do plugin continua funcionando, o que disfarcava o problema).
+  // Ate 28/07 so a copia DEV do build levava estas DLLs pro bundle; o publish NAO —
+  // por isso Murilo/Camila/Katia nao conseguiam importar o modelo. NAO REMOVER.
+  'Microsoft.Data.Sqlite.dll',
+  'SQLitePCLRaw.batteries_v2.dll',
+  'SQLitePCLRaw.core.dll',
+  'SQLitePCLRaw.provider.e_sqlite3.dll',
+  // nativo: no build fica em runtimes\win-x64\native, mas o plugin carrega da RAIZ
+  { from: 'runtimes/win-x64/native/e_sqlite3.dll', to: 'e_sqlite3.dll' },
 ];
 
 // Mesma constante usada em src/main.js no decrypt — NÃO ALTERAR
@@ -118,9 +129,12 @@ function embedTarget(t) {
   if (fs.existsSync(depsDir)) fs.rmSync(depsDir, { recursive: true, force: true });
   fs.mkdirSync(depsDir, { recursive: true });
   let copied = 0;
-  for (const rel of PUBLIC_DEPS) {
+  for (const dep of PUBLIC_DEPS) {
+    // aceita 'caminho/rel.dll' ou { from, to } (quando o destino muda de lugar)
+    const rel = typeof dep === 'string' ? dep : dep.from;
+    const destRel = typeof dep === 'string' ? dep : dep.to;
     const src = path.resolve(found.buildDir, rel);
-    const dst = path.resolve(depsDir, rel);
+    const dst = path.resolve(depsDir, destRel);
     if (!fs.existsSync(src)) { console.warn(`[embed-civil3d] (${t.ver}) dep faltando: ${rel}`); continue; }
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     fs.copyFileSync(src, dst);
