@@ -1092,8 +1092,10 @@ def extrair_modelo_rede(db_path):
             planar = (comp_li.get(eid, 0) or 0) * FT
             if planar <= 0:
                 planar = math.hypot(nb["x"] - na["x"], nb["y"] - na["y"])
-            dz = (na.get("cfundo") or 0) - (nb.get("cfundo") or 0)
-            comp = round(math.sqrt(planar * planar + dz * dz), 2)
+            # comprimento = PLANAR do modelo (HMIGeometryScaledLength), NAO o 3D
+            # sqrt(planar^2+dz^2): tem que bater EXATO com o modelo/DXF/MAPAMODELO.
+            # O 3D inflava as quedas fortes (ex.: TL OSE-844 Janiopolis 54,30 -> 54,43).
+            comp = round(planar, 2)
             dn = int(round((dia.get(eid, 0) or 0) * FT * 1000)) or 150
             DN_set[str(dn)] += 1
             ext_by_dn[str(dn)] = round(ext_by_dn.get(str(dn), 0.0) + comp, 2)
