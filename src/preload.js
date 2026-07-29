@@ -176,6 +176,11 @@ window.electronAPI = {
     pickSave: (name)   => ipcRenderer.invoke('memorial:pick-save', name),
     gerar:    (cfg)    => ipcRenderer.invoke('memorial:gerar', cfg),
     abrir:    (p)      => ipcRenderer.invoke('memorial:abrir', p),
+    // configurações salvas (_APOIO\MEMORIAL-CONFIGS no OneDrive da 2S)
+    cfgListar:   ()              => ipcRenderer.invoke('memorial:cfg:listar'),
+    cfgSalvar:   (nome, cfg)     => ipcRenderer.invoke('memorial:cfg:salvar', { nome, cfg }),
+    cfgCarregar: (arquivo)       => ipcRenderer.invoke('memorial:cfg:carregar', arquivo),
+    cfgExcluir:  (arquivo)       => ipcRenderer.invoke('memorial:cfg:excluir', arquivo),
   },
   // Mapa Geral — a partir do Excel FlexTable do SewerGEMS gera SHAPE (PV c/ cotas
   // + REDES) + DXF geral (blocos SES + MLEADER anti-colisão + rótulos de rede),

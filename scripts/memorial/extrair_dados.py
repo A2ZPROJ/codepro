@@ -549,13 +549,46 @@ def extrair_soleiras(soleiras_path, rede_segs, pv_xy, tmp_root, serve_buf=90.0):
     a <= serve_buf de qualquer trecho da rede projetada."""
     sr, base = _open_soleiras_shp(soleiras_path, tmp_root)
     flds = [f[0] for f in sr.fields[1:]]
+
+    # ── nomes de campo NAO sao padronizados entre os shapes da 2S ──
+    # O do Eng. Beltrao traz o tipo em "Column2" (nao "STATUS") e usa
+    # "Edificacao"/"Frente" em vez de MAIUSCULAS. A busca antiga era exata e
+    # sensivel a caixa -> status vazio -> tabela de soleiras ZERADA (28/07).
+    _low = {f.lower(): f for f in flds}
+
+    def _g(d, *nomes):
+        for n in nomes:
+            f = _low.get(n.lower())
+            if f is not None and d.get(f) not in (None, ""):
+                return d.get(f)
+        return None
+
+    # campo do STATUS: tenta os nomes conhecidos; se nao achar, DESCOBRE qual
+    # coluna contem valores "SOLEIRA-..." olhando as primeiras feicoes.
+    campo_status = None
+    for cand in ("STATUS", "TIPO", "CLASSE", "SITUACAO", "Column2"):
+        if cand.lower() in _low:
+            campo_status = _low[cand.lower()]
+            break
+    if campo_status is None:
+        for i in range(min(50, len(sr))):
+            d0 = dict(zip(flds, list(sr.record(i))))
+            for f in flds:
+                if str(d0.get(f, "")).strip().upper().startswith("SOLEIRA"):
+                    campo_status = f
+                    break
+            if campo_status:
+                break
+
     sol_rows = []
     for i in range(len(sr)):
         d = dict(zip(flds, list(sr.record(i))))
-        st = str(d.get("STATUS", "")).strip()
-        sol_rows.append(dict(x=d.get("X"), y=d.get("Y"), status=st,
-                             edificacao=d.get("EDIFICACAO"), dif_cota=d.get("DIF_COTA"),
-                             frente=d.get("FRENTE"), local=str(d.get("LOCAL", "")).strip()))
+        st = str(d.get(campo_status, "") if campo_status else "").strip()
+        sol_rows.append(dict(x=_g(d, "X"), y=_g(d, "Y"), status=st,
+                             edificacao=_g(d, "EDIFICACAO", "Edificacao"),
+                             dif_cota=_g(d, "DIF_COTA", "DIFCOTA"),
+                             frente=_g(d, "FRENTE", "Frente"),
+                             local=str(_g(d, "LOCAL", "Local") or "").strip()))
 
     # ---- filtro espacial pela bacia (envoltoria da rede + PVs) ----
     hull = convex_hull([(x, y) for (x, y) in pv_xy] + [v for seg in rede_segs for v in seg])
@@ -873,6 +906,267 @@ def _copiar_interferencias(geo_dir, interf_paths):
 # ============================================================================
 #  5) Modelo hidraulico SewerGEMS (.sqlite/.stsw) -> parametros de projeto
 # ============================================================================
+def extrair_modelo_rede(db_path):
+    """PROJETO BASICO: monta o MESMO bloco que extrair_ose_multi() produz, porem
+    lendo o MODELO HIDRAULICO (.sqlite do SewerGEMS) em vez da planilha de OSE.
+
+    No Projeto Basico ainda nao existem OSEs — a rede so existe no modelo. Aqui
+    cada CONDUTO ATIVO vira um "trecho" e cada NO ATIVO vira um "point", no
+    formato que o restante da extracao (soleiras, geo, quadros) ja espera.
+
+    Regras herdadas do MAPAMODELO (validadas 28/07):
+      - SO CONDUTO: links em Conduit_Physical_Data. Os L-* (ligacao predial,
+        no SOLEIRAS-*) e P-* (recalque) ficam de fora.
+      - SO ATIVO: HMIDomainDataSet.ActiveScenarioID -> HMIScenarioAlternative
+        (AlternativeTypeID=3) -> HMIAlternative.ParentID (a filha guarda so o
+        que difere). Ausente na tabela = ATIVO.
+      - Tudo em PES no banco -> x0,3048.
+    Nunca levanta excecao: devolve None se nao conseguir ler."""
+    import sqlite3, struct
+    FT = 0.3048
+    try:
+        con = sqlite3.connect(db_path)
+        con.text_factory = lambda b: b.decode("utf-8", "replace")
+        cur = con.cursor()
+
+        def _q(sql, args=()):
+            try:
+                return list(cur.execute(sql, args))
+            except Exception:
+                return []
+
+        # ---- labels + quem e no/tubo (ElementType=3) ----
+        rotulo, tipo3 = {}, set()
+        for eid, lab, et in _q("SELECT ElementID, Label, ElementType "
+                               "FROM HMIModelingElement WHERE IsDeleted=0"):
+            if lab:
+                rotulo[eid] = lab
+            if et == 3:
+                tipo3.add(eid)
+
+        # ---- cenario ativo -> alternativas (fisica=4, topologia ativa=3) ----
+        r = _q("SELECT ActiveScenarioID FROM HMIDomainDataSet")
+        cen = r[0][0] if r else None
+        pai = {a: p for a, p in _q("SELECT AlternativeID, ParentID FROM HMIAlternative "
+                                   "WHERE IsDeleted=0") if p is not None}
+
+        def _cadeia(alt):
+            out, cur_a = [], alt
+            while cur_a and cur_a not in out:
+                out.append(cur_a)
+                cur_a = pai.get(cur_a)
+            return out
+
+        def _alt(tipo):
+            rr = _q("SELECT AlternativeID FROM HMIScenarioAlternative "
+                    "WHERE ScenarioID=? AND AlternativeTypeID=?", (cen, tipo))
+            return rr[0][0] if rr else None
+
+        cad_fis = _cadeia(_alt(4))
+        cad_top = _cadeia(_alt(3))
+
+        def _ativos(tabela):
+            por = {}
+            for eid, alt, act in _q("SELECT DomainElementID, AlternativeID, "
+                                    "HMIActiveTopologyIsActive FROM %s" % tabela):
+                por.setdefault(eid, {})[alt] = bool(act)
+            res = {}
+            for eid, d in por.items():
+                for a in cad_top:
+                    if a in d:
+                        res[eid] = d[a]
+                        break
+                else:
+                    res[eid] = True
+            return res
+
+        no_ativo = _ativos("BaseNode_HMIActiveTopology_Data")
+        li_ativo = _ativos("BaseLink_HMIActiveTopology_Data")
+        ativo = lambda m, e: m.get(e, True)
+
+        # ---- geometria (WKB little-endian: 1=Point, 2=LineString) ----
+        def _wkb(b):
+            pts = []
+            if not b or len(b) < 5:
+                return pts
+            gt = struct.unpack_from("<I", b, 1)[0]
+            off = 5
+            if gt == 1 and len(b) >= 21:
+                pts.append(struct.unpack_from("<dd", b, off))
+            elif gt == 2 and len(b) >= 9:
+                n = struct.unpack_from("<I", b, off)[0]
+                off += 4
+                for _ in range(n):
+                    if len(b) < off + 16:
+                        break
+                    pts.append(struct.unpack_from("<dd", b, off))
+                    off += 16
+            return pts
+
+        geo_no = {}
+        for eid, blob in _q("SELECT DomainElementID, HMIGeometry "
+                            "FROM BaseNode_HmiDataSetGeometry_Data"):
+            if eid not in geo_no:
+                p = _wkb(blob)
+                if p:
+                    geo_no[eid] = p[0]
+
+        geo_li, comp_li = {}, {}
+        for eid, blob, sc in _q("SELECT DomainElementID, HMIGeometry, HMIGeometryScaledLength "
+                                "FROM BaseLink_HmiDataSetGeometry_Data"):
+            if eid not in geo_li:
+                p = _wkb(blob)
+                if p:
+                    geo_li[eid] = p
+                if sc:
+                    comp_li[eid] = sc
+
+        # ---- propriedades por alternativa ----
+        def _prop(tabela, coluna):
+            por = {}
+            for eid, alt, v in _q("SELECT DomainElementID, AlternativeID, %s FROM %s"
+                                  % (coluna, tabela)):
+                if v:
+                    por.setdefault(eid, {})[alt] = v
+            res = {}
+            for eid, d in por.items():
+                for a in cad_fis:
+                    if a in d:
+                        res[eid] = d[a]
+                        break
+                else:
+                    res[eid] = list(d.values())[0]
+            return res
+
+        inv = _prop("GravityNode_Physical_Data", "Physical_InvertElevation")
+        rim = _prop("GravitySurfaceStructure_Physical_Data", "Physical_RimElevation")
+        rim_out = _prop("Outfall_Physical_Data", "Physical_RimElevation")
+        dia = _prop("Conduit_Physical_Data", "ConduitDiameter")
+
+        condutos = {e for (e,) in _q("SELECT DISTINCT DomainElementID FROM Conduit_Physical_Data")}
+
+        topo = {}
+        for eid, alt, a, b in _q("SELECT DomainElementID, AlternativeID, "
+                                 "HMITopologyStartNodeID, HMITopologyStopNodeID "
+                                 "FROM BaseLink_HMIDataSetTopology_Data"):
+            if eid not in topo or alt == 33:
+                topo[eid] = (a, b)
+
+        # ---- monta os NOS ----
+        pts_por_id, points = {}, {}
+        for eid, (x, y) in geo_no.items():
+            if eid not in tipo3 or eid not in rotulo or not ativo(no_ativo, eid):
+                continue
+            nome = (rotulo[eid] or "").strip()
+            ct = rim.get(eid) or rim_out.get(eid)
+            cf = inv.get(eid)
+            ct_m = round(ct * FT, 3) if ct else None
+            cf_m = round(cf * FT, 3) if cf else None
+            prof = round(ct_m - cf_m, 2) if (ct_m and cf_m) else None
+            d = dict(name=nome, x=round(x * FT, 3), y=round(y * FT, 3),
+                     z=ct_m, prof=prof, tipo=("TL" if nome.upper().startswith("TL") else "PV"),
+                     ose=None, cfundo=cf_m)
+            pts_por_id[eid] = d
+            points[nome] = d
+
+        # ---- monta os TRECHOS (so conduto ativo) ----
+        trechos, detalhamento, ext_by_dn = [], [], {}
+        DN_set, ext_total = Counter(), 0.0
+        method_set = Counter()
+        ext_mnd = ext_vca = 0.0
+        n_vca = 0
+        for eid, (a, b) in topo.items():
+            if eid not in tipo3 or eid not in rotulo:
+                continue
+            if condutos and eid not in condutos:
+                continue           # ligacao predial / recalque -> fora
+            if not ativo(li_ativo, eid):
+                continue
+            na, nb = pts_por_id.get(a), pts_por_id.get(b)
+            if not na or not nb:
+                continue
+            lab = (rotulo[eid] or "").strip()
+            verts = [(round(px * FT, 3), round(py * FT, 3)) for (px, py) in geo_li.get(eid, [])]
+            if len(verts) < 2:
+                verts = [(na["x"], na["y"]), (nb["x"], nb["y"])]
+            planar = (comp_li.get(eid, 0) or 0) * FT
+            if planar <= 0:
+                planar = math.hypot(nb["x"] - na["x"], nb["y"] - na["y"])
+            dz = (na.get("cfundo") or 0) - (nb.get("cfundo") or 0)
+            comp = round(math.sqrt(planar * planar + dz * dz), 2)
+            dn = int(round((dia.get(eid, 0) or 0) * FT * 1000)) or 150
+            DN_set[str(dn)] += 1
+            ext_by_dn[str(dn)] = round(ext_by_dn.get(str(dn), 0.0) + comp, 2)
+            ext_total += comp
+            # METODO EXECUTIVO (regra do Lucas, 28/07): profundidade < 3,00 m
+            # -> MND; **3,00 m OU MAIS -> VCA**. Vale a MAIOR profundidade entre
+            # as duas pontas: "se em algum ponto bater 3 ou +, vira VCA".
+            prof_max = max([p for p in (na.get("prof"), nb.get("prof"))
+                            if isinstance(p, (int, float))] or [0])
+            metodo = "VCA" if prof_max >= 3.0 else "MND"
+            method_set[metodo] += 1
+            if metodo == "VCA":
+                ext_vca += comp
+                n_vca += 1
+            else:
+                ext_mnd += comp
+            trechos.append(dict(ose=lab, dn=str(dn), comprimento=comp, vertices=verts,
+                                montante=na["name"], jusante=nb["name"],
+                                metodo=metodo, prof_max=prof_max))
+            for nd in (na, nb):
+                nd["ose"] = nd["ose"] or lab
+
+        # ---- detalhamento (alimenta as faixas de profundidade) ----
+        vistos = set()
+        for t in trechos:
+            for nome in (t["montante"], t["jusante"]):
+                if nome in vistos:
+                    continue
+                vistos.add(nome)
+                p = points.get(nome) or {}
+                detalhamento.append(dict(ose=t["ose"], tipo=p.get("tipo") or "PV", nome=nome,
+                                         ctopo=p.get("z"), cfundo=p.get("cfundo"),
+                                         prof=p.get("prof")))
+
+        faixas = {"ate_1_25": 0, "1_25_a_2_00": 0, "2_00_a_3_00": 0,
+                  "3_00_a_4_00": 0, "acima_4_00": 0}
+        for d in detalhamento:
+            p = d["prof"]
+            if isinstance(p, (int, float)):
+                if p <= 1.25:      faixas["ate_1_25"] += 1
+                elif p <= 2.00:    faixas["1_25_a_2_00"] += 1
+                elif p <= 3.00:    faixas["2_00_a_3_00"] += 1
+                elif p <= 4.00:    faixas["3_00_a_4_00"] += 1
+                else:              faixas["acima_4_00"] += 1
+
+        n_pv = sum(1 for p in points.values() if p["tipo"] == "PV")
+        n_tl = sum(1 for p in points.values() if p["tipo"] == "TL")
+        ext_total = round(ext_total, 2)
+        con.close()
+
+        if not trechos:
+            return None
+
+        # "1 OSE" sintetica so pra alimentar os quadros de resumo
+        ose_list = [dict(ose="MODELO", ext=ext_total, pv=n_pv, tl=n_tl, pit=0)]
+        total_row = dict(ext=ext_total, pv=n_pv, tl=n_tl, pit=0)
+
+        return dict(
+            ose_list=ose_list, total_row=total_row, detalhamento=detalhamento,
+            DN_set=DN_set, method_set=method_set, pav_set=Counter(),
+            points=points, trechos=trechos, ose_meta={},
+            tq_list=[], deg_list=[],
+            faixas=faixas, ext_mnd=round(ext_mnd, 2), ext_vca=round(ext_vca, 2),
+            n_ose_vca=n_vca,
+            ext_vca_sheets=round(ext_vca, 2), ext_total_sheets=ext_total,
+            ext_by_dn=ext_by_dn,
+            arquivo_fonte=os.path.basename(db_path),
+            fonte_rede="modelo_hidraulico")
+    except Exception as e:
+        sys.stderr.write("[extrair] falha ao ler a rede do modelo: %s\n" % e)
+        return None
+
+
 def extrair_modelo_sqlite(db_path, scenario_id=None):
     """Le a rede do modelo SewerGEMS (banco SQLite, schema Bentley/Haestad) SEM
     OpenFlows/licenca. Unidades internas em PES (x0,3048 -> m). Resolve a
@@ -923,6 +1217,25 @@ def extrair_modelo_sqlite(db_path, scenario_id=None):
         plink = load("PhysicalLink_Physical_Data",
                      ["Physical_UpstreamInvert", "Physical_DownstreamInvert"])
         cond = load("Conduit_Physical_Data", ["ConduitDiameter"])
+        # IDs de CONDUTO sem filtro de alternativa — usado pra descartar as
+        # ligacoes prediais (L-*) e o recalque (P-*) da contagem/extensao.
+        conduit_ids = set()
+        try:
+            conduit_ids = {r[0] for r in cur.execute(
+                "SELECT DISTINCT DomainElementID FROM Conduit_Physical_Data")}
+        except Exception:
+            pass
+        # ... e tambem os INATIVOS (Active Topology). No Eng. Beltrao sao 34
+        # restos ("RCE (Polyline)-nnn", prototipos) que inflavam a extensao em
+        # ~3 km. Ausente na tabela = ATIVO.
+        try:
+            inativos = {r[0] for r in cur.execute(
+                "SELECT DomainElementID FROM BaseLink_HMIActiveTopology_Data "
+                "WHERE HMIActiveTopologyIsActive=0")}
+            if inativos:
+                conduit_ids = {i for i in conduit_ids if i not in inativos} or conduit_ids
+        except Exception:
+            pass
         geom = load("BaseLink_HmiDataSetGeometry_Data", ["HMIGeometryScaledLength"])
         glink = load("GravityLinkBase_Physical_Data", ["Physical_ManningsN", "Physical_Material"])
         ext = load("Conduit_HMIUserDefinedExtensions_Data", ["RECOBRIMNTO"])
@@ -932,6 +1245,15 @@ def extrair_modelo_sqlite(db_path, scenario_id=None):
         ext_total = 0.0
         n_trechos = 0
         for did, t in geom.items():
+            # SO COLETOR: o modelo tem 3 familias de link — OSE-* (conduto),
+            # L-* (ligacao predial, no SOLEIRAS-*) e P-* (recalque). Sem este
+            # filtro a extensao/contagem incham com as ligacoes prediais (no
+            # Eng. Beltrao: 1.169 trechos/50.013 m em vez de 1.087/47.008).
+            # Mesmo bug que apareceu no MAPAMODELO. Lucas mandou ignorar (28/07).
+            # NAO usar o `cond` do load(): ele filtra por alternativa ativa e pode
+            # vir VAZIO, o que desligaria o filtro em silencio.
+            if conduit_ids and did not in conduit_ids:
+                continue
             L = t.get("HMIGeometryScaledLength")
             if L:
                 ext_total += L * FT
@@ -1007,19 +1329,44 @@ def extrair(cfg):
 
     # ose pode ser um caminho unico (str) ou uma lista de planilhas a mesclar.
     ose_paths = [ose_xlsx] if isinstance(ose_xlsx, str) else list(ose_xlsx or [])
-    if not ose_paths:
-        raise FileNotFoundError("OSE.xlsx nao informado.")
-    faltando = [p for p in ose_paths if not (p and os.path.exists(p))]
-    if faltando:
-        raise FileNotFoundError("OSE.xlsx nao encontrado: %s" % ", ".join(faltando))
+
+    # PROJETO BASICO: nao existe OSE — a rede vem do MODELO HIDRAULICO.
+    tipo_projeto = (_get(cfg, "tipo_projeto", default="executivo") or "executivo").strip().lower()
+    modelo_p = _get(cfg, "modelo", "modelo_sqlite", "modelo_hidraulico", "sqlite")
+    if modelo_p and os.path.isdir(modelo_p):          # apontaram a PASTA do modelo
+        achado = None
+        for raiz, _dirs, arqs in os.walk(modelo_p):
+            for a in arqs:
+                if a.lower().endswith(".sqlite"):
+                    achado = os.path.join(raiz, a); break
+            if achado: break
+        if achado:
+            modelo_p = achado
+    usar_modelo = (tipo_projeto == "basico") or not ose_paths
 
     _ensure_dir(out_dir)
     geo_dir = _ensure_dir(os.path.join(out_dir, "geo"))
     tmp_root = _ensure_dir(os.path.join(out_dir, "_tmp_extracao"))
 
-    # ---- 1) OSE ----
-    print("[extrair] OSE:", " + ".join(ose_paths))
-    O = extrair_ose_multi(ose_paths)
+    O = None
+    if usar_modelo:
+        if not (modelo_p and os.path.exists(modelo_p)):
+            raise FileNotFoundError(
+                "Projeto Basico: informe o MODELO HIDRAULICO (.sqlite/.stsw) — "
+                "e dele que sai a rede quando nao ha OSE.")
+        print("[extrair] Rede do MODELO HIDRAULICO:", modelo_p)
+        O = extrair_modelo_rede(modelo_p)
+        if not O:
+            raise RuntimeError("Nao consegui ler a rede do modelo: %s" % modelo_p)
+        print("[extrair] Modelo: %d trechos, %d nos, %.2f m" % (
+            len(O["trechos"]), len(O["points"]), O["total_row"]["ext"]))
+    else:
+        faltando = [p for p in ose_paths if not (p and os.path.exists(p))]
+        if faltando:
+            raise FileNotFoundError("OSE.xlsx nao encontrado: %s" % ", ".join(faltando))
+        # ---- 1) OSE ----
+        print("[extrair] OSE:", " + ".join(ose_paths))
+        O = extrair_ose_multi(ose_paths)
     rede_segs = [t["vertices"] for t in O["trechos"]]
     pv_xy = [(p["x"], p["y"]) for p in O["points"].values()]
     n_pv_pts = sum(1 for p in O["points"].values() if p["tipo"] == "PV")

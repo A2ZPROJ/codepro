@@ -14667,9 +14667,56 @@ body.presenting #presentingBadge { display: flex; }
       el.textContent = txt || ''; el.style.color = color || 'var(--text3)';
     }
 
+    // ── Construtor de fluxogramas: UM POR BACIA ─────────────────
+    // Lucas 28/07: "preciso poder criar um fluxograma por bacia... dentro do
+    // mesmo memorial eu posso ter várias bacias". Cada bacia vira uma FIGURA
+    // no memorial, como já era o fluxograma único.
+    function addBacia(nome, etapas) {
+      const list = $('mem-flux-list'); if (!list) return null;
+      const bloco = document.createElement('div');
+      bloco.className = 'mem-bacia';
+      bloco.style.cssText = 'border:1.5px solid var(--border);border-radius:8px;padding:12px 14px;'
+                          + 'background:var(--surface2);display:flex;flex-direction:column;gap:10px';
+      bloco.innerHTML =
+        '<div style="display:flex;gap:8px;align-items:center">'
+        + '<span style="font-size:11px;font-weight:700;color:var(--text2);flex-shrink:0">Bacia</span>'
+        + '<input class="mem-bacia-nome" type="text" placeholder="nome da bacia (ex.: Bacia 01)" '
+        + 'value="' + (nome ? String(nome).replace(/"/g, '&quot;') : '') + '" style="flex:1;min-width:0"/>'
+        + '<button class="mem-bacia-addetapa" style="flex-shrink:0;background:var(--surface);color:var(--text);'
+        + 'border:1.5px solid var(--border);border-radius:6px;padding:6px 12px;font-family:inherit;font-size:11px;'
+        + 'font-weight:600;cursor:pointer">+ etapa</button>'
+        + '<button class="mem-bacia-del" title="Remover bacia" style="flex-shrink:0;background:var(--surface);'
+        + 'color:var(--red,#A11312);border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;'
+        + 'font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">×</button>'
+        + '</div>'
+        + '<div class="mem-bacia-etapas" style="display:flex;flex-direction:column;gap:8px"></div>';
+      const etapasBox = bloco.querySelector('.mem-bacia-etapas');
+      bloco.querySelector('.mem-bacia-del').addEventListener('click', () => bloco.remove());
+      bloco.querySelector('.mem-bacia-addetapa').addEventListener('click', () => addFluxRow('', '', etapasBox));
+      list.appendChild(bloco);
+      (etapas && etapas.length ? etapas : [null]).forEach(e =>
+        addFluxRow(e && e.tipo, e && (e.descricao || e.desc), etapasBox));
+      return bloco;
+    }
+
+    function collectFluxogramas() {
+      const out = [];
+      document.querySelectorAll('#mem-flux-list .mem-bacia').forEach((b, i) => {
+        const nome = (b.querySelector('.mem-bacia-nome').value || '').trim() || ('Bacia ' + String(i + 1).padStart(2, '0'));
+        const etapas = [];
+        b.querySelectorAll('.mem-flux-row').forEach(r => {
+          const tipo = r.querySelector('.mem-flux-tipo').value;
+          const desc = (r.querySelector('.mem-flux-desc').value || '').trim();
+          if (tipo) etapas.push({ tipo: tipo, descricao: desc });
+        });
+        if (etapas.length) out.push({ bacia: nome, etapas: etapas });
+      });
+      return out;
+    }
+
     // ── Construtor de etapas do fluxograma ──────────────────────
-    function addFluxRow(tipo, desc) {
-      const list = $('mem-flux-list'); if (!list) return;
+    function addFluxRow(tipo, desc, host) {
+      const list = host || $('mem-flux-list'); if (!list) return;
       const row = document.createElement('div');
       row.className = 'mem-flux-row';
       row.style.cssText = 'display:flex;gap:8px;align-items:center';
@@ -14733,6 +14780,137 @@ body.presenting #presentingBadge { display: flex; }
       }
     }
 
+    // ── Config: montar / aplicar / salvar / carregar ────────────
+    // O MESMO objeto que vai pro gerador é o que a gente salva — assim o
+    // "carregar" devolve exatamente o estado de antes (Lucas 28/07).
+    function coletarCfg(saida) {
+      const fluxos = collectFluxogramas();
+      return {
+        saida: saida || null,
+        modelo_memorial: (($('mem-modelo-doc') && $('mem-modelo-doc').value) || '2s'),
+        tipo_projeto:    (($('mem-tipo-projeto') && $('mem-tipo-projeto').value) || 'executivo'),
+        ose:            memPaths.ose || null,
+        modelo:         memPaths.modelo || null,
+        txt_dir:        memPaths.txt || null,
+        soleiras:       memPaths.soleiras || null,
+        interferencias: memPaths.interferencias || null,
+        mapas_dir:      memPaths.mapas || null,
+        marcos_dir:     memPaths.marcos || null,
+        marcos_nomes:   ($('mem-marcos-nomes').value || '').trim(),
+        soleiras_atend:     ($('mem-sol-atend').value || '').trim(),
+        soleiras_nao_atend: ($('mem-sol-naoatend').value || '').trim(),
+        ligacoes:           ($('mem-ligacoes').value || '').trim(),
+        consumo_percapita:  (($('mem-percapita') && $('mem-percapita').value) || '').trim(),
+        projeto: {
+          municipio: ($('mem-municipio').value || '').trim(),
+          uf: ($('mem-uf').value || '').trim() || 'PR',
+          subbacia: ($('mem-subbacia').value || '').trim(),
+          codigo_doc: ($('mem-codigo').value || '').trim(),
+          rev: ($('mem-rev').value || '').trim() || 'R1',
+          data: ($('mem-data').value || '').trim(),
+        },
+        art: {
+          eng_resp: ($('mem-eng').value || '').trim() || 'RODRIGO ANTONIO ZANATTA',
+          crea: ($('mem-crea').value || '').trim() || 'SC-0680240/D',
+          art: ($('mem-art').value || '').trim() || '1720260898051',
+        },
+        // NOVO: um fluxograma por bacia
+        fluxogramas: fluxos,
+        // compatibilidade com o gerador antigo (1 fluxograma só)
+        fluxograma: { etapas: (fluxos[0] && fluxos[0].etapas) || [] },
+      };
+    }
+
+    function setVal(id, v) { const el = $(id); if (el && v != null) el.value = v; }
+
+    function aplicarCfg(cfg) {
+      if (!cfg) return;
+      setVal('mem-modelo-doc',   cfg.modelo_memorial);
+      setVal('mem-tipo-projeto', cfg.tipo_projeto);
+      const p = cfg.projeto || {};
+      setVal('mem-municipio', p.municipio); setVal('mem-uf', p.uf);
+      setVal('mem-subbacia', p.subbacia);   setVal('mem-codigo', p.codigo_doc);
+      setVal('mem-rev', p.rev);             setVal('mem-data', p.data);
+      const a = cfg.art || {};
+      setVal('mem-eng', a.eng_resp); setVal('mem-crea', a.crea); setVal('mem-art', a.art);
+      setVal('mem-marcos-nomes', cfg.marcos_nomes);
+      setVal('mem-sol-atend', cfg.soleiras_atend);
+      setVal('mem-sol-naoatend', cfg.soleiras_nao_atend);
+      setVal('mem-ligacoes', cfg.ligacoes);
+      setVal('mem-percapita', cfg.consumo_percapita);
+      // caminhos
+      const mapa = [['ose','mem-ose-path'],['modelo','mem-modelo-path'],['txt','mem-txt-path'],
+                    ['soleiras','mem-sol-path'],['interferencias','mem-int-path'],
+                    ['mapas','mem-mapas-path'],['marcos','mem-marcos-path']];
+      const vindo = { ose: cfg.ose, modelo: cfg.modelo, txt: cfg.txt_dir, soleiras: cfg.soleiras,
+                      interferencias: cfg.interferencias, mapas: cfg.mapas_dir, marcos: cfg.marcos_dir };
+      mapa.forEach(([k, id]) => {
+        if (vindo[k]) {
+          memPaths[k] = vindo[k];
+          const el = $(id);
+          if (el) el.value = Array.isArray(vindo[k]) ? vindo[k].join(', ') : vindo[k];
+        }
+      });
+      // fluxogramas
+      const list = $('mem-flux-list');
+      if (list) {
+        list.innerHTML = '';
+        const fl = (cfg.fluxogramas && cfg.fluxogramas.length)
+          ? cfg.fluxogramas
+          : [{ bacia: '', etapas: (cfg.fluxograma && cfg.fluxograma.etapas) || [] }];
+        fl.forEach(f => addBacia(f.bacia, f.etapas));
+      }
+    }
+
+    function cfgStatus(txt, cor) {
+      const el = $('mem-cfg-status'); if (!el) return;
+      el.textContent = txt || ''; el.style.color = cor || 'var(--text3)';
+    }
+
+    async function recarregarListaCfg() {
+      const sel = $('mem-cfg-lista'); if (!sel || !window.electronAPI?.memorial?.cfgListar) return;
+      const r = await window.electronAPI.memorial.cfgListar();
+      sel.innerHTML = '<option value="">— carregar configuração —</option>';
+      if (r && r.ok) {
+        (r.itens || []).forEach(it => {
+          const o = document.createElement('option');
+          o.value = it.arquivo; o.textContent = it.rotulo;
+          sel.appendChild(o);
+        });
+        if (!r.itens || !r.itens.length) cfgStatus('Nenhuma configuração salva ainda.');
+      } else {
+        cfgStatus('Não consegui listar as configurações: ' + ((r && r.erro) || '?'), 'var(--red,#A11312)');
+      }
+    }
+
+    async function salvarCfg() {
+      const mun = ($('mem-municipio').value || '').trim();
+      const sub = ($('mem-subbacia').value || '').trim();
+      const sugestao = (mun || 'memorial') + (sub ? ' - ' + sub : '');
+      const nome = window.prompt('Nome da configuração:', sugestao);
+      if (nome === null) return;
+      const r = await window.electronAPI.memorial.cfgSalvar(nome, coletarCfg(null));
+      if (r && r.ok) {
+        cfgStatus('Configuração salva: ' + r.arquivo, 'var(--green,#15803d)');
+        recarregarListaCfg();
+      } else {
+        cfgStatus('Erro ao salvar: ' + ((r && r.erro) || '?'), 'var(--red,#A11312)');
+      }
+    }
+
+    async function carregarCfg() {
+      const sel = $('mem-cfg-lista'); if (!sel || !sel.value) {
+        cfgStatus('Escolha uma configuração na lista.', 'var(--red,#A11312)'); return;
+      }
+      const r = await window.electronAPI.memorial.cfgCarregar(sel.value);
+      if (r && r.ok) {
+        aplicarCfg(r.cfg);
+        cfgStatus('Configuração carregada.', 'var(--green,#15803d)');
+      } else {
+        cfgStatus('Erro ao carregar: ' + ((r && r.erro) || '?'), 'var(--red,#A11312)');
+      }
+    }
+
     async function gerar() {
       if (_memBusy) return;
       if (!window.electronAPI || !window.electronAPI.memorial) {
@@ -14746,35 +14924,7 @@ body.presenting #presentingBadge { display: flex; }
       const saida = await window.electronAPI.memorial.pickSave(defName);
       if (!saida) { memStatus(''); return; }
 
-      const cfg = {
-        saida: saida,
-        modelo_memorial: (($('mem-modelo-doc') && $('mem-modelo-doc').value) || '2s'),
-        ose:            memPaths.ose || null,
-        modelo:         memPaths.modelo || null,
-        txt_dir:        memPaths.txt || null,
-        soleiras:       memPaths.soleiras || null,
-        interferencias: memPaths.interferencias || null,
-        mapas_dir:      memPaths.mapas || null,
-        marcos_dir:     memPaths.marcos || null,
-        marcos_nomes:   ($('mem-marcos-nomes').value || '').trim(),
-        soleiras_atend:     ($('mem-sol-atend').value || '').trim(),
-        soleiras_nao_atend: ($('mem-sol-naoatend').value || '').trim(),
-        ligacoes:           ($('mem-ligacoes').value || '').trim(),
-        projeto: {
-          municipio: municipio,
-          uf: ($('mem-uf').value || '').trim() || 'PR',
-          subbacia: ($('mem-subbacia').value || '').trim(),
-          codigo_doc: ($('mem-codigo').value || '').trim(),
-          rev: ($('mem-rev').value || '').trim() || 'R1',
-          data: ($('mem-data').value || '').trim(),
-        },
-        art: {
-          eng_resp: ($('mem-eng').value || '').trim() || 'RODRIGO ANTONIO ZANATTA',
-          crea: ($('mem-crea').value || '').trim() || 'SC-0680240/D',
-          art: ($('mem-art').value || '').trim() || '1720260898051',
-        },
-        fluxograma: { etapas: collectEtapas() },
-      };
+      const cfg = coletarCfg(saida);
 
       _memBusy = true;
       const btn = $('mem-gerar'); if (btn) { btn.disabled = true; btn.style.opacity = .6; btn.style.cursor = 'default'; }
@@ -14841,12 +14991,18 @@ body.presenting #presentingBadge { display: flex; }
         b.addEventListener('click', () => pickDir(b.dataset.target));
       });
       const add = $('mem-flux-add');
-      if (add) add.addEventListener('click', () => addFluxRow('Rede Projetada',''));
-      // seed inicial com 2 etapas se a lista estiver vazia
+      if (add) add.addEventListener('click', () => addBacia('', null));
+      // botões das configurações salvas
+      const bSalvar = $('mem-cfg-salvar');
+      if (bSalvar) bSalvar.addEventListener('click', salvarCfg);
+      const bCarregar = $('mem-cfg-carregar');
+      if (bCarregar) bCarregar.addEventListener('click', carregarCfg);
+      recarregarListaCfg();
+      // seed inicial: 1 bacia com 2 etapas se a lista estiver vazia
       const list = $('mem-flux-list');
       if (list && !list.children.length) {
-        addFluxRow('Rede Projetada','');
-        addFluxRow('Corpo Receptor','');
+        addBacia('', [{ tipo: 'Rede Projetada', descricao: '' },
+                      { tipo: 'Corpo Receptor', descricao: '' }]);
       }
       return true;
     }
@@ -17923,6 +18079,16 @@ body.presenting #presentingBadge { display: flex; }
             </select>
           </div>
 
+          <!-- 0b) Tipo de projeto -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">Tipo de projeto</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:8px">No <b>Projeto Básico</b> ainda não existem OSEs — os quadros de rede saem do <b>modelo hidráulico</b> (extensão, PVs, TLs, profundidades e trechos). No <b>Executivo</b>, saem da planilha de conferência de OSE.</div>
+            <select id="mem-tipo-projeto" class="mem-inp" style="max-width:340px">
+              <option value="executivo" selected>Projeto Executivo (usa as OSEs)</option>
+              <option value="basico">Projeto Básico (sem OSE — usa o modelo hidráulico)</option>
+            </select>
+          </div>
+
           <!-- 1) Arquivos do projeto -->
           <div>
             <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">1. Arquivos do projeto</div>
@@ -17971,6 +18137,8 @@ body.presenting #presentingBadge { display: flex; }
                 <input id="mem-sol-naoatend" type="text" inputmode="numeric" placeholder="ex.: 5" class="mem-inp"/></label>
               <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Ligações domiciliares (nº)
                 <input id="mem-ligacoes" type="text" inputmode="numeric" placeholder="ex.: 457" class="mem-inp"/></label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Consumo per capita (L/hab.dia)
+                <input id="mem-percapita" type="text" inputmode="decimal" placeholder="ex.: 150 — sem isso sai [A PREENCHER]" class="mem-inp"/></label>
               <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--text2)">Marcos / RRNN (nomes)
                 <input id="mem-marcos-nomes" type="text" placeholder="ex.: M-0032 e M-0033 (ou deixe a pasta achar)" class="mem-inp"/></label>
             </div>
@@ -18011,11 +18179,23 @@ body.presenting #presentingBadge { display: flex; }
           <!-- 4) Fluxograma do sistema (construtor de etapas) -->
           <div>
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-              <div style="font-size:12px;font-weight:600;color:var(--text)">4. Fluxograma do sistema</div>
-              <div style="font-size:11px;color:var(--text3)">Adicione as etapas na ordem do fluxo (montante → corpo receptor)</div>
-              <button id="mem-flux-add" style="margin-left:auto;background:var(--gray-900);color:white;border:none;border-radius:6px;padding:6px 12px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">+ Adicionar etapa</button>
+              <div style="font-size:12px;font-weight:600;color:var(--text)">4. Fluxogramas do sistema</div>
+              <div style="font-size:11px;color:var(--text3)">Um fluxograma por bacia — cada um vira uma figura no memorial. Etapas na ordem do fluxo (montante → corpo receptor)</div>
+              <button id="mem-flux-add" style="margin-left:auto;background:var(--gray-900);color:white;border:none;border-radius:6px;padding:6px 12px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">+ Adicionar bacia</button>
             </div>
-            <div id="mem-flux-list" style="display:flex;flex-direction:column;gap:8px"></div>
+            <div id="mem-flux-list" style="display:flex;flex-direction:column;gap:14px"></div>
+          </div>
+
+          <!-- 4b) Configurações salvas -->
+          <div style="border-top:1px solid var(--border);padding-top:14px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <div style="font-size:12px;font-weight:600;color:var(--text)">Configurações salvas</div>
+              <div style="font-size:11px;color:var(--text3);flex:1;min-width:180px">Guarda município, ligações, caminhos e os fluxogramas. Fica no OneDrive da 2S — abre em qualquer máquina.</div>
+              <select id="mem-cfg-lista" class="mem-inp" style="max-width:280px;flex:0 0 280px"><option value="">— carregar configuração —</option></select>
+              <button id="mem-cfg-carregar" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:7px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Carregar</button>
+              <button id="mem-cfg-salvar" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);border-radius:6px;padding:7px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Salvar configurações</button>
+            </div>
+            <div id="mem-cfg-status" style="font-size:11px;color:var(--text3);margin-top:6px"></div>
           </div>
 
           <!-- 5) Gerar -->

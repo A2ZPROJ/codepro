@@ -71,6 +71,14 @@ MAPA5 = os.path.join(MAPAS, "Mapa5_Interferencias.png")
 MAPA6 = os.path.join(MAPAS, "Mapa6_3D_Topografia.png")
 MAPA7 = os.path.join(MAPAS, "Mapa7_Sondagem.png")
 FLUXOGRAMA = os.path.join(BASE, "Fluxograma_Sistema.png")
+# UM FLUXOGRAMA POR BACIA: lista de (nome_da_bacia, caminho_png). Preenchida em
+# apply_config() a partir de cfg["fluxogramas"]. Vazia => cai no FLUXOGRAMA unico.
+FLUXOGRAMAS = []
+
+# "executivo" (usa as OSEs) | "basico" (sem OSE — os quadros de rede saem do
+# MODELO HIDRAULICO). Decisao do Lucas 28/07: no Projeto Basico ainda nao existem
+# OSEs, entao extensao/PVs/TLs/profundidades/trechos vem do .stsw.
+TIPO_PROJETO = "executivo"
 FOTOS = os.path.join(BASE, "fotos_campo")
 DADOS_JSON = os.path.join(BASE, "dados_amapora.json")
 SAIDA = os.path.join(BASE, "Memorial_Descritivo_2S_AMAPORA.docx")
@@ -399,8 +407,19 @@ def build_subst_map():
 
     # --- Criterios / parametros ---
     # Coeficientes SANEPAR PADRAO, fixos para todos os memoriais (Lucas 07/07):
-    # so o consumo per capita (QPERC) fica a preencher pelo usuario.
-    m["QPERC"] = FALTA_PREENCHER
+    # so o consumo per capita (QPERC) e informado. Desde 28/07 ele vem da
+    # PRE-CONFIGURACAO do Nexus (cfg["consumo_percapita"]); se nao vier, segue
+    # como [A PREENCHER] em vermelho, sem inventar valor.
+    _qp = None
+    if CFG:
+        _qp = CFG.get("consumo_percapita") or (CFG.get("parametros") or {}).get("consumo_percapita")
+    if _qp not in (None, ""):
+        try:
+            m["QPERC"] = ("%.2f" % float(str(_qp).replace(",", "."))).replace(".", ",")
+        except Exception:
+            m["QPERC"] = str(_qp).strip()
+    else:
+        m["QPERC"] = FALTA_PREENCHER
     m["K1"] = "1,20"
     m["K2"] = "1,50"
     m["K3"] = "0,50"
@@ -1443,6 +1462,137 @@ def h3(doc, text):
 # ============================================================================
 # CONSTRUCAO DO DOCUMENTO
 # ============================================================================
+def _marcar_campos_sujos(doc):
+    """Marca TOC / PAGEREF / SEQ como 'dirty' e APAGA o resultado em cache.
+
+    PROBLEMA (Lucas 28/07): no modelo CONSORCIO o Sumario, o Indice de Figuras
+    e o de Tabelas vem do TEMPLATE — e vem com o RESULTADO EM CACHE do documento
+    original, cujos marcadores (_Toc...) NAO existem no memorial gerado. O Word
+    entao mostra "Erro! Indicador nao definido." em cada linha, e a Lista de
+    Figuras aparece vazia.
+
+    Marcar o campo como dirty forca o Word a RECALCULAR na abertura (o
+    updateFields ja esta ligado). Apagar o cache evita o texto errado piscar
+    antes do recalculo — e e o que faz o "Figura 0" virar a numeracao certa.
+    """
+    body = doc.element.body
+    achados = 0
+    # 1) marca os inicios de campo como dirty
+    for fld in body.iter(qn('w:fldChar')):
+        if fld.get(qn('w:fldCharType')) != 'begin':
+            continue
+        r = fld.getparent()
+        p = r.getparent() if r is not None else None
+        if p is None:
+            continue
+        # o instrText do campo vem logo em seguida, no mesmo paragrafo
+        txt = "".join(t.text or "" for t in p.iter(qn('w:instrText')))
+        if any(k in txt for k in ("TOC", "PAGEREF", "SEQ")):
+            fld.set(qn('w:dirty'), 'true')
+            achados += 1
+    # 2) remove o resultado em cache (tudo entre 'separate' e 'end')
+    #    SO em paragrafos de TOC/PAGEREF. NUNCA em paragrafos com SEQ: ali o
+    #    titulo da legenda ("Figura 3 – Mapa de Soleiras") mora no mesmo
+    #    paragrafo e seria APAGADO junto — foi o que aconteceu na 1a tentativa.
+    #    O "0" do SEQ nao precisa ser limpo: o dirty + updateFields renumeram.
+    limpos = 0
+    for p in body.iter(qn('w:p')):
+        instr = "".join(t.text or "" for t in p.iter(qn('w:instrText')))
+        if "SEQ" in instr or not any(k in instr for k in ("TOC", "PAGEREF")):
+            continue
+        runs = list(p.iter(qn('w:r')))
+        dentro = False
+        for r in runs:
+            tipos = [f.get(qn('w:fldCharType')) for f in r.iter(qn('w:fldChar'))]
+            if 'separate' in tipos:
+                dentro = True
+                continue
+            if 'end' in tipos:
+                dentro = False
+                continue
+            if dentro:
+                for t in r.iter(qn('w:t')):
+                    if t.text:
+                        t.text = ""
+                        limpos += 1
+    sys.stderr.write("[memorial] campos marcados p/ recalculo: %d (cache limpo em %d runs)\n"
+                     % (achados, limpos))
+
+
+def _preencher_revisoes(doc):
+    """Tabela de REVISOES (pagina 2) a partir do config.
+
+    Lucas 28/07: "se eu gerar pela primeira vez sera a A0, com a data que eu
+    colocar nas pre-configuracoes; e dai as revisoes podemos controlar pelo
+    arquivo JSON". Antes o template trazia A0 + R1 FIXOS, entao TODO memorial
+    saia com uma R1 que nao existia.
+
+    Config esperado (opcional):
+        cfg["revisoes"] = [
+          {"rev":"A0","descricao":"EMISSÃO INICIAL","data":"28/07/2026",
+           "elaborado":"...","aprovado":"..."},
+          {"rev":"R1","descricao":"REVISÃO","data":"...", ...}
+        ]
+    Sem isso -> UMA linha A0 com a data de projeto.data (emissao inicial)."""
+    cfg = CFG or {}
+    proj = cfg.get("projeto") or {}
+    art = cfg.get("art") or {}
+    elab = art.get("eng_resp") or ""
+    aprov = art.get("aprovado") or elab
+
+    revs = cfg.get("revisoes") or []
+    if not revs:
+        revs = [{"rev": "A0", "descricao": "EMISSÃO INICIAL",
+                 "data": proj.get("data_r0") or proj.get("data") or "",
+                 "elaborado": elab, "aprovado": aprov}]
+
+    # acha a tabela pelo cabecalho
+    alvo = None
+    for t in doc.tables:
+        try:
+            cab = [c.text.strip().upper() for c in t.rows[0].cells]
+        except Exception:
+            continue
+        if "REVISÃO" in cab and "APROVADOR" in cab:
+            alvo = t
+            break
+    if alvo is None:
+        return
+
+    def _escrever(row, vals):
+        for cel, val in zip(row.cells, vals):
+            if cel.paragraphs and cel.paragraphs[0].runs:
+                cel.paragraphs[0].runs[0].text = val
+                for r in cel.paragraphs[0].runs[1:]:
+                    r.text = ""
+                for p in cel.paragraphs[1:]:
+                    for r in p.runs:
+                        r.text = ""
+            else:
+                cel.text = val
+
+    corpo = alvo.rows[1:]
+    for i, row in enumerate(corpo):
+        if i < len(revs):
+            r = revs[i]
+            _escrever(row, [str(r.get("rev", "")), str(r.get("descricao", "")),
+                            str(r.get("data", "")), str(r.get("elaborado", elab)),
+                            str(r.get("aprovado", aprov))])
+        else:
+            _escrever(row, ["", "", "", "", ""])   # linha sobrando fica VAZIA
+
+    # mais revisoes do que linhas: clona a ultima
+    if len(revs) > len(corpo):
+        import copy as _copy
+        for r in revs[len(corpo):]:
+            nova = _copy.deepcopy(alvo.rows[-1]._tr)
+            alvo._tbl.append(nova)
+            _escrever(alvo.rows[-1], [str(r.get("rev", "")), str(r.get("descricao", "")),
+                                      str(r.get("data", "")), str(r.get("elaborado", elab)),
+                                      str(r.get("aprovado", aprov))])
+    sys.stderr.write("[memorial] tabela de revisoes: %d revisao(oes)\n" % len(revs))
+
+
 def _set_update_fields_on_open(doc):
     """Adiciona <w:updateFields w:val="true"/> ao settings.xml para que o Word
     atualize os campos automaticos (SUMARIO, numero de pagina) ao ABRIR o
@@ -1879,20 +2029,31 @@ def build():
     # TOLERANCIA A FLUXOGRAMA FALTANTE: so cria a pagina paisagem dedicada se o
     # PNG do fluxograma existir; senao, pula a secao inteira graciosamente (o
     # contador de figuras nao avanca, mantendo a numeracao correta).
-    if FLUXOGRAMA and os.path.exists(FLUXOGRAMA):
+    # UMA PAGINA POR BACIA: FLUXOGRAMAS = [(nome_bacia, png), ...]. Quando ha um
+    # so (ou o config e o antigo, com "fluxograma" unico), o comportamento e
+    # identico ao de antes. Pedido do Lucas 28/07: "cada bacia tem seu
+    # fluxograma e dentro do mesmo memorial eu posso ter varias bacias".
+    _fluxos = [(b, p) for (b, p) in (FLUXOGRAMAS or []) if p and os.path.exists(p)]
+    if not _fluxos and FLUXOGRAMA and os.path.exists(FLUXOGRAMA):
+        _fluxos = [("", FLUXOGRAMA)]
+
+    for _bacia, _fpng in _fluxos:
+        _sufixo = (" — " + _bacia) if _bacia else ""
+        _legenda = "Fluxograma do Sistema de Esgotamento Sanitário" + _sufixo
         new_section_landscape(doc)
-        _hflux = h1(doc, "FLUXOGRAMA DO SISTEMA")
+        _hflux = h1(doc, "FLUXOGRAMA DO SISTEMA" + (" — " + _bacia.upper() if _bacia else ""))
         _hflux.paragraph_format.space_before = Pt(2)
         _hflux.paragraph_format.space_after = Pt(4)
         add_para(doc,
-                 "O fluxograma a seguir sintetiza a concepção do Sistema de Esgotamento Sanitário da "
-                 "{{SUBBACIA}}, desde a contribuição das redes coletoras, passando pela elevatória "
+                 "O fluxograma a seguir sintetiza a concepção do Sistema de Esgotamento Sanitário "
+                 + ("da bacia " + _bacia if _bacia else "da {{SUBBACIA}}")
+                 + ", desde a contribuição das redes coletoras, passando pela elevatória "
                  "({{EEE}}) e pela estação de tratamento ({{ETE}}), até a destinação final no corpo "
                  "receptor ({{CORPO_RECEPTOR}}).", space_after=4)
         # imagem grande ocupando a pagina landscape
         _fig_n[0] += 1
         _flux_n = _fig_n[0]
-        FIGURAS.append((_flux_n, "Fluxograma do Sistema de Esgotamento Sanitário"))
+        FIGURAS.append((_flux_n, _legenda))
         _sec = doc.sections[-1]
         _avail_w = page_width_emu(_sec)
         _avail_h = _sec.page_height - _sec.top_margin - _sec.bottom_margin
@@ -1901,7 +2062,7 @@ def build():
         _pflux.paragraph_format.space_before = Pt(4)
         _pflux.paragraph_format.space_after = Pt(2)
         _rflux = _pflux.add_run()
-        _picf = _rflux.add_picture(FLUXOGRAMA, width=Emu(int(_avail_w * 0.90)))
+        _picf = _rflux.add_picture(_fpng, width=Emu(int(_avail_w * 0.90)))
         # cap de altura conservador para que TODO o conteudo da pagina paisagem
         # (titulo + intro + imagem + legenda + fonte + paragrafo de quebra de
         # secao) caiba numa UNICA pagina, evitando a pagina paisagem em branco.
@@ -1911,14 +2072,15 @@ def build():
             _picf.height = Emu(int(_picf.height * _rt))
             _picf.width = Emu(int(_picf.width * _rt))
         # legenda como estilo Caption + campo SEQ Figura (popula a Lista de Figuras)
-        add_caption(doc, "Figura", _flux_n, "Fluxograma do Sistema de Esgotamento Sanitário",
+        add_caption(doc, "Figura", _flux_n, _legenda,
                     align=WD_ALIGN_PARAGRAPH.CENTER)
         _srcf = doc.add_paragraph()
         _srcf.alignment = WD_ALIGN_PARAGRAPH.CENTER
         _rsf = _srcf.add_run("Fonte: 2S Engenharia, 2026.")
         _rsf.italic = True; _rsf.font.size = Pt(8.5); _rsf.font.name = FONTE
         _rsf.font.color.rgb = RGBColor(0x70, 0x70, 0x70)
-    else:
+
+    if not _fluxos:
         sys.stderr.write(
             "[memorial] AVISO: fluxograma ausente, secao pulada -> %s\n" % FLUXOGRAMA)
 
@@ -2720,6 +2882,8 @@ def build():
 
     # atualiza os campos (SUMARIO/PAGE) automaticamente ao abrir no Word,
     # sem necessidade de F9.
+    _preencher_revisoes(doc)
+    _marcar_campos_sujos(doc)
     _set_update_fields_on_open(doc)
 
     # Modelo Consorcio: o timbrado vive no header DEFAULT (2 imgs, todas as
@@ -2979,10 +3143,23 @@ def apply_config(cfg):
       "fluxograma": { "etapas": [ {tipo, descricao}, ... ], "titulo": "" }
     }
     """
-    global CFG, BASE, MAPAS, FLUXOGRAMA, FOTOS, DADOS_JSON, DADOS_EXTRA_JSON
+    global CFG, BASE, MAPAS, FLUXOGRAMA, FLUXOGRAMAS, FOTOS, DADOS_JSON, DADOS_EXTRA_JSON
     global SAIDA, TEMPLATE, REDE_GEOJSON, WORKDIR, TEM_SOLEIRAS, TEM_INTERF
-    global MODELO_MEMORIAL, FONTE
+    global MODELO_MEMORIAL, FONTE, TIPO_PROJETO
     CFG = cfg or {}
+
+    # Tipo de projeto: "executivo" (usa OSE) ou "basico" (usa o modelo hidraulico).
+    TIPO_PROJETO = (cfg.get("tipo_projeto") or "executivo").strip().lower()
+    if TIPO_PROJETO not in ("executivo", "basico"):
+        TIPO_PROJETO = "executivo"
+    if TIPO_PROJETO == "basico":
+        # No Projeto Basico ainda NAO existem OSEs. Ignoramos qualquer planilha de
+        # OSE que tenha ficado no config (ex.: config salvo de um executivo e
+        # reaproveitado) pra que os quadros de rede saiam do MODELO HIDRAULICO.
+        for _k in ("ose", "ose_xlsx"):
+            if cfg.get(_k):
+                sys.stderr.write("[memorial] Projeto Basico: ignorando OSE informada (%s)\n" % _k)
+                cfg[_k] = None
 
     # Modelo do memorial: "2s" (padrao) ou "consorcio" (SANEPAR/Acciona).
     MODELO_MEMORIAL = (cfg.get("modelo_memorial") or "2s").strip().lower()
@@ -3059,14 +3236,35 @@ def apply_config(cfg):
     # mapas
     _resolver_mapas(cfg.get("mapas_dir") or MAPAS)
 
-    # fluxograma: gera do config (etapas) num PNG temporario; senao usa o do BASE
-    flux_png = os.path.join(WORKDIR, "_fluxograma_memorial.png")
-    gerado = _gerar_fluxograma_do_config(cfg, flux_png)
-    if gerado:
-        FLUXOGRAMA = gerado
-    elif cfg.get("fluxograma_png") and os.path.exists(cfg["fluxograma_png"]):
-        FLUXOGRAMA = cfg["fluxograma_png"]
-    # senao mantem o default (BASE/Fluxograma_Sistema.png)
+    # fluxogramas: UM POR BACIA (cfg["fluxogramas"]). Cada um vira um PNG proprio
+    # e, no documento, uma pagina paisagem com sua figura e legenda.
+    bacias = cfg.get("fluxogramas") or []
+    if bacias:
+        for i, b in enumerate(bacias):
+            etapas = (b or {}).get("etapas") or []
+            if not etapas:
+                continue
+            nome = ((b or {}).get("bacia") or "").strip()
+            png = os.path.join(WORKDIR, "_fluxograma_bacia_%02d.png" % (i + 1))
+            sub = cfg.get("projeto", {}).get("subbacia", "")
+            gerado_b = _gerar_fluxograma_do_config(
+                {"fluxograma": {"etapas": etapas, "titulo": (b or {}).get("titulo")},
+                 "projeto": dict(cfg.get("projeto") or {}, subbacia=(nome or sub))},
+                png)
+            if gerado_b:
+                FLUXOGRAMAS.append((nome, gerado_b))
+        if FLUXOGRAMAS:
+            FLUXOGRAMA = FLUXOGRAMAS[0][1]   # compat: 1º vira o "principal"
+
+    # compatibilidade com o config antigo (um fluxograma so)
+    if not FLUXOGRAMAS:
+        flux_png = os.path.join(WORKDIR, "_fluxograma_memorial.png")
+        gerado = _gerar_fluxograma_do_config(cfg, flux_png)
+        if gerado:
+            FLUXOGRAMA = gerado
+        elif cfg.get("fluxograma_png") and os.path.exists(cfg["fluxograma_png"]):
+            FLUXOGRAMA = cfg["fluxograma_png"]
+        # senao mantem o default (BASE/Fluxograma_Sistema.png)
 
 
 def main():

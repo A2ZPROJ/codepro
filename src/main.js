@@ -2707,6 +2707,91 @@ ipcMain.handle('memorial:abrir', async (_e, p) => {
   catch (e) { return { ok: false, error: e.message }; }
 });
 
+// ── CONFIGURAÇÕES SALVAS DO MEMORIAL ────────────────────────────────
+// Ficam em _APOIO\MEMORIAL-CONFIGS no OneDrive da 2S, MESMO padrão do
+// orçamento das EEE: o caminho absoluto muda de máquina (nome do usuário,
+// e cada um sincroniza a partir de um nível diferente da biblioteca), mas
+// DENTRO do OneDrive é sempre o mesmo. Por isso reusamos o
+// acharPastaNoOneDrive(), que já resolve isso em qualquer PC.
+// Decisão do Lucas, 28/07.
+const MEMORIAL_CFG_DIRNAME = 'MEMORIAL-CONFIGS';
+const ehPastaMemorialCfg = () => true;   // qualquer pasta com esse nome serve
+
+function memorialCfgDir({ criar = false } = {}) {
+  if (process.env.NEXUS_MEMORIAL_CFG_DIR) return process.env.NEXUS_MEMORIAL_CFG_DIR;
+  const achado = acharPastaNoOneDrive(MEMORIAL_CFG_DIRNAME, ehPastaMemorialCfg);
+  if (achado) return achado;
+  if (!criar) return null;
+  // Só cria na ESCRITA (nunca na leitura — evita pasta vazia órfã, bug 2.84.88).
+  for (const root of oneDriveRoots()) {
+    for (const n of (() => { try { return fs.readdirSync(root); } catch { return []; } })()) {
+      const apoio = path.join(root, n, '002. ACCIONA', '001. BLOCO 02', '_APOIO');
+      if (fs.existsSync(apoio)) {
+        const alvo = path.join(apoio, MEMORIAL_CFG_DIRNAME);
+        try { fs.mkdirSync(alvo, { recursive: true }); return alvo; } catch {}
+      }
+    }
+  }
+  return null;
+}
+
+const _cfgSafeName = (s) => String(s || 'memorial')
+  .replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_').slice(0, 80) || 'memorial';
+
+ipcMain.handle('memorial:cfg:listar', async () => {
+  try {
+    const dir = memorialCfgDir();
+    if (!dir) return { ok: true, dir: null, itens: [] };
+    const itens = fs.readdirSync(dir)
+      .filter(f => f.toLowerCase().endsWith('.json'))
+      .map(f => {
+        const full = path.join(dir, f);
+        let rotulo = f.replace(/\.json$/i, '');
+        try {
+          const j = JSON.parse(fs.readFileSync(full, 'utf8'));
+          const mun = j?.projeto?.municipio, sub = j?.projeto?.subbacia;
+          if (mun) rotulo = mun + (sub ? ' — ' + sub : '');
+        } catch {}
+        let mtime = null;
+        try { mtime = fs.statSync(full).mtime.toISOString(); } catch {}
+        return { arquivo: f, rotulo, mtime };
+      })
+      .sort((a, b) => String(b.mtime).localeCompare(String(a.mtime)));
+    return { ok: true, dir, itens };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
+
+ipcMain.handle('memorial:cfg:salvar', async (_e, { nome, cfg } = {}) => {
+  try {
+    const dir = memorialCfgDir({ criar: true });
+    if (!dir) return { ok: false, erro: 'Não achei a pasta _APOIO do OneDrive da 2S nesta máquina.' };
+    const base = _cfgSafeName(nome || cfg?.projeto?.municipio);
+    const alvo = path.join(dir, base + '.json');
+    const payload = { ...cfg, _salvo_em: new Date().toISOString(), _versao_app: app.getVersion() };
+    fs.writeFileSync(alvo, JSON.stringify(payload, null, 2), 'utf8');
+    return { ok: true, arquivo: path.basename(alvo), caminho: alvo };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
+
+ipcMain.handle('memorial:cfg:carregar', async (_e, arquivo) => {
+  try {
+    const dir = memorialCfgDir();
+    if (!dir) return { ok: false, erro: 'Pasta de configurações não encontrada.' };
+    const alvo = path.join(dir, path.basename(String(arquivo || '')));
+    if (!fs.existsSync(alvo)) return { ok: false, erro: 'Configuração não encontrada: ' + arquivo };
+    return { ok: true, cfg: JSON.parse(fs.readFileSync(alvo, 'utf8')) };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
+
+ipcMain.handle('memorial:cfg:excluir', async (_e, arquivo) => {
+  try {
+    const dir = memorialCfgDir();
+    if (!dir) return { ok: false, erro: 'Pasta de configurações não encontrada.' };
+    fs.unlinkSync(path.join(dir, path.basename(String(arquivo || ''))));
+    return { ok: true };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
+
 // ────────────────────────────────────────────────────────────────────
 // MAPA GERAL — do Excel FlexTable (SewerGEMS) gera SHAPE (PV c/ cotas +
 // REDES) + DXF geral (blocos SES-POÇO-DE-VISITA/SES-TL + MLEADER com
