@@ -3036,6 +3036,7 @@ def _gerar_mapas(geo_dir, mapas_dir, cfg):
     if ibge:
         env["MEMORIAL_IBGE"] = str(ibge)
     env["MEMORIAL_MUNICIPIO"] = proj.get("municipio") or "Amaporã"
+    env["MEMORIAL_UF"] = proj.get("uf") or "PR"
     if proj.get("subbacia"):
         env["MEMORIAL_SUBBACIA"] = proj.get("subbacia")
     if cfg.get("sondagem_xlsx"):

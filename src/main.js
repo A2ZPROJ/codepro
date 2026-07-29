@@ -3087,13 +3087,44 @@ app.on('browser-window-created', (_e, win) => {
 //   HKCU\Software\Autodesk\AutoCAD\<R25.1|R26.0>\<ProductKey>\Profiles\<Profile>\General
 //   ValueName: TrustedPaths (REG_SZ, paths separados por ;)
 // Cada versão registra a SUA pasta no seu próprio ramo do registro.
+// Roda um script PowerShell e devolve o stdout (já trimado).
+//
+// ⚠ NUNCA voltar pra `execSync('powershell.exe ... -Command "<script>"')`: essa
+// string passa pelo **cmd.exe**, que corta o comando no PRIMEIRO \n. Com script
+// multi-linha o PowerShell não roda, o stdout volta VAZIO e NÃO estoura exceção —
+// falha 100% silenciosa. Foi exatamente isso que manteve `c3dEnsureTrustedPath` e
+// `c3dEnsureAppLoader` como no-op em TODA máquina desde que foram escritos (o log
+// ainda imprimia "OK", porque a saída vazia não batia com nenhum marcador e caía no
+// else). Diagnosticado 29/07/2026 na máquina da Camila (2S-ENG-04, Civil 2027):
+// TrustedPaths vazio nos 4 profiles com o log dizendo "OK em  profile(s)" — o espaço
+// duplo era o contador vindo vazio.
+// `-EncodedCommand` + `execFileSync` não passam por cmd.exe nem por escape de aspas.
+function psRun(script, timeout = 15000) {
+  const { execFileSync } = require('child_process');
+  const enc = Buffer.from(script, 'utf16le').toString('base64');
+  return execFileSync(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', enc],
+    { windowsHide: true, timeout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+  ).trim();
+}
+
+// true se o Civil 3D está aberto. Importa porque o AutoCAD mantém o profile em
+// memória e o REESCREVE no fechamento — qualquer TrustedPaths gravado com ele
+// aberto é APAGADO quando o usuário fecha o CAD (gotcha confirmado 09/07 na Katia).
+function acadEstaAberto() {
+  try {
+    return psRun("if (Get-Process acad -ErrorAction SilentlyContinue) { 'SIM' } else { 'NAO' }", 8000) === 'SIM';
+  } catch { return false; }
+}
+
 function c3dEnsureTrustedPath() {
+  const civilAberto = acadEstaAberto();
   for (const t of C3D_TARGETS) {
     const trustedDir = c3dBundleDllDir(t.ver);
     if (!fs.existsSync(trustedDir)) continue;          // só registra versão instalada
     const regVer = t.seriesMin;                        // 'R25.1' / 'R26.0' = chave do registro
     try {
-      const { execSync } = require('child_process');
       // PowerShell que percorre todos os profiles daquela versão e garante o path.
       // Idempotente: se path já está presente, não duplica. Emite um marcador
       // NO_BRANCH/OK:<n>/NO_PROFILES pra o Node logar — é o que revela, no log do
@@ -3104,15 +3135,18 @@ $ErrorActionPreference = 'SilentlyContinue';
 $bundlePath = '${trustedDir.replace(/'/g, "''")}';
 $baseRegPath = 'HKCU:\\Software\\Autodesk\\AutoCAD\\${regVer}';
 if (-not (Test-Path $baseRegPath)) { Write-Output 'NO_BRANCH'; exit 0; }
-$n = 0;
+# $script: é OBRIGATÓRIO: dentro de ForEach-Object ANINHADO, "$n++" escreve numa
+# cópia do escopo filho e o contador de fora fica em 0 (validado 29/07).
+# NÃO usar o nome $profile — é variável automática do PowerShell.
+$script:n = 0;
 Get-ChildItem $baseRegPath -ErrorAction SilentlyContinue | ForEach-Object {
   $productKey = $_.PSChildName;
   $profilesPath = "$baseRegPath\\$productKey\\Profiles";
   if (-not (Test-Path $profilesPath)) { return; }
 
   Get-ChildItem $profilesPath -ErrorAction SilentlyContinue | ForEach-Object {
-    $profile = $_.PSChildName;
-    $generalPath = "$profilesPath\\$profile\\General";
+    $perfil = $_.PSChildName;
+    $generalPath = "$profilesPath\\$perfil\\General";
     if (-not (Test-Path $generalPath)) {
       New-Item -Path $generalPath -Force | Out-Null;
     }
@@ -3123,24 +3157,27 @@ Get-ChildItem $baseRegPath -ErrorAction SilentlyContinue | ForEach-Object {
       $newValue = if ($current) { "$current;$bundlePath" } else { $bundlePath };
       Set-ItemProperty -Path $generalPath -Name 'TrustedPaths' -Value $newValue -Type String -Force;
     }
-    $n++;
+    $script:n++;
   };
 };
-if ($n -eq 0) { Write-Output 'NO_PROFILES'; } else { Write-Output ('OK:' + $n); }
+if ($script:n -eq 0) { Write-Output 'NO_PROFILES'; } else { Write-Output ('OK:' + $script:n); }
 exit 0;
 `.trim();
 
-      const out = execSync(`powershell.exe -NoProfile -NonInteractive -Command "${ps.replace(/"/g, '\\"')}"`, {
-        windowsHide: true,
-        timeout: 8000,
-        encoding: 'utf8',
-      }).trim();
+      const out = psRun(ps);
       if (out === 'NO_BRANCH')
         logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}/${regVer}) PULADO — Civil ${t.ver} nunca foi aberto (ramo do registro ${regVer} inexistente). Abra o Civil ${t.ver} 1x e reabra o Nexus.`);
       else if (out === 'NO_PROFILES')
         logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}/${regVer}) sem profiles no registro — SECURELOAD pode pedir confirmação na 1ª carga.`);
-      else
-        logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}/${regVer}) OK em ${out.replace('OK:', '')} profile(s): ${trustedDir}`);
+      else if (/^OK:\d+$/.test(out)) {
+        logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}/${regVer}) OK em ${out.slice(3)} profile(s): ${trustedDir}`);
+        // O AutoCAD reescreve o profile ao FECHAR, apagando o que gravamos agora.
+        if (civilAberto)
+          logUpdate(`civil3d:bundle: ⚠ TrustedPaths (${t.ver}) gravado com o Civil ABERTO — ele apaga isso ao fechar. Feche o Civil e reabra o Nexus.`);
+      } else
+        // Qualquer outra coisa (inclusive VAZIO) é FALHA. Antes caía aqui e era
+        // logado como "OK" — foi o que escondeu o bug do cmd.exe por semanas.
+        logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}/${regVer}) FALHOU — resposta inesperada do PowerShell: '${out}'`);
     } catch (e) {
       logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}) falhou: ` + e.message);
     }
@@ -3163,14 +3200,13 @@ function c3dEnsureAppLoader() {
     if (!fs.existsSync(dllPath)) continue;              // só registra versão instalada
     const regVer = t.seriesMin;                         // 'R25.1' / 'R26.0'
     try {
-      const { execSync } = require('child_process');
       const ps = `
 $ErrorActionPreference = 'SilentlyContinue';
 $dll = '${dllPath.replace(/'/g, "''")}';
 $appName = 'Nexus${t.ver}';
 $baseRegPath = 'HKCU:\\Software\\Autodesk\\AutoCAD\\${regVer}';
 if (-not (Test-Path $baseRegPath)) { Write-Output 'NO_BRANCH'; exit 0; }
-$n = 0;
+$script:n = 0;
 Get-ChildItem $baseRegPath -ErrorAction SilentlyContinue | ForEach-Object {
   $productKey = $_.PSChildName;
   $appsPath = "$baseRegPath\\$productKey\\Applications";
@@ -3181,20 +3217,20 @@ Get-ChildItem $baseRegPath -ErrorAction SilentlyContinue | ForEach-Object {
   New-ItemProperty -Path $key -Name 'LOADCTRLS'   -Value 2   -PropertyType DWord  -Force | Out-Null;
   New-ItemProperty -Path $key -Name 'MANAGED'     -Value 1   -PropertyType DWord  -Force | Out-Null;
   New-ItemProperty -Path $key -Name 'LOADER'      -Value $dll -PropertyType String -Force | Out-Null;
-  $n++;
+  $script:n++;
 };
-if ($n -eq 0) { Write-Output 'NO_PRODUCTKEY'; } else { Write-Output ('OK:' + $n); }
+if ($script:n -eq 0) { Write-Output 'NO_PRODUCTKEY'; } else { Write-Output ('OK:' + $script:n); }
 exit 0;
 `.trim();
-      const out = execSync(`powershell.exe -NoProfile -NonInteractive -Command "${ps.replace(/"/g, '\\"')}"`, {
-        windowsHide: true, timeout: 8000, encoding: 'utf8',
-      }).trim();
+      const out = psRun(ps);
       if (out === 'NO_BRANCH')
         logUpdate(`civil3d:bundle: AppLoader (${t.ver}/${regVer}) PULADO — Civil ${t.ver} nunca aberto (ramo ${regVer} inexistente).`);
       else if (out === 'NO_PRODUCTKEY')
         logUpdate(`civil3d:bundle: AppLoader (${t.ver}/${regVer}) sem ProductKey no registro.`);
+      else if (/^OK:\d+$/.test(out))
+        logUpdate(`civil3d:bundle: AppLoader (${t.ver}/${regVer}) OK em ${out.slice(3)} ProductKey(s): ${dllPath}`);
       else
-        logUpdate(`civil3d:bundle: AppLoader (${t.ver}/${regVer}) OK em ${out.replace('OK:', '')} ProductKey(s): ${dllPath}`);
+        logUpdate(`civil3d:bundle: AppLoader (${t.ver}/${regVer}) FALHOU — resposta inesperada do PowerShell: '${out}'`);
     } catch (e) {
       logUpdate(`civil3d:bundle: AppLoader (${t.ver}) falhou: ` + e.message);
     }

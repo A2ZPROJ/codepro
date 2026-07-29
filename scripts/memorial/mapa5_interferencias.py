@@ -141,8 +141,8 @@ ymin, ymax = by0-my, by1+my
 # ---------------- figura ----------------
 fig = plt.figure(figsize=(11.69, 8.27), dpi=300)
 fig.patch.set_facecolor(C.PAPER)
-C.title_block(fig, "MAPA DE INTERFERÊNCIAS — BACIA 02",
-              "Rede coletora projetada x redes existentes (água e drenagem) — Amaporã / PR")
+C.title_block(fig, "MAPA DE INTERFERÊNCIAS — " + C.SUBBACIA.upper(),
+              "Rede coletora projetada x redes existentes (água e drenagem) — " + C.MUN_UF)
 
 ax = fig.add_axes(C.map_axes_rect())
 ax.set_xlim(xmin, xmax); ax.set_ylim(ymin, ymax); ax.set_aspect("equal")

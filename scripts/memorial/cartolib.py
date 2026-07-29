@@ -76,6 +76,22 @@ INTDIR = os.environ.get("MEMORIAL_INTERF", "")
 IBGE = os.environ.get("MEMORIAL_IBGE", "4100905")
 # diretorio com os TXT de topografia — usado p/ (re)gerar o cache topo se faltar
 TXT_DIR = os.environ.get("MEMORIAL_TXT_DIR", "")
+
+# ---- IDENTIFICACAO DO PROJETO (28/07) -------------------------------------
+# BUG que isso corrige: os mapas traziam "Amaporã / PR" e "Bacia 02" ESCRITOS
+# NO CODIGO. O memorial ja passava MEMORIAL_MUNICIPIO/MEMORIAL_SUBBACIA por
+# ambiente, mas os scripts ignoravam — entao TODO memorial, de qualquer cidade,
+# saia com Amapora nos mapas. Usar SEMPRE estas constantes nos titulos.
+MUNICIPIO = os.environ.get("MEMORIAL_MUNICIPIO", "Amaporã")
+UF        = os.environ.get("MEMORIAL_UF", "PR")
+SUBBACIA  = os.environ.get("MEMORIAL_SUBBACIA", "Bacia 02")
+MUN_UF    = "%s / %s" % (MUNICIPIO, UF)
+
+
+def bacia_label(prefixo=""):
+    """Rotulo da bacia pro titulo, ja em CAIXA ALTA quando usado em titulo."""
+    s = (SUBBACIA or "").strip() or "Bacia"
+    return (prefixo + s) if prefixo else s
 os.makedirs(OUT, exist_ok=True)
 os.makedirs(CACHE, exist_ok=True)
 

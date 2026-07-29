@@ -71,8 +71,8 @@ xmin, xmax = bx0-mx, bx1+mx; ymin, ymax = by0-my, by1+my
 
 fig = plt.figure(figsize=(11.69, 8.27), dpi=300)
 fig.patch.set_facecolor(C.PAPER)
-C.title_block(fig, "CLASSIFICAÇÃO DAS SOLEIRAS — BACIA 02",
-              "Imóveis atendidos x não atendidos por gravidade — Amaporã / PR")
+C.title_block(fig, "CLASSIFICAÇÃO DAS SOLEIRAS — " + C.SUBBACIA.upper(),
+              "Imóveis atendidos x não atendidos por gravidade — " + C.MUN_UF)
 
 ax = fig.add_axes(C.map_axes_rect())
 ax.set_xlim(xmin, xmax); ax.set_ylim(ymin, ymax); ax.set_aspect("equal")
@@ -120,11 +120,11 @@ handles = [
     Line2D([0], [0], marker="v", color="none", mfc=C.RED, mec="white",
            ms=9, label=f"Não atendida — negativa ({len(neg)})"),
     Line2D([0], [0], color="#FFCC00", lw=2.2, label="Rede coletora — Bacia 02"),
-    Line2D([0], [0], color=C.RED, lw=2.0, ls=(0, (6, 3)), label="Limite da Bacia 02"),
+    Line2D([0], [0], color=C.RED, lw=2.0, ls=(0, (6, 3)), label="Limite da " + C.SUBBACIA),
 ]
 C.footer_legend(fig, handles, ncol=4, map_ax=ax,
                 extra_right=(f"ÍNDICE DE ATENDIMENTO: {idx}%\n"
-                             f"Soleiras Bacia 02: {ntot} (pos {len(pos)} / neg {len(neg)})"))
+                             f"Soleiras {C.SUBBACIA}: {ntot} (pos {len(pos)} / neg {len(neg)})"))
 
 src_txt = ("Imagem de fundo: Esri World Imagery" if bm else "Fundo: sem imagem (offline)")
 C.credits(fig, fonte=src_txt + "  ·  Levantamento 2S")

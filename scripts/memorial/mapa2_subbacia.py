@@ -28,8 +28,8 @@ print("Bacia 02 — PV/TL:", len(pvs), "(PV", n_pv, "/ TL", n_tl, ") trechos:", 
 
 fig = plt.figure(figsize=(11.69, 8.27), dpi=300)
 fig.patch.set_facecolor(C.PAPER)
-C.title_block(fig, "REDE COLETORA PROJETADA — BACIA 02",
-              "Delimitação da bacia de esgotamento e traçado da rede coletora — Amaporã / PR")
+C.title_block(fig, "REDE COLETORA PROJETADA — " + C.SUBBACIA.upper(),
+              "Delimitação da bacia de esgotamento e traçado da rede coletora — " + C.MUN_UF)
 
 ax = fig.add_axes(C.map_axes_rect())
 ax.set_xlim(xmin, xmax); ax.set_ylim(ymin, ymax)
@@ -79,7 +79,7 @@ handles = [
     Line2D([0], [0], marker="s", color="none", mfc="#FFCC00", mec=C.DARK,
            ms=8, label=f"Terminal de Limpeza — TL ({n_tl})"),
     Line2D([0], [0], color=C.RED, lw=2.2, ls=(0, (6, 3)),
-           label="Limite da Bacia 02"),
+           label="Limite da " + C.SUBBACIA),
 ]
 C.footer_legend(fig, handles, ncol=4, map_ax=ax,
                 extra_right=(f"BACIA 02 · {len(rede_in)} trechos · {n_pv} PV · {n_tl} TL\n"

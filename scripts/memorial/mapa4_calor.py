@@ -63,8 +63,8 @@ print("cotas grade:", round(zmin, 2), "a", round(zmax, 2))
 # ---------- figura ----------
 fig = plt.figure(figsize=(11.69, 8.27), dpi=300)
 fig.patch.set_facecolor(C.PAPER)
-C.title_block(fig, "MAPA HIPSOMÉTRICO — TOPOGRAFIA DA BACIA 02",
-              "Modelo digital do terreno (10.035 pontos GNSS) e rede coletora — Amaporã / PR")
+C.title_block(fig, "MAPA HIPSOMÉTRICO — TOPOGRAFIA DA " + C.SUBBACIA.upper(),
+              "Modelo digital do terreno e rede coletora — " + C.MUN_UF)
 
 MAP_RECT = C.map_axes_rect()
 ax = fig.add_axes(MAP_RECT)
