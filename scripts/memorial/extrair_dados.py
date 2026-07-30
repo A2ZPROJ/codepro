@@ -1041,6 +1041,8 @@ def extrair_modelo_rede(db_path):
         inv = _prop("GravityNode_Physical_Data", "Physical_InvertElevation")
         rim = _prop("GravitySurfaceStructure_Physical_Data", "Physical_RimElevation")
         rim_out = _prop("Outfall_Physical_Data", "Physical_RimElevation")
+        # cota de TERRENO — PCT real quando o no usa "Rim = Ground Elevation"
+        ground = _prop("BaseNode_Physical_Data", "Physical_GroundElevation")
         dia = _prop("Conduit_Physical_Data", "ConduitDiameter")
 
         condutos = {e for (e,) in _q("SELECT DISTINCT DomainElementID FROM Conduit_Physical_Data")}
@@ -1058,7 +1060,8 @@ def extrair_modelo_rede(db_path):
             if eid not in tipo3 or eid not in rotulo or not ativo(no_ativo, eid):
                 continue
             nome = (rotulo[eid] or "").strip()
-            ct = rim.get(eid) or rim_out.get(eid)
+            g = ground.get(eid)
+            ct = g if (g and g > 1) else (rim.get(eid) or rim_out.get(eid))
             cf = inv.get(eid)
             ct_m = round(ct * FT, 3) if ct else None
             cf_m = round(cf * FT, 3) if cf else None
