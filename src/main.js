@@ -2422,6 +2422,15 @@ ipcMain.handle('orc-elev:cotacoes-add-doc', async (_e, meta) => {
     const dest = path.join(docsDir, destName);
     let arquivoFinal = src, copiado = false;
     try { fs.copyFileSync(src, dest); arquivoFinal = dest; copiado = true; } catch {}
+    // Sobe TAMBÉM pro Supabase Storage — assim quem NÃO tem o OneDrive sincronizado
+    // (ex.: Gustavo, que lê do cache do banco) consegue abrir o PDF. destName = a chave.
+    let storageKey = null;
+    try {
+      const buf = fs.readFileSync(src);
+      const up = await supabase.storage.from('cotacoes-docs').upload(destName, buf, { contentType: 'application/pdf', upsert: true });
+      if (!up.error) storageKey = destName;
+      else logUpdate('cotacoes storage upload err: ' + up.error.message);
+    } catch (e) { logUpdate('cotacoes storage upload exc: ' + e.message); }
     const rec = {
       id, tipo: 'doc',
       assunto: String((meta && meta.assunto) || '').trim(),
@@ -2432,6 +2441,7 @@ ipcMain.handle('orc-elev:cotacoes-add-doc', async (_e, meta) => {
       obs: String((meta && meta.obs) || '').trim(),
       criadoPor: String((meta && meta.criadoPor) || '').trim(),
       criadoEm: now.toISOString(),
+      storageKey,
     };
     const arr = cotacoesLoad(); arr.unshift(rec);
     const info = cotacoesSave(arr);
@@ -2450,13 +2460,44 @@ ipcMain.handle('orc-elev:cotacoes-del', async (_e, id) => {
     return { ok: true, cotacoes: rest, ...info };
   } catch (e) { return { ok: false, erro: e.message }; }
 });
+// Atualiza os metadados (assunto/fornecedor/data/obs) de uma cotação existente, sem trocar o PDF.
+ipcMain.handle('orc-elev:cotacoes-update', async (_e, upd) => {
+  try {
+    const id = String((upd && upd.id) || '').trim();
+    if (!id) return { ok: false, erro: 'id ausente' };
+    const arr = cotacoesLoad();
+    const alvo = arr.find(c => c && c.id === id);
+    if (!alvo) return { ok: false, erro: 'Cotação não encontrada.' };
+    ['assunto', 'fornecedor', 'data', 'obs'].forEach(k => {
+      if (upd[k] !== undefined) alvo[k] = String(upd[k] || '').trim();
+    });
+    const info = cotacoesSave(arr);
+    return { ok: true, cotacoes: arr, ...info };
+  } catch (e) { return { ok: false, erro: e.message }; }
+});
 // Abre o PDF de uma cotação (doc) no visualizador padrão.
 ipcMain.handle('orc-elev:cotacoes-abrir', async (_e, id) => {
   try {
     const alvo = cotacoesLoad().find(c => c.id === id);
-    if (!alvo || !alvo.arquivo) return { ok: false, erro: 'Cotação não encontrada.' };
-    const r = await shell.openPath(alvo.arquivo);
-    return { ok: !r, error: r || null };
+    if (!alvo) return { ok: false, erro: 'Cotação não encontrada.' };
+    // 1) arquivo local (mesma máquina / OneDrive sincronizado)
+    if (alvo.arquivo && fs.existsSync(alvo.arquivo)) {
+      const r = await shell.openPath(alvo.arquivo);
+      return { ok: !r, error: r || null };
+    }
+    // 2) fallback: baixa do Supabase Storage (quem não tem OneDrive, ex.: Gustavo)
+    if (alvo.storageKey) {
+      const dl = await supabase.storage.from('cotacoes-docs').download(alvo.storageKey);
+      if (dl.error || !dl.data) return { ok: false, erro: 'Não consegui baixar o PDF do servidor: ' + (dl.error?.message || 'sem dados') };
+      const buf = Buffer.from(await dl.data.arrayBuffer());
+      const tmpDir = path.join(app.getPath('temp'), 'nexus-cotacoes');
+      try { if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true }); } catch {}
+      const dest = path.join(tmpDir, String(alvo.storageKey).replace(/[\\/]+/g, '_'));
+      fs.writeFileSync(dest, buf);
+      const r = await shell.openPath(dest);
+      return { ok: !r, error: r || null, fromStorage: true };
+    }
+    return { ok: false, erro: 'PDF indisponível nesta máquina (cotação antiga, sem cópia no servidor).' };
   } catch (e) { return { ok: false, erro: e.message }; }
 });
 

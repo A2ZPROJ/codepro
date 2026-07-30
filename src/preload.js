@@ -143,6 +143,7 @@ window.electronAPI = {
     cotacoesAdd:    (c)  => ipcRenderer.invoke('orc-elev:cotacoes-add', c),
     cotacoesAddDoc: (m)  => ipcRenderer.invoke('orc-elev:cotacoes-add-doc', m),
     cotacoesDel:    (id) => ipcRenderer.invoke('orc-elev:cotacoes-del', id),
+    cotacoesUpdate: (u)  => ipcRenderer.invoke('orc-elev:cotacoes-update', u),
     cotacoesAbrir:  (id) => ipcRenderer.invoke('orc-elev:cotacoes-abrir', id),
     fornecedoresList: ()  => ipcRenderer.invoke('orc-elev:fornecedores-list'),
     fornecedoresAdd:  (f) => ipcRenderer.invoke('orc-elev:fornecedores-add', f),

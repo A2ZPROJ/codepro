@@ -234,6 +234,12 @@ REFS=[
  ('11','Reposição de pavimento','Reposição do pavimento removido na implantação, no mesmo tipo do existente, dentro da área correspondente.','Projeto + SANEPAR MOS','Área reposta lançada dentro da área a que pertence.'),
  ('12','Norma de referência — EEE','Concepção da estação elevatória de esgoto conforme norma técnica.','ABNT NBR 12208 — Estações elevatórias de esgoto sanitário','Complementar: NBR 9649 (redes) e MPS SANEPAR.'),
  ('13','Limpeza final de obra','Limpeza geral ao término, lançada como grupo próprio ao final do orçamento.','SANEPAR MOS','Grupo LIMPEZA DE OBRA (sempre o último).')]
+# --- recalque: referências específicas quando há a área LINHA DE RECALQUE ---
+if any(x.get('kind')=='area' and 'RECALQUE' in str(x.get('desc','')).upper() for x in rows):
+    REFS = REFS + [
+     ('14','Linha de recalque — vala','Largura de vala 0,40 m para tubo DN<100 mm (sem acesso de operário na vala); profundidade pelo perfil do projeto.','SANEPAR MOS 5ª Ed. + ABNT NBR 17015 + projeto (PLRE)','Vol. da vala = extensão × 0,40 m × prof. média (Memória de Cálculo).'),
+     ('15','Linha de recalque — recomposição asfáltica','Corte de pavimento em 2 bordas + pintura de ligação + CBUQ e=5,0 cm na faixa da vala.','SANEPAR MOS + diretriz 2S (recomposição e=5 cm)','CBUQ = área da vala × 0,05 m; área = extensão × largura.'),
+     ('16','Linha de recalque — materiais','Tubo PEAD DE90, curvas, ventosa/válvula guilhotina DN80, caixas de ventosa/descarga/PV em anéis de concreto DN800.','Cotação/internet (peças) + SANEPAR (caixas e serviços)','Ventosa e válvula guilhotina DN80 não constam na SANEPAR → cotação.')]
 rr=5
 for row in REFS:
     for i,v in enumerate(row,1):

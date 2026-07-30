@@ -44,6 +44,8 @@ def build_cfg(d):
     cfg.AREA_INSERTS = d.get('AREA_INSERTS')   # [[after, header, [[cod,desc,tipo,orig,q,un,val],...]], ...]
     cfg.EXTRA_BLOCK  = d.get('EXTRA_BLOCK')
     cfg.MEMO_FONTES  = d.get('MEMO_FONTES')
+    cfg.REMOVE_SUBGROUPS = d.get('REMOVE_SUBGROUPS')   # ['012.004'] = remove subgrupo (cabeçalho+itens)
+    cfg.RENAME_GROUP     = d.get('RENAME_GROUP')       # {'015':'REVESTIMENTO'} = renomeia cabeçalho por código
     return cfg
 
 

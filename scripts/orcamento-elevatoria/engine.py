@@ -321,7 +321,8 @@ def build_memorial(cfg, mem_path):
         for k,a in anchors.items(): out=out.replace('{%s}'%k,a)
         return out
     # título / cabeçalho
-    ws['A1']='MEMORIAL DE CÁLCULO — EEE %s — %s'%(cfg.SB, cfg.CIDADE)
+    _sbtit = cfg.SB if str(cfg.SB).upper().startswith('EEE') else 'EEE '+str(cfg.SB)
+    ws['A1']='MEMORIAL DE CÁLCULO — %s — %s'%(_sbtit, cfg.CIDADE)
     ws['A1'].font=Font(bold=True,size=13,color='1F3864')
     ws['A2']=('Contrato %s · EEE em Linha (poço seco NT-24) · Padrão SANEPAR · Organizado POR ÁREA. '
               'Células AMARELAS = dados de entrada do projeto; coluna QUANT. = fórmula sobre esses dados.'%cfg.CONTRATO)
@@ -371,13 +372,33 @@ def build_memorial(cfg, mem_path):
                 if fonte:
                     set_fonte(ws.cell(r,7), fonte)           # fonte com link clicável
             for c in range(2,8): ws.cell(r,c).border=BD
-    # ---- seção: FONTES DE PREÇO de cotação/internet (com link) ----
+    # ---- EXTRA_BLOCK: cada bloco vira SEÇÃO própria no Memorial (área + memória de cálculo) ----
+    # item = (cod,desc,tipo,orig,quant,un,valor[,memoria_de_calculo]). O 8º campo (opcional)
+    # é a conta (ex.: "552,24 m × 0,40 × 1,30 = 287,16 m³") e aparece na coluna MEMÓRIA DE CÁLCULO.
+    eb=getattr(cfg,'EXTRA_BLOCK',None)
+    for blk in ([eb] if isinstance(eb,dict) else (eb or [])):
+        r+=1; ws.cell(r,1,blk.get('titulo','GRUPO EXTRA'))
+        ws.merge_cells(start_row=r,start_column=1,end_row=r,end_column=7)
+        for c in range(1,8): ws.cell(r,c).fill=C_AREA; ws.cell(r,c).border=BD
+        ws.cell(r,1).font=F_AREA; ws.cell(r,1).alignment=AL_L
+        for it in blk['itens']:
+            it=list(it)
+            desc=it[1]; orig=it[3]; q=it[4]; un=it[5]; val=it[6]
+            calc=it[7] if len(it)>7 else ''
+            if isinstance(calc,str) and calc[:1]=='=': calc=' '+calc   # senão o Excel trata como fórmula
+            r+=1
+            ws.cell(r,2,desc).alignment=AL_L
+            ws.cell(r,3,calc).font=F_NOTE; ws.cell(r,3).alignment=AL_L
+            d=ws.cell(r,4,q); d.number_format=num; d.alignment=AL_C
+            ws.cell(r,5,un).alignment=AL_C
+            if val is not None:
+                p=ws.cell(r,6,val); p.number_format=money; p.alignment=AL_C
+            set_fonte(ws.cell(r,7), orig)
+            for c in range(2,8): ws.cell(r,c).border=BD
+    # ---- seção: FONTES DE PREÇO de cotação/internet (AREA_INSERTS + MEMO_FONTES) ----
     extras=[]
     for blk in (getattr(cfg,'AREA_INSERTS',[]) or []):
         for it in blk[2]: extras.append((it[1],it[4],it[5],it[6],it[3]))  # desc,q,un,val,fonte(orig)
-    eb=getattr(cfg,'EXTRA_BLOCK',None)
-    if eb:
-        for it in eb['itens']: extras.append((it[1],it[4],it[5],it[6],it[3]))
     for it in (getattr(cfg,'MEMO_FONTES',[]) or []):
         extras.append(it)  # já em (desc,q,un,val,fonte)
     if extras:
@@ -409,7 +430,7 @@ def build_memorial(cfg, mem_path):
 # ------------------------------------------------------ pipeline COM
 def run(cfg):
     out_xlsx = cfg.OUT_XLSX
-    sheet = 'ORÇAMENTO SINTÉTICO - %s' % cfg.SB
+    sheet = ('ORÇAMENTO SINTÉTICO - %s' % cfg.SB)[:31]   # Excel limita nome de aba a 31 chars
     mem_tmp = os.path.join(os.path.dirname(out_xlsx), '_memorial_tmp.xlsx')
     anchors = build_memorial(cfg, mem_tmp)
     for key in set(MAP_REF.values()):
@@ -424,6 +445,15 @@ def run(cfg):
         # 1) congelar I,K como valores (quebra refs externas)
         for col in ('I','K'):
             rng=ws.Range('%s15:%s209'%(col,col)); rng.Value=rng.Value
+        # 1b) congelar SÓ os códigos-FÓRMULA da col B (itens de cotação numerados 19.0xx
+        #     via '=Bxxx+1'): senão o prune_zero_qty apaga a linha referida (ex.: painel
+        #     QTY_UPD[145]=0 quebra o '=B145+1' do cabo 0,6/1kV) e o código vira #REF!.
+        #     Mexe só nas fórmulas — os códigos-TEXTO ('042007046' c/ zero à esq.) ficam intactos.
+        for r in range(15,210):
+            cell=ws.Cells(r,2)
+            f=retry(lambda r=r: ws.Cells(r,2).Formula)
+            if isinstance(f,str) and f.startswith('='):
+                retry(lambda r=r: setattr(ws.Cells(r,2),'Value',ws.Cells(r,2).Value))
         # 2) título/nome
         ws.Range('K6').Value=cfg.SB; ws.Range('K5').Value='EEE (SES)'
         ws.Name=sheet
@@ -486,6 +516,14 @@ def run(cfg):
         add_extra_block(xl, ws, cfg)
         # 9c) remover linhas de item com QUANT=0 (itens que não se aplicam à obra)
         nrem = prune_zero_qty(xl, ws)
+        # 9c-2) remover SUBGRUPOS inteiros (cabeçalho + itens) pedidos na config
+        #       (ex.: A6 tira o subgrupo 012.004 PINTURA = "tratamento de superfície")
+        remove_subgroups(xl, ws, cfg)
+        # 9c-3) renomear cabeçalhos de grupo/subgrupo por código
+        #       (ex.: "REVESTIMENTO E TRATAMENTO DE SUPERFÍCIE" -> "REVESTIMENTO")
+        rename_groups(ws, cfg)
+        # 9c-4) higiene: zera células de ERRO no cabeçalho (logo quebrado do gabarito A2 = #VALUE!)
+        clear_header_errors(ws)
         retry(lambda: xl.CalculateFull())
         vt=210
         for r in range(205,330):
@@ -505,6 +543,13 @@ def run(cfg):
         try: retry(lambda: setattr(wb.Worksheets('BDI').Range('F1'),'Formula',"='%s'!O%d"%(sheet,vt)))
         except Exception: pass
         retry(lambda: xl.CalculateFull())
+        # 9e) VARREDURA DE ERRO — antes de fechar, confere que NENHUMA célula da planilha
+        #      ficou com #REF!/#VALUE!/#DIV etc. (Daniel: "analisar se tem erro antes de finalizar").
+        errs = scan_errors(wb)
+        if errs:
+            print('ERRO: células com erro na planilha ->')
+            for loc in errs: print('   ', loc)
+            raise SystemExit('Abortado: planilha saiu com erro (ver acima). NÃO entregar.')
         custo=sv(ws.Cells(vt,15).Value); total=sv(ws.Cells(vt,16).Value)
         wb.Save()
         # 10) PDFs
@@ -538,7 +583,7 @@ def area_inserts(xl, ws, cfg):
             retry(lambda b=b: ws.Rows(b+1).Insert(xlDown))
         xl.CutCopyMode = False
         for k, it in enumerate(items):
-            cod, desc, tipo, orig, q, un, val = it[:7]   # tolera 8º campo (memória de cálculo) vindo da análise
+            cod, desc, tipo, orig, q, un, val = it[:7]   # tolera 8º campo (memória de cálculo)
             r = b+1+k
             retry(lambda r=r: setattr(ws.Cells(r,2), 'NumberFormat', '@'))  # código como TEXTO
             for col, value in [(2,cod),(5,desc),(7,tipo),(8,_origem_curta(orig)),(9,q),(10,un),(11,val)]:
@@ -588,15 +633,112 @@ def prune_zero_qty(xl, ws):
         retry(lambda r=r: ws.Rows(r).Delete())
     return [descr[r] for r in sorted(targets)]
 
+def _find_vt(ws):
+    for r in range(15, 700):
+        v = ws.Cells(r,2).Value or ws.Cells(r,5).Value
+        if v and 'VALOR TOTAL' in str(v).upper(): return r
+    return None
+
+def _strip_ref(ws, dead_row, vt):
+    """Tira o termo +P<dead>/+O<dead> (ou <dead>+ no início) de QUALQUER cabeçalho que some
+    a linha `dead_row` EXPLICITAMENTE, senão ao deletá-la vira #REF!. Somas por RANGE
+    (SUBTOTAL/SUM) o Excel reajusta sozinho — essas são deixadas em paz."""
+    for h in range(14, vt+1):
+        for col, L in ((16,'P'),(15,'O')):
+            f = ws.Cells(h,col).Formula
+            if not (isinstance(f,str) and f.startswith('=')): continue
+            if ('%s%d'%(L,dead_row)) not in f: continue
+            if 'SUBTOTAL' in f.upper() or 'SUM(' in f.upper(): continue
+            f2 = re.sub(r'\+%s%d\b'%(L,dead_row), '', f)
+            if f2 == f: f2 = re.sub(r'%s%d\b\+'%(L,dead_row), '', f)
+            if f2 != f: retry(lambda h=h,col=col,f2=f2: setattr(ws.Cells(h,col),'Formula',f2))
+
+def remove_subgroups(xl, ws, cfg):
+    """Remove SUBGRUPOS inteiros (linha de cabeçalho do subgrupo + suas linhas de item) cujo
+    CÓDIGO (col B) esteja em cfg.REMOVE_SUBGROUPS (ex.: ['012.004'] = PINTURA). Robusto a
+    deslocamentos: acha o subgrupo pelo código, pega os itens seguintes (G=Mat/MO) até o
+    próximo cabeçalho, tira as refs explícitas +P<linha> do grupo-pai (senão #REF!) e deleta
+    de baixo p/ cima. O VALOR TOTAL (SUMIF por tipo, passo 9d) reabsorve tudo sozinho."""
+    codes = getattr(cfg, 'REMOVE_SUBGROUPS', None)
+    if not codes: return
+    for code in codes:
+        vt = _find_vt(ws)
+        if not vt: return
+        hr = None
+        for r in range(15, vt):
+            b = ws.Cells(r,2).Value
+            if b is not None and str(b).strip() == str(code).strip(): hr = r; break
+        if hr is None:
+            print('AVISO remove_subgroups: código %s não encontrado' % code); continue
+        rows = [hr]                                   # cabeçalho do subgrupo
+        r = hr+1
+        while r < vt:
+            g = ws.Cells(r,7).Value
+            if g in ('Mat','MO'): rows.append(r); r += 1
+            else: break                               # próximo cabeçalho -> para
+        for dead in rows: _strip_ref(ws, dead, vt)    # limpa refs explícitas ANTES de deletar
+        for dead in sorted(rows, reverse=True):
+            retry(lambda dead=dead: ws.Rows(dead).Delete())
+
+def rename_groups(ws, cfg):
+    """Renomeia o texto (col E) do cabeçalho cujo código (col B) esteja em cfg.RENAME_GROUP
+    = {codigo: novo_texto}. Ex.: {'015': 'REVESTIMENTO'}."""
+    ren = getattr(cfg, 'RENAME_GROUP', None)
+    if not ren: return
+    vt = _find_vt(ws) or 400
+    for r in range(15, vt):
+        b = ws.Cells(r,2).Value
+        if b is None: continue
+        key = str(b).strip()
+        if key in ren:
+            retry(lambda r=r, key=key: setattr(ws.Cells(r,5),'Value', ren[key]))
+
+def clear_header_errors(ws):
+    """Zera qualquer célula de ERRO (#VALUE!/#REF! etc.) no bloco de CABEÇALHO (linhas 1..14):
+    o gabarito A2 traz fórmula quebrada nas caixas de LOGO (B3/N3) que vira #VALUE! e aparece
+    no orçamento. Os logos são imagens flutuantes -> limpar o valor da célula não os remove.
+    Só o cabeçalho: erro no corpo é tratado pela varredura scan_errors (aborta a entrega)."""
+    for r in range(1, 15):
+        for c in range(1, 17):
+            v = ws.Cells(r,c).Value
+            if isinstance(v, int) and v in ERR:
+                retry(lambda r=r,c=c: setattr(ws.Cells(r,c),'Value',''))
+
+def scan_errors(wb):
+    """Varre TODAS as abas e devolve a lista de células com valor de ERRO (#REF!/#VALUE!/...).
+    Usado como trava final: se voltar algo, o engine aborta e NÃO entrega o orçamento."""
+    out = []
+    for sh in wb.Worksheets:
+        ur = sh.UsedRange
+        data = ur.Value
+        if data is None: continue
+        if not isinstance(data, tuple): data = ((data,),)
+        r0, c0 = ur.Row, ur.Column
+        for i, row in enumerate(data):
+            if not isinstance(row, tuple): row = (row,)
+            for j, v in enumerate(row):
+                if isinstance(v, int) and v in ERR:
+                    out.append('%s!%s%d = %s' % (sh.Name,
+                               chr(64+c0+j) if c0+j<=26 else '?', r0+i, ERR[v]))
+    return out
+
 def add_extra_block(xl, ws, cfg):
-    """Anexa um bloco de itens (ex.: pavimentação asfáltica) ANTES da linha VALOR TOTAL,
-    copiando o formato de um cabeçalho de bloco (linha 38) e de um item (linha 41) do A2.
-    Não afeta MAP_REF (linhas 17-209), pois insere depois da 209."""
-    blk = getattr(cfg, 'EXTRA_BLOCK', None)
-    if not blk: return
+    """Anexa um ou MAIS blocos de itens (ex.: PAVIMENTAÇÃO ASFÁLTICA da estação +
+    LINHA DE RECALQUE), cada um como GRUPO SEPARADO com subtotal próprio, ANTES do
+    VALOR TOTAL. cfg.EXTRA_BLOCK = dict (1 bloco, legado) OU lista de dicts (vários).
+    Cada bloco é inserido em sequência; o vt é re-localizado a cada inserção porque as
+    linhas deslocam. O VALOR TOTAL final é reconstruído por SUMIF (passo 9d do run),
+    então pega todos os itens dos blocos automaticamente pelo TIPO (G=Mat/MO)."""
+    eb = getattr(cfg, 'EXTRA_BLOCK', None)
+    if not eb: return
+    for blk in ([eb] if isinstance(eb, dict) else eb):
+        _insert_one_block(xl, ws, blk)
+
+def _insert_one_block(xl, ws, blk):
+    """Insere UM bloco/grupo com cabeçalho + itens + subtotal próprio antes do VALOR TOTAL."""
     itens = blk['itens']; n = len(itens)
     vt = None
-    for r in range(190, 320):
+    for r in range(190, 700):
         v = ws.Cells(r,2).Value or ws.Cells(r,5).Value
         if v and 'VALOR TOTAL' in str(v).upper(): vt = r; break
     if not vt: raise SystemExit('VALOR TOTAL não encontrado para o bloco extra')
@@ -615,7 +757,7 @@ def add_extra_block(xl, ws, cfg):
     retry(lambda: setattr(ws.Cells(hr,15), 'Formula', '=SUM(O%d:O%d)' % (vt+1, vt+n)))
     retry(lambda: setattr(ws.Cells(hr,16), 'Formula', '=SUM(P%d:P%d)' % (vt+1, vt+n)))
     for k, it in enumerate(itens):
-        cod, desc, tipo, orig, q, un, val = it[:7]   # itens da análise trazem 8º campo (memória de cálculo) — ignora aqui
+        cod, desc, tipo, orig, q, un, val = it[:7]   # 8º campo (memória de cálculo) só p/ o Memorial
         r = vt+1+k
         retry(lambda r=r: setattr(ws.Cells(r,2), 'NumberFormat', '@'))  # código como TEXTO (preserva zero à esquerda do SANEPAR)
         for col, value in [(2,cod),(5,desc),(7,tipo),(8,_origem_curta(orig)),(9,q),(10,un),(11,val)]:
