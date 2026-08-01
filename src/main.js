@@ -2769,7 +2769,14 @@ function memorialCfgDir({ criar = false } = {}) {
       const apoio = path.join(root, n, '002. ACCIONA', '001. BLOCO 02', '_APOIO');
       if (fs.existsSync(apoio)) {
         const alvo = path.join(apoio, MEMORIAL_CFG_DIRNAME);
-        try { fs.mkdirSync(alvo, { recursive: true }); return alvo; } catch {}
+        try {
+          fs.mkdirSync(alvo, { recursive: true });
+          // Acabou de criar: crava no cache p/ o listar/carregar acharem JÁ.
+          // Senão o `null` cacheado por 5 min (acharPastaNoOneDrive) faz a config
+          // sumir da lista logo após o 1º salvamento — bug "salvei e não aparece".
+          _pastaCache.set(MEMORIAL_CFG_DIRNAME, { v: alvo, t: Date.now() });
+          return alvo;
+        } catch {}
       }
     }
   }

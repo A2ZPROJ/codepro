@@ -14887,8 +14887,16 @@ body.presenting #presentingBadge { display: flex; }
       const mun = ($('mem-municipio').value || '').trim();
       const sub = ($('mem-subbacia').value || '').trim();
       const sugestao = (mun || 'memorial') + (sub ? ' - ' + sub : '');
-      const nome = window.prompt('Nome da configuração:', sugestao);
-      if (nome === null) return;
+      // Electron 29 NÃO implementa window.prompt() (retorna null sem exibir nada)
+      // -> usar o modal próprio askPrompt(). Bug: com window.prompt o save era
+      // abortado sempre em "if (nome === null) return" e nada era gravado.
+      const _resp = await window.askPrompt({
+        title: 'Salvar configuração',
+        message: 'Nome da configuração:',
+        defaultValue: sugestao,
+      });
+      if (_resp === null) return;                       // cancelou
+      const nome = (_resp.value || '').trim() || sugestao;
       const r = await window.electronAPI.memorial.cfgSalvar(nome, coletarCfg(null));
       if (r && r.ok) {
         cfgStatus('Configuração salva: ' + r.arquivo, 'var(--green,#15803d)');

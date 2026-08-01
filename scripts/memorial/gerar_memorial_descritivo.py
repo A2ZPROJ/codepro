@@ -331,19 +331,34 @@ def build_subst_map():
     m["VERIFICADO"] = art.get("verificado") or eng
     m["APROVADO"] = art.get("aprovado") or eng
 
+    # --- Codigo IBGE do municipio: config -> resolve pelo nome (best-effort) ---
+    cod_ibge = proj.get("codigo_ibge") or (CFG.get("codigo_ibge") if isinstance(CFG, dict) else None)
+    if not cod_ibge:
+        try: cod_ibge = _resolver_ibge(m["MUNICIPIO"], m["UF"])
+        except Exception: cod_ibge = None
+    m["COD_IBGE"] = str(cod_ibge) if cod_ibge else FALTA_INFORMAR
+
     # --- Codigo do documento / revisao / data ---
-    m["CODIGO_DOC"] = proj.get("codigo_doc") or "MD-RCE-AMAPORA-BACIA02B-R1"
-    m["CODIGO_MC"] = proj.get("codigo_mc") or "MC-RCE-AMAPORA-BACIA02B-R1"
+    # Default derivado do NOME do municipio (nunca chumbado em outra cidade).
+    _dslug = _doc_slug(m["MUNICIPIO"])
+    m["CODIGO_DOC"] = proj.get("codigo_doc") or ("MD-RCE-%s-BACIA02B-R1" % _dslug)
+    m["CODIGO_MC"] = proj.get("codigo_mc") or ("MC-RCE-%s-BACIA02B-R1" % _dslug)
     m["REV"] = proj.get("rev") or "R1"
     m["DATA"] = proj.get("data") or "Junho/2026"
     m["DATA_R0"] = proj.get("data_r0") or "Janeiro/2026"
     m["DESCRICAO_REV"] = proj.get("descricao_rev") or (
         "Revisão de projeto executivo com dados de campo consolidados")
 
-    # --- Dados IBGE do municipio (Amapora-PR por padrao) ---
-    # Populacao residente / area territorial; editaveis via config.
-    POP_MUNI_2022 = int(proj.get("pop_muni") or 4762)
-    AREA_MUNI_KM2 = float(proj.get("area_muni") or 384.7)
+    # --- Dados IBGE do municipio: config -> IBGE (Censo 2022, pelo codigo) -> fallback ---
+    # Populacao residente / area territorial. Quando ha codigo IBGE, PUXA do IBGE
+    # (agregado 4714) p/ NUNCA herdar numeros de outra cidade — foi o bug do
+    # memorial de Janiopolis que saiu com dados/legenda de Amapora.
+    ibge_pop = ibge_area = None
+    if cod_ibge:
+        try: ibge_pop, ibge_area = _ibge_pop_area(cod_ibge)
+        except Exception: pass
+    POP_MUNI_2022 = int(proj.get("pop_muni") or ibge_pop or 4762)
+    AREA_MUNI_KM2 = float(proj.get("area_muni") or ibge_area or 384.7)
     m["POP_MUNI"] = _fmt_int(POP_MUNI_2022)
     m["AREA_MUNI"] = "{:.1f}".format(AREA_MUNI_KM2).replace(".", ",")
 
@@ -1929,8 +1944,8 @@ def build():
         first_col_left=True,
     )
     add_table_source(doc,
-                     "Fonte: população e área territorial – IBGE, Censo 2022 (Amaporã-PR, "
-                     "cód. 4100905); área da sub-bacia – envoltória da rede projetada (2S "
+                     "Fonte: população e área territorial – IBGE, Censo 2022 ({{MUNICIPIO}}-{{UF}}, "
+                     "cód. {{COD_IBGE}}); área da sub-bacia – envoltória da rede projetada (2S "
                      "Engenharia, 2026); população na sub-bacia estimada por nº de imóveis "
                      "atendidos × tamanho médio do domicílio.")
     add_para(doc,
@@ -2992,6 +3007,41 @@ def _resolver_ibge(municipio, uf):
     except Exception as e:
         sys.stderr.write("[ibge] nao resolveu '%s/%s': %s\n" % (municipio, uf, e))
     return None
+
+
+def _doc_slug(municipio):
+    """Nome do municipio -> token p/ codigo de documento (MAIUSCULO, sem acento
+    nem espaco). Ex.: 'Janiopolis' -> 'JANIOPOLIS'. Evita codigo chumbado em
+    outra cidade quando o config nao informa codigo_doc/codigo_mc."""
+    import unicodedata, re as _re
+    s = unicodedata.normalize("NFKD", str(municipio or "")).encode("ascii", "ignore").decode("ascii")
+    return _re.sub(r"[^A-Za-z0-9]", "", s).upper() or "MUNICIPIO"
+
+
+def _ibge_pop_area(codigo):
+    """Populacao residente (Censo 2022) e area territorial (km2) do municipio,
+    pelo codigo IBGE. Agregado 4714: var 93 = populacao, 6318 = area.
+    Best-effort: retorna (None, None) em qualquer falha (sem internet, etc.),
+    p/ o chamador cair no valor do config ou no fallback."""
+    import urllib.request, gzip
+
+    def _fetch(var):
+        url = ("https://servicodados.ibge.gov.br/api/v3/agregados/4714/"
+               "periodos/2022/variaveis/%s?localidades=N6%%5B%s%%5D" % (var, codigo))
+        req = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})
+        raw = urllib.request.urlopen(req, timeout=12).read()
+        if raw[:2] == b"\x1f\x8b":
+            raw = gzip.decompress(raw)
+        d = json.loads(raw.decode("utf-8"))
+        serie = d[0]["resultados"][0]["series"][0]["serie"]
+        return float(list(serie.values())[0])
+
+    pop = area = None
+    try: pop = int(round(_fetch("93")))
+    except Exception as e: sys.stderr.write("[ibge pop] %s\n" % e)
+    try: area = _fetch("6318")
+    except Exception as e: sys.stderr.write("[ibge area] %s\n" % e)
+    return pop, area
 
 
 def _gerar_mapas(geo_dir, mapas_dir, cfg):
