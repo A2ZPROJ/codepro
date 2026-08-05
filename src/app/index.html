@@ -76,8 +76,9 @@
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
+<script src="vendor/supabase.umd.js"></script>
 <script type="module">
-  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+  const { createClient } = supabase;   // Supabase LOCAL (vendor/supabase.umd.js) — NÃO depende mais do esm.sh (causava tela branca + lentidão em internet ruim)
   import { esc } from './js/core/utils.js';
   import audit from './js/core/audit.js';
   import { TIMBRADO_2S_HEADER, TIMBRADO_2S_FOOTER } from './js/grd-timbrado.js';
