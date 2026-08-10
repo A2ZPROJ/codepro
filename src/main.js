@@ -2649,6 +2649,105 @@ function memorialResolveScript() {
   return null;
 }
 
+// requirements.txt das libs Python dos scripts (openpyxl/pyshp/numpy/docx/matplotlib).
+function memorialResolveRequirements() {
+  const candidates = [
+    path.join(__dirname, '..', 'scripts', 'requirements.txt'),
+    path.join(process.resourcesPath || '', 'scripts', 'requirements.txt'),
+    path.join(app.getAppPath(), '..', 'scripts', 'requirements.txt'),
+  ];
+  for (const c of candidates) {
+    try { if (c && fs.existsSync(c)) return c; } catch {}
+  }
+  return null;
+}
+
+// Garante as dependencias Python do memorial. Confere UMA vez por sessao; se
+// faltar algo (ex.: "No module named 'shapefile'" numa maquina nova), instala
+// automaticamente do requirements.txt e segue. Assim o usuario nunca ve o erro.
+let _memorialDepsOk = false;
+function memorialGarantirDeps(py) {
+  return new Promise((resolve) => {
+    if (_memorialDepsOk) return resolve({ ok: true });
+    const { execFile } = require('child_process');
+    const check = [...py.args, '-c', 'import openpyxl,shapefile,numpy,docx,matplotlib'];
+    execFile(py.cmd, check, { windowsHide: true, timeout: 45000 }, (err) => {
+      if (!err) { _memorialDepsOk = true; return resolve({ ok: true }); }
+      logUpdate('memorial: dependencia Python faltando, instalando via pip...');
+      const req = memorialResolveRequirements();
+      const pipArgs = req
+        ? [...py.args, '-m', 'pip', 'install', '--disable-pip-version-check', '--no-input', '-r', req]
+        : [...py.args, '-m', 'pip', 'install', '--disable-pip-version-check', '--no-input',
+           'openpyxl', 'pyshp', 'numpy', 'python-docx', 'matplotlib'];
+      execFile(py.cmd, pipArgs, { windowsHide: true, timeout: 600000 }, (e2, so, se) => {
+        if (e2) {
+          return resolve({ ok: false, erro:
+            'Faltam bibliotecas Python (pyshp/matplotlib/...) e a instalacao automatica falhou. '
+            + 'Rode manualmente: python -m pip install -r requirements.txt\n' + String(se || e2.message || '').slice(-300) });
+        }
+        logUpdate('memorial: dependencias instaladas.');
+        _memorialDepsOk = true;
+        resolve({ ok: true, instalou: true });
+      });
+    });
+  });
+}
+
+// Assa os numeros de pagina no .docx: abre no Word (COM, invisivel) e ATUALIZA
+// Sumario/TOC + Lista de Figuras/Tabelas + campos PAGE, repagina e salva. Com
+// isso o indice sai correto em QUALQUER leitor, sem depender do F9/updateFields
+// na abertura (fim do "Erro! Indicador nao definido."). Tolerante: se o Word
+// nao estiver instalado ou o COM falhar, o .docx segue valido (campos 'dirty').
+function memorialAtualizarIndiceWord(docxPath) {
+  return new Promise((resolve) => {
+    let ps1;
+    try {
+      const linhas = [
+        'param([Parameter(Mandatory=$true)][string]$Path)',
+        '$ErrorActionPreference = "Stop"',
+        '$word = $null; $doc = $null',
+        'try {',
+        '  $word = [Activator]::CreateInstance([Type]::GetTypeFromProgID("Word.Application"))',
+        '  try { $word.Visible = $false } catch {}',
+        '  try { $word.DisplayAlerts = 0 } catch {}',
+        '  $doc = $word.Documents.Open($Path)',
+        '  try { $doc.Fields.Update() | Out-Null } catch {}',
+        '  foreach ($sec in $doc.Sections) {',
+        '    foreach ($h in $sec.Headers) { try { if ($h.Range.Fields.Count -gt 0) { $h.Range.Fields.Update() | Out-Null } } catch {} }',
+        '    foreach ($f in $sec.Footers) { try { if ($f.Range.Fields.Count -gt 0) { $f.Range.Fields.Update() | Out-Null } } catch {} }',
+        '  }',
+        '  try { $doc.Repaginate() } catch {}',
+        '  foreach ($toc in $doc.TablesOfContents) { try { $toc.Update() } catch {} }',
+        '  foreach ($tof in $doc.TablesOfFigures) { try { $tof.Update() } catch {} }',
+        '  $doc.Save()',
+        '  $doc.Close(0)',
+        '  $word.Quit()',
+        '  Write-Output "INDICE_OK"',
+        '} catch {',
+        '  Write-Output ("INDICE_ERRO: " + $_.Exception.Message)',
+        '  try { if ($doc) { $doc.Close(0) } } catch {}',
+        '  try { if ($word) { $word.Quit() } } catch {}',
+        '  exit 1',
+        '}',
+      ];
+      ps1 = path.join(os.tmpdir(), `nexus_idx_${Date.now()}.ps1`);
+      fs.writeFileSync(ps1, linhas.join('\r\n'), 'utf8');
+    } catch (e) {
+      return resolve({ ok: false, erro: 'Falha ao preparar atualizacao do indice: ' + e.message });
+    }
+    const { execFile } = require('child_process');
+    execFile('powershell.exe',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps1, '-Path', docxPath],
+      { windowsHide: true, timeout: 180000 }, (err, stdout, stderr) => {
+        try { fs.unlinkSync(ps1); } catch {}
+        const out = String(stdout || '') + String(stderr || '');
+        if (!err && /INDICE_OK/.test(out)) return resolve({ ok: true });
+        const m = out.match(/INDICE_ERRO:\s*(.*)/);
+        resolve({ ok: false, erro: (m ? m[1] : (err ? err.message : out)).toString().trim().slice(-300) });
+      });
+  });
+}
+
 ipcMain.handle('memorial:pick-file', async (_e, kind) => {
   if (!mainWindow) return null;
   const filtros = {
@@ -2700,6 +2799,10 @@ ipcMain.handle('memorial:gerar', async (_e, cfg) => {
     const py = orcRceResolvePython();
     if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
 
+    // garante as libs Python (pyshp/matplotlib/...) — instala sozinho em maquina nova
+    const deps = await memorialGarantirDeps(py);
+    if (!deps.ok) return { ok: false, erro: deps.erro };
+
     // grava config.json num tmp
     const tmpJson = path.join(os.tmpdir(), `nexus_memorial_${Date.now()}.json`);
     fs.writeFileSync(tmpJson, JSON.stringify(cfg, null, 2), 'utf8');
@@ -2723,7 +2826,7 @@ ipcMain.handle('memorial:gerar', async (_e, cfg) => {
         try { fs.unlinkSync(tmpJson); } catch {}
         resolve({ ok: false, erro: 'Erro ao executar o Python: ' + e.message });
       });
-      proc.on('close', (code) => {
+      proc.on('close', async (code) => {
         try { fs.unlinkSync(tmpJson); } catch {}
         // última linha não-vazia do stdout = JSON
         const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
@@ -2732,6 +2835,15 @@ ipcMain.handle('memorial:gerar', async (_e, cfg) => {
           try { parsed = JSON.parse(lines[i]); break; } catch {}
         }
         if (parsed && typeof parsed === 'object') {
+          // assa os numeros de pagina do Sumario/Listas no .docx (Word COM)
+          if (parsed.ok && parsed.saida) {
+            const idx = await memorialAtualizarIndiceWord(parsed.saida);
+            parsed.indiceAtualizado = !!idx.ok;
+            if (!idx.ok) {
+              parsed.avisoIndice = 'O documento foi gerado, mas o índice não pôde ser atualizado '
+                + 'automaticamente (' + idx.erro + '). Abra no Word, selecione tudo (Ctrl+A) e tecle F9.';
+            }
+          }
           resolve(parsed);
         } else {
           resolve({ ok: false, erro: (err || out || `Python saiu com código ${code} sem JSON.`).slice(-1500) });

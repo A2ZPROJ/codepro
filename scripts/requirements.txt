@@ -1,0 +1,15 @@
+# Dependencias Python dos scripts do Nexus (memorial, mapa-geral, orcamento).
+# O Nexus usa o Python 3 do SISTEMA (nao embute) — estas libs precisam estar
+# instaladas no interpretador que o app detecta (AppData\Local\Programs\Python\*).
+# Instalar em maquina nova:  python -m pip install -r requirements.txt
+#
+# Hard deps (o pipeline quebra sem elas):
+openpyxl        # leitura das OSE .xlsx
+pyshp           # import shapefile — extracao dos dados brutos (shape PV/tubo)
+numpy           # calculos
+python-docx     # geracao do .docx do memorial
+matplotlib      # mapas/figuras do memorial
+#
+# Opcionais (guardadas em try/except — mapa cai pra modo simples sem elas):
+# contextily    # basemap dos mapas de interferencia
+# pyproj        # reprojecao p/ o basemap
