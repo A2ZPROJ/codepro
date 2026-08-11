@@ -9,6 +9,7 @@ pyshp           # import shapefile — extracao dos dados brutos (shape PV/tubo)
 numpy           # calculos
 python-docx     # geracao do .docx do memorial
 matplotlib      # mapas/figuras do memorial
+pyproj          # UTM<->geográficas (aba Correção Geoidal)
 #
 # Opcionais (guardadas em try/except — mapa cai pra modo simples sem elas):
 # contextily    # basemap dos mapas de interferencia

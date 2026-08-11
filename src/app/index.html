@@ -7806,6 +7806,11 @@ body.presenting #presentingBadge { display: flex; }
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           <span class="sb-label">Renomear</span>
         </button>
+        <!-- 5b. Correção Geoidal (cotas dos TXT de levantamento) -->
+        <button class="sb-item" data-tab="geoide" data-label="Correção Geoidal" onclick="switchTab('geoide',this)">
+          <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 010 18a14 14 0 010-18z"/><path d="M4.5 8.5c4.5 2 10.5 2 15 0"/></svg>
+          <span class="sb-label">Correção Geoidal</span>
+        </button>
         <!-- 6. Coleta de Endereços -->
         <button class="sb-item" data-tab="coleta-end" data-label="Coleta de Endereços" data-requires-online="1" style="display:none" onclick="switchTab('coleta-end',this);setTimeout(()=>window.coletaEndInit&&window.coletaEndInit(),60);">
           <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/><path d="M3 13h4M17 13h4"/></svg>
@@ -15927,6 +15932,87 @@ body.presenting #presentingBadge { display: flex; }
   </script>
 
   <!-- RENOMEAR TAB -->
+  <!-- ============ CORREÇÃO GEOIDAL ============ -->
+  <div class="tab-content" id="tab-geoide">
+    <div style="padding:20px;max-width:900px;margin:0 auto">
+
+      <div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:12px">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">Correção da ondulação geoidal</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px">
+            Converte a cota do GNSS (elipsoidal) para <b>ortométrica</b>: <code style="font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:4px">H = h − N</code>.
+            Gera um <code style="font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:4px">_ORTO.txt</code> ao lado do original — o original é preservado e passa a ser ignorado na geração do SHAPE/SIMBOLOGIA/TOPO.
+          </div>
+        </div>
+
+        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px">
+          <!-- seleção -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn" onclick="geoPick('arquivo')">Escolher TXT…</button>
+            <button class="btn" onclick="geoPick('pasta')">Escolher pasta…</button>
+            <span id="geo-sel" style="font-size:12px;color:var(--text3)">nenhum selecionado</span>
+          </div>
+
+          <!-- modelo -->
+          <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+            <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px">
+              <input type="radio" name="geo-modelo" value="hnor" checked> hgeoHNOR2020 <span style="color:var(--text3)">(oficial atual, embutido)</span>
+            </label>
+            <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px">
+              <input type="radio" name="geo-modelo" value="mapgeo"> MAPGEO2015 <span style="color:var(--text3)">(exige o app instalado)</span>
+            </label>
+          </div>
+
+          <div style="font-size:11.5px;color:var(--text3);background:var(--surface2);border-radius:6px;padding:9px 12px;line-height:1.5">
+            ⚠ Os dois modelos diferem ~11&nbsp;cm. Use sempre o <b>mesmo</b> em toda a cidade.
+            Em dúvida se o lote já veio corrigido do campo, rode <b>Simular</b> primeiro e compare com os levantamentos vizinhos.
+          </div>
+
+          <!-- ações -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn" onclick="geoRodar(true)">Simular (não grava)</button>
+            <button class="btn btn-primary" onclick="geoRodar(false)">Corrigir e gravar</button>
+            <label style="font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px;margin-left:auto">
+              <input type="checkbox" id="geo-somar"> inverter (somar N: H → h)
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div id="geo-out" style="display:none;background:var(--surface);border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:14px 18px">
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Resultado</div>
+        <pre id="geo-log" style="margin:0;font-size:12px;line-height:1.55;color:var(--text2);white-space:pre-wrap;font-family:Consolas,monospace;max-height:340px;overflow:auto"></pre>
+      </div>
+
+    </div>
+  </div>
+  <script>
+  // ---- Correção Geoidal ----
+  let geoAlvos = [];
+  async function geoPick(tipo){
+    try{
+      const r = await window.electronAPI.geoide.pick(tipo);
+      if(r && r.length){ geoAlvos = r;
+        document.getElementById('geo-sel').textContent =
+          r.length===1 ? r[0] : (r.length+' itens selecionados');
+      }
+    }catch(e){ alert('Erro ao selecionar: '+e.message); }
+  }
+  async function geoRodar(dry){
+    if(!geoAlvos.length){ alert('Escolha um arquivo TXT ou uma pasta primeiro.'); return; }
+    const modelo = (document.querySelector('input[name="geo-modelo"]:checked')||{}).value || 'hnor';
+    const somar  = document.getElementById('geo-somar').checked;
+    const out = document.getElementById('geo-out'), log = document.getElementById('geo-log');
+    out.style.display='block'; log.textContent = dry ? 'Simulando…' : 'Corrigindo…';
+    try{
+      const r = await window.electronAPI.geoide.corrigir({ alvos: geoAlvos, modelo, somar, dry });
+      if(!r || !r.ok){ log.textContent = 'ERRO: ' + ((r&&r.erro)||'falha desconhecida'); return; }
+      log.textContent = (dry ? '[SIMULAÇÃO — nada foi gravado]\n\n' : '')
+        + r.resultados.map(x => x.log).join('\n\n');
+    }catch(e){ log.textContent = 'ERRO: '+e.message; }
+  }
+  </script>
+
   <div class="tab-content" id="tab-renomear">
     <div style="padding:20px;max-width:960px;margin:0 auto">
 

@@ -212,6 +212,32 @@ function classifyOse(r, ctx) {
     ]));
   }
 
+  // ── COBERTURA (anti-silêncio) ──────────────────────────────────────────
+  // O diff/divergência acima é PULADO quando um valor vem null (faltou numa
+  // fonte). Antes isso passava VERDE. Agora: se o campo existe em ALGUMA fonte
+  // mas falta noutra ONDE A OSE ESTÁ PRESENTE, é ERRO "não conferido" — não se
+  // certifica o que não foi conferido. Só dispara quando a fonte foi parseada
+  // (in_mapa/in_perfil/in_excel), pra não duplicar o "ausente no <fonte>".
+  function coverage(label, ref, unit, dec, sources) {
+    if (!sources.some(s => s.v != null)) return;   // ninguém tem → outro check cuida
+    const linha = sources.map(x => x.name + '=' + (x.v == null ? '—' : fmt(x.v, dec) + (unit || ''))).join(' · ');
+    for (const s of sources) {
+      if (s.present && s.v == null) {
+        errors.push(label + ' não conferido em ' + ref + ' — faltou no ' + s.name + ' (' + linha + ')');
+      }
+    }
+  }
+  coverage('i', 'OSE', '', 4, [
+    { name: 'Planilha', v: Ip, present: r.in_excel },
+    { name: 'Mapa',     v: Im, present: r.in_mapa },
+    { name: 'Perfil',   v: If, present: r.in_perfil },
+  ]);
+  coverage('L', 'OSE', 'm', 3, [
+    { name: 'Planilha', v: Lp, present: r.in_excel },
+    { name: 'Mapa',     v: Lm, present: r.in_mapa },
+    { name: 'Perfil',   v: Lf, present: r.in_perfil },
+  ]);
+
   // Por PV
   let hasTQ = false, hasTLbad = false, hasShallow = false, hasDeepTL = false;
   for (const pv of (r.pvs || [])) {
@@ -278,6 +304,28 @@ function classifyOse(r, ctx) {
         { name: 'Mapa',     v: pv.mapa_h },
         { name: 'Perfil',   v: pv.perf_h },
       ]));
+    }
+
+    // COBERTURA por PV (anti-silêncio): CT/CF/h presente em alguma fonte mas
+    // faltando ONDE O PV EXISTE = NÃO CONFERIDO (ERRO). Guardado por
+    // anyPvHasMapa/anyPvHasPerf (só quando a fonte foi parseada p/ a OSE) e
+    // isento p/ PV existente / TL co-locado (dado de campo imutável).
+    if (!isExistingPv(pv.id) && !colocatedTL) {
+      const pvCov = (label, unit, dec, exV, maV, peV) => {
+        if (![exV, maV, peV].some(v => v != null)) return;
+        const linha = 'Planilha=' + (exV == null ? '—' : fmt(exV, dec) + (unit || ''))
+          + ' · Mapa=' + (maV == null ? '—' : fmt(maV, dec) + (unit || ''))
+          + ' · Perfil=' + (peV == null ? '—' : fmt(peV, dec) + (unit || ''));
+        if (anyPvHasMapa && pv.in_pv_mapa && maV == null)
+          errors.push(label + ' não conferido em ' + pv.id + ' — faltou no Mapa (' + linha + ')');
+        if (anyPvHasPerf && pv.in_pv_perfil && peV == null)
+          errors.push(label + ' não conferido em ' + pv.id + ' — faltou no Perfil (' + linha + ')');
+        if (exV == null && (maV != null || peV != null))
+          errors.push(label + ' não conferido em ' + pv.id + ' — faltou na Planilha (' + linha + ')');
+      };
+      pvCov('CT', '', 3, pv.excel_ct,      pv.mapa_ct, pv.perf_ct);
+      pvCov('CF', '', 3, pv.excel_cf_pv,   pv.mapa_cf, pv.perf_cf);
+      pvCov('h',  'm', 3, pv.excel_prof_pv, pv.mapa_h,  pv.perf_h);
     }
 
     // Profundidade mínima por DN — regra A2Z: h ≥ max(1,10 ; 0,95 + DN/1000).

@@ -2855,6 +2855,70 @@ ipcMain.handle('memorial:gerar', async (_e, cfg) => {
   }
 });
 
+// ────────────────────────────────────────────────────────────────────
+// CORREÇÃO GEOIDAL — aplica H = h − N nas cotas de TXT de levantamento.
+// Chama scripts/geoide/corrigir_geoide.py com a grade oficial embutida
+// (hgeoHNOR2020). Gera <nome>_ORTO.txt; o pipeline de topografia (shape/
+// simbologia/TOPO) ignora o bruto quando existe o _ORTO.
+// ────────────────────────────────────────────────────────────────────
+function geoideResolve(nome) {
+  const cands = [
+    path.join(__dirname, '..', 'scripts', 'geoide', nome),
+    path.join(process.resourcesPath || '', 'scripts', 'geoide', nome),
+    path.join(app.getAppPath(), '..', 'scripts', 'geoide', nome),
+  ];
+  for (const c of cands) { try { if (c && fs.existsSync(c)) return c; } catch {} }
+  return null;
+}
+
+ipcMain.handle('geoide:pick', async (_e, tipo) => {
+  const r = await dialog.showOpenDialog(mainWindow, {
+    title: tipo === 'pasta' ? 'Pasta com os TXT' : 'Arquivo TXT do levantamento',
+    properties: tipo === 'pasta' ? ['openDirectory'] : ['openFile', 'multiSelections'],
+    filters: tipo === 'pasta' ? undefined : [{ name: 'TXT', extensions: ['txt'] }],
+  });
+  return r.canceled ? [] : r.filePaths;
+});
+
+// dry=true -> só simula (mostra o N que seria aplicado, sem gravar)
+ipcMain.handle('geoide:corrigir', async (_e, { alvos, modelo, somar, dry }) => {
+  try {
+    if (!alvos || !alvos.length) return { ok: false, erro: 'Nenhum arquivo/pasta selecionado.' };
+    const script = geoideResolve('corrigir_geoide.py');
+    if (!script) return { ok: false, erro: 'Script não encontrado (scripts/geoide/corrigir_geoide.py).' };
+    const py = orcRceResolvePython();
+    if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
+    const deps = await memorialGarantirDeps(py);          // instala pyproj se faltar
+    if (!deps.ok) return { ok: false, erro: deps.erro };
+
+    let grade = null;
+    if (modelo === 'mapgeo') {
+      const mg = String.raw`C:\Program Files (x86)\MAPGEO2015 v1.0\Grid\MAPGEO2015_SIRGAS2000.txt`;
+      if (!fs.existsSync(mg)) return { ok: false, erro: 'MAPGEO2015 não instalado nesta máquina. Use o hgeoHNOR2020.' };
+      grade = mg;
+    } else {
+      grade = geoideResolve('hgeoHNOR2020.gsf');
+      if (!grade) return { ok: false, erro: 'Grade hgeoHNOR2020.gsf não encontrada no pacote.' };
+    }
+
+    const { execFile } = require('child_process');
+    const saidas = [];
+    for (const alvo of alvos) {
+      const args = [...py.args, script, alvo, '--grade', grade];
+      if (somar) args.push('--somar');
+      if (dry) args.push('--dry');
+      const out = await new Promise((resolve) => {
+        execFile(py.cmd, args, { windowsHide: true, timeout: 600000, maxBuffer: 8 * 1024 * 1024 },
+          (err, so, se) => resolve(((so || '') + (se || '')).trim() || (err ? String(err.message) : '')));
+      });
+      saidas.push({ alvo, log: out });
+    }
+    return { ok: true, dry: !!dry, resultados: saidas };
+  } catch (e) {
+    return { ok: false, erro: e.message };
+  }
+});
+
 ipcMain.handle('memorial:abrir', async (_e, p) => {
   try { const r = await shell.openPath(p); return { ok: !r, error: r || null }; }
   catch (e) { return { ok: false, error: e.message }; }

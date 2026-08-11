@@ -183,6 +183,13 @@ window.electronAPI = {
     cfgCarregar: (arquivo)       => ipcRenderer.invoke('memorial:cfg:carregar', arquivo),
     cfgExcluir:  (arquivo)       => ipcRenderer.invoke('memorial:cfg:excluir', arquivo),
   },
+  // Correção Geoidal — aplica H = h − N nas cotas dos TXT de levantamento
+  // (grade oficial hgeoHNOR2020 embutida; MAPGEO2015 se instalado na máquina).
+  geoide: {
+    pick:     (tipo)  => ipcRenderer.invoke('geoide:pick', tipo),
+    corrigir: (cfg)   => ipcRenderer.invoke('geoide:corrigir', cfg),
+    abrir:    (p)     => ipcRenderer.invoke('memorial:abrir', p),
+  },
   // Mapa Geral — a partir do Excel FlexTable do SewerGEMS gera SHAPE (PV c/ cotas
   // + REDES) + DXF geral (blocos SES + MLEADER anti-colisão + rótulos de rede),
   // via gerador Python (scripts/mapa-geral/gerar_mapa.py).

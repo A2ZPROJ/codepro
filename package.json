@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "2.84.121",
+  "version": "2.84.122",
   "description": "Nexus â€” GestÃ£o Integrada A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
@@ -78,6 +78,14 @@
         "to": "scripts/mapa-geral",
         "filter": [
           "**/*.py"
+        ]
+      },
+      {
+        "from": "scripts/geoide",
+        "to": "scripts/geoide",
+        "filter": [
+          "**/*.py",
+          "**/*.gsf"
         ]
       }
     ],
