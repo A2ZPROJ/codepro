@@ -995,17 +995,42 @@ ipcMain.handle('dashboard:pick-file', async () => {
 // app.whenReady (bloqueava startup com fs.readFileSync do xlsx do OneDrive,
 // que pode ser lento se OneDrive estiver sincronizando). Agora só dispara
 // quando o main estiver pronto (ver createMain → ready-to-show).
+// Falha de carga do dashboard NÃO pode ser silenciosa. Em 07/2026 a planilha
+// mudou de pasta, o push parou e o painel da diretoria ficou 28 DIAS congelado
+// sem ninguém notar — porque o `{ok:false}` era simplesmente ignorado aqui.
+// Agora: log sempre + notificação nativa uma vez por sessão + evento pra UI.
+let dashboardAvisouErro = false;
+function avisarDashboardQuebrado(motivo) {
+  logUpdate('DASHBOARD SEM PUSH: ' + motivo);
+  try { mainWindow?.webContents.send('dashboard:load-error', motivo); } catch (_) {}
+  if (dashboardAvisouErro) return;
+  dashboardAvisouErro = true;
+  try {
+    const { Notification } = require('electron');
+    if (Notification.isSupported()) {
+      new Notification({
+        title: 'Dashboard da diretoria sem atualizar',
+        body: motivo + '\nO painel público está congelado até isso ser resolvido.',
+      }).show();
+    }
+  } catch (_) {}
+}
+
 function initDashboardBackground() {
   setupDashboardWatcher();
   const initRes = loadDashboardData();
   if (initRes.ok) pushDashboardToSupabase(initRes.data);
+  else avisarDashboardQuebrado(initRes.error || 'planilha não encontrada');
   dashboardInterval = setInterval(() => {
     if (!dashboardWatchPath) {
       setupDashboardWatcher();
       const res = loadDashboardData();
       if (res.ok) {
+        dashboardAvisouErro = false;   // voltou a funcionar → pode avisar de novo se cair
         mainWindow?.webContents.send('dashboard:data-updated', res.data);
         pushDashboardToSupabase(res.data);
+      } else {
+        avisarDashboardQuebrado(res.error || 'planilha não encontrada');
       }
     }
   }, 5 * 60 * 1000);

@@ -93,6 +93,8 @@ window.electronAPI = {
     pickFile:       ()    => ipcRenderer.invoke('dashboard:pick-file'),
     getPublicLink:  ()    => ipcRenderer.invoke('dashboard:get-public-link'),
     onDataUpdated:  (cb)  => ipcRenderer.on('dashboard:data-updated', (_, data) => cb(data)),
+    // Dispara quando o push de background falha (planilha sumiu/renomeada).
+    onLoadError:    (cb)  => ipcRenderer.on('dashboard:load-error', (_, msg) => cb(msg)),
   },
   // Reuniões — Fase 8: gravação de tela+áudio via desktopCapturer.
   // Fluxo:

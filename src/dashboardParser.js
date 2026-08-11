@@ -1,24 +1,39 @@
 // Dashboard Diretoria — parser da planilha "01-Planilha Acompanhamento e Controle_2S INTERNA.xlsx"
 // Baseado em dashboard_2s_10.html (parseData) e dashboard-2s/src/main.js
+//
+// ⚠ HISTÓRICO (11/08/2026): o painel público ficou 28 DIAS congelado (último push
+// 13/07 15:38) porque a reorganização das pastas da Acciona levou
+// "004. CT-027.2025 - PROJETOS" para "BACKUP_CT-027.2025 - PROJETOS" E a planilha
+// foi renomeada (espaços → underscores). Os 3 fallbacks antigos partiam todos do
+// mesmo trecho de caminho, então nenhum sobreviveu — e a falha era SILENCIOSA.
+// Por isso agora: (1) pasta e nome separados, (2) lista de pastas candidatas
+// incluindo a antiga, (3) match por PADRÃO de nome, não nome exato.
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const XLSX = require('xlsx');
 
-// Caminho base configurado por Lucas (usuário atual lcabd)
-const BASE_PATH_LCABD = 'C:\\Users\\lcabd\\OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA\\001. SERVIDOR PARANÁ\\002. ACCIONA\\004. CT-027.2025 - PROJETOS\\000. CRONOGRAMAS\\DASHBOARD ONLINE\\01-Planilha Acompanhamento e Controle_2S INTERNA.xlsx';
+// Nome atual do arquivo (11/08/2026). NÃO confiar só nele — ver NAME_RE abaixo.
+const XLSX_NAME = '01-Planilha_Acompanhamento_e_Controle_2S INTERNA.xlsx';
 
-// Relativo a partir do diretório de usuário
-const REL_FROM_HOME = path.join(
-  'OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA',
-  '001. SERVIDOR PARANÁ',
-  '002. ACCIONA',
-  '004. CT-027.2025 - PROJETOS',
-  '000. CRONOGRAMAS',
-  'DASHBOARD ONLINE',
-  '01-Planilha Acompanhamento e Controle_2S INTERNA.xlsx'
-);
+// Qualquer "01-Planilha ... Acompanhamento ... Controle ... .xlsx", com espaço ou
+// underscore, ignorando temporários do Excel (~$...). Sobrevive a renomeação.
+const NAME_RE = /^(?!~\$).*planilha[ _-]*acompanhamento[ _-]*e[ _-]*controle.*\.xlsx?$/i;
+
+// Pasta ATUAL da planilha (relativa ao home), + as antigas como fallback.
+const REL_DIRS = [
+  path.join('OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA', '001. SERVIDOR PARANÁ',
+            '002. ACCIONA', '001. BLOCO 02', '_CRONOGRAMAS', 'DASHBOARD ONLINE'),
+  // legado — antes da reorganização de julho/2026
+  path.join('OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA', '001. SERVIDOR PARANÁ',
+            '002. ACCIONA', '004. CT-027.2025 - PROJETOS', '000. CRONOGRAMAS', 'DASHBOARD ONLINE'),
+  path.join('OneDrive - 2S ENGENHARIA DE AGRIMENSURA E GEOTECNOLOGIA', '001. SERVIDOR PARANÁ',
+            '002. ACCIONA', 'BACKUP_CT-027.2025 - PROJETOS', '000. CRONOGRAMAS', 'DASHBOARD ONLINE'),
+];
+
+const BASE_PATH_LCABD = path.join('C:\\Users\\lcabd', REL_DIRS[0], XLSX_NAME);
+const REL_FROM_HOME = path.join(REL_DIRS[0], XLSX_NAME);   // mantido p/ compat.
 
 const SVC = [
   { key: 'topo',   lbl: 'Topografia',        sh: 'Topografia',     cs: 4,  cp: 5,  cr: 6  },
@@ -31,38 +46,70 @@ const SVC = [
 ];
 
 /**
+ * Procura na PASTA um arquivo que case com NAME_RE. Se houver mais de um
+ * (ex.: nome antigo + nome novo convivendo), devolve o de mtime mais recente.
+ * Ignora a subpasta OBSOLETO — lá mora a versão morta da planilha.
+ */
+function pickInDir(dir) {
+  try {
+    if (!fs.existsSync(dir)) return null;
+    const hits = fs.readdirSync(dir, { withFileTypes: true })
+      .filter(e => e.isFile() && NAME_RE.test(e.name))
+      .map(e => {
+        const full = path.join(dir, e.name);
+        let mtime = 0;
+        try { mtime = fs.statSync(full).mtimeMs; } catch(_) {}
+        return { full, mtime };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    return hits.length ? hits[0].full : null;
+  } catch(_) { return null; }
+}
+
+/**
  * Resolve o caminho do XLSX considerando múltiplos usuários/máquinas.
- * 1) Substitui C:\Users\lcabd pelo %USERPROFILE% atual
- * 2) Se não existir, tenta o REL_FROM_HOME a partir do os.homedir()
- * 3) Se ainda não achar, glob manual por OneDrive*2S ENGENHARIA* dentro do home
- * 4) Retorna null se nada achado
+ * 1) savedPath (escolha manual do usuário), se ainda existir
+ * 2) para cada raiz OneDrive*2S ENGENHARIA* do home (e o home cru), tenta cada
+ *    pasta de REL_DIRS — atual primeiro, legado depois — casando por PADRÃO de nome
+ * 3) null se nada achado
+ *
+ * Casa por padrão (NAME_RE) em vez de nome exato de propósito: em 07/2026 a
+ * planilha foi renomeada trocando espaços por underscores e o painel congelou.
  */
 function resolveXlsxPath(savedPath) {
   const home = os.homedir();
-  const candidates = [];
 
-  if (savedPath) candidates.push(savedPath);
-
-  // Troca C:\Users\lcabd pelo home atual
-  candidates.push(BASE_PATH_LCABD.replace(/^C:\\Users\\lcabd/i, home));
-  candidates.push(path.join(home, REL_FROM_HOME));
-
-  for (const c of candidates) {
-    try { if (c && fs.existsSync(c)) return c; } catch(_) {}
+  if (savedPath) {
+    try { if (fs.existsSync(savedPath)) return savedPath; } catch(_) {}
+    // savedPath morreu (renomearam o arquivo?) — tenta o padrão na mesma pasta
+    const sibling = pickInDir(path.dirname(savedPath));
+    if (sibling) return sibling;
   }
 
-  // Glob manual: dentro de home, procura pastas OneDrive* com "2S ENGENHARIA"
+  // Raízes: o home direto + cada pasta OneDrive*2S ENGENHARIA* dentro dele.
+  const roots = [home];
   try {
-    const entries = fs.readdirSync(home, { withFileTypes: true });
-    for (const e of entries) {
-      if (!e.isDirectory()) continue;
-      if (!/OneDrive/i.test(e.name)) continue;
-      if (!/2S ENGENHARIA/i.test(e.name)) continue;
-      const rest = REL_FROM_HOME.split(path.sep).slice(1).join(path.sep);
-      const p = path.join(home, e.name, rest);
-      if (fs.existsSync(p)) return p;
+    for (const e of fs.readdirSync(home, { withFileTypes: true })) {
+      if (e.isDirectory() && /OneDrive/i.test(e.name) && /2S ENGENHARIA/i.test(e.name)) {
+        // REL_DIRS já começa com a pasta OneDrive; aqui entramos a partir dela,
+        // então cortamos o 1º segmento do relativo.
+        roots.push({ base: home, oneDrive: e.name });
+      }
     }
   } catch(_) {}
+
+  for (const rel of REL_DIRS) {
+    // a) home + relativo completo (inclui o nome padrão da pasta OneDrive)
+    const hit = pickInDir(path.join(home, rel));
+    if (hit) return hit;
+    // b) pasta OneDrive com nome diferente (outro tenant/usuário)
+    const rest = rel.split(path.sep).slice(1).join(path.sep);
+    for (const r of roots) {
+      if (typeof r === 'string') continue;
+      const h = pickInDir(path.join(r.base, r.oneDrive, rest));
+      if (h) return h;
+    }
+  }
 
   return null;
 }
