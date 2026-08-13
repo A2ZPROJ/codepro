@@ -439,9 +439,12 @@ def build_subst_map():
     m["K2"] = "1,50"
     m["K3"] = "0,50"
     m["C_RETORNO"] = "0,80"
-    m["TX_INFILTRACAO"] = "0,01"          # L/s.km
-    # Taxa de Contribuicao Linear (Tab. 07) = mesma taxa de infiltracao 0,01 L/s.km.
-    m["TAXA_LINEAR"] = "0,01"
+    # Ti = 0,10 L/s.km — valor OFICIAL dos projetos (Lucas, 12/08/2026). Estava 0,01,
+    # 10x menor e ABAIXO do minimo de 0,05 da NBR 9649 que o proprio texto do item 7.2
+    # cita, ou seja, o memorial se contradizia. Nao mudar sem ele mandar.
+    m["TX_INFILTRACAO"] = "0,10"          # L/s.km
+    # Taxa de Contribuicao Linear (Tab. 07) = mesma taxa de infiltracao 0,10 L/s.km.
+    m["TAXA_LINEAR"] = "0,10"
     # Declividade minima: sai automatica. Da vazao minima de projeto (1,50 L/s),
     # pela relacao de tensao trativa Imin = 0,0055 * Qi^-0,47 (~0,0045 m/m).
     # Sobrescrita pelo modelo hidraulico (declividade_min_m_m) quando apontado.
