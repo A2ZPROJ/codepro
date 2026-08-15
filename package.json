@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "2.84.147",
+  "version": "2.84.148",
   "description": "Nexus â€” GestÃ£o Integrada A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
@@ -150,4 +150,5 @@
     "@sentry/cli@2.58.6": true
   }
 }
+
 
