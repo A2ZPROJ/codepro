@@ -1075,6 +1075,21 @@ const C3D_BUNDLE_VERSION_FILE = path.join(C3D_BUNDLE_ROOT, 'Version.txt');
 // Pasta da DLL no bundle pra uma versão (…\Contents\Civil3D\2026 ou \2027)
 function c3dBundleDllDir(ver) { return path.join(C3D_BUNDLE_CONTENTS, ver); }
 function c3dBundleDllPath(ver) { return path.join(c3dBundleDllDir(ver), 'GerarProjetoMND.dll'); }
+// Carimbo POR VERSÃO de CAD, dentro da própria pasta. O Version.txt da raiz só
+// é escrito quando TODAS as versões entraram — se o 2027 estava travado (CAD
+// aberto), a raiz fica sem carimbo e não dá pra saber o que tem em cada pasta.
+function c3dBundleStampPath(ver) { return path.join(c3dBundleDllDir(ver), 'nexus-version.txt'); }
+
+// Compara "2.84.154" x "2.84.151" -> 1 / 0 / -1. Peças não numéricas viram 0.
+function c3dCmpVersao(a, b) {
+  const pa = String(a || '').split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b || '').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] || 0, y = pb[i] || 0;
+    if (x !== y) return x > y ? 1 : -1;
+  }
+  return 0;
+}
 
 function c3dDeriveKey() {
   const crypto = require('crypto');
@@ -1339,8 +1354,26 @@ function c3dInstallBundleSync() {
       const dir = c3dBundleDllDir(t.ver);
       fs.mkdirSync(dir, { recursive: true });
       let dllOk = true;
+
+      // ANTI-REBAIXAMENTO (16/08/2026). O bundle é compartilhado por qualquer
+      // Nexus que abrir na máquina. Se uma cópia ANTIGA do app subir depois da
+      // nova, ela sobrescrevia a DLL boa pela velha dela — foi o que rebaixou o
+      // 2027 de 2.55.351 pra 2.55.347 enquanto o 2026 ficava parado, e fez o
+      // Lucas testar correção com DLL velha duas vezes no mesmo dia.
+      // Agora cada pasta carrega o carimbo de quem a escreveu e só aceita
+      // versão MAIOR ou IGUAL.
+      let jaTem = null;
+      try { jaTem = fs.readFileSync(c3dBundleStampPath(t.ver), 'utf8').trim(); } catch {}
+      if (jaTem && c3dCmpVersao(jaTem, version) > 0 && fs.existsSync(c3dBundleDllPath(t.ver))) {
+        logUpdate(`civil3d:bundle: ${t.ver} já tem v${jaTem} (mais nova que v${version}) — não rebaixei`);
+        installedVers.push(t.ver);
+        c3dCopyDepsSync(c3dGetDepsSrcDir(t.ver), dir);
+        continue;
+      }
+
       try {
         fs.writeFileSync(c3dBundleDllPath(t.ver), dll);
+        try { fs.writeFileSync(c3dBundleStampPath(t.ver), version + '\n'); } catch {}
       } catch (e) {
         if (e.code === 'EBUSY' || e.code === 'EPERM') { busy = true; dllOk = false; }
         else throw e;
@@ -1362,7 +1395,14 @@ function c3dInstallBundleSync() {
         error: 'Civil 3D está aberto. Feche-o pra atualizar a DLL.' };
     }
 
-    fs.writeFileSync(C3D_BUNDLE_XML, c3dBuildPackageContents(version, installedVers));
+    // O XML declara TODA versão que tem DLL no disco — não só as escritas agora.
+    // Antes, com o Civil 2027 aberto (write EBUSY), o 2027 saía de installedVers
+    // e o PackageContents era reescrito só com o bloco do 2026: a DLL continuava
+    // lá na pasta, mas o AutoCAD 2027 deixava de carregar o plugin.
+    const versParaXml = C3D_TARGETS
+      .map(t => t.ver)
+      .filter(v => installedVers.includes(v) || fs.existsSync(c3dBundleDllPath(v)));
+    fs.writeFileSync(C3D_BUNDLE_XML, c3dBuildPackageContents(version, versParaXml));
     // Só carimba a versão se TODAS as disponíveis entraram — senão deixa pendente
     // pro próximo start reescrever as que faltaram.
     if (!busy) fs.writeFileSync(C3D_BUNDLE_VERSION_FILE, version + '\n');

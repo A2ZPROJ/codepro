@@ -98,6 +98,10 @@ function findDll(tfm) {
   return null;
 }
 
+// mtime da DLL-fonte de cada alvo — usado no fim pra garantir que 2026 e 2027
+// vieram do MESMO build.
+const mtimes = [];
+
 function embedTarget(t) {
   const found = findDll(t.tfm);
   const outFile = path.resolve(ASSETS_DIR, t.bin);
@@ -113,6 +117,8 @@ function embedTarget(t) {
     console.warn(`[embed-civil3d] (${t.ver}) DLL não encontrada (${t.tfm}) e sem blob prévio — PULANDO`);
     return { ok: false, missing: true };
   }
+
+  mtimes.push({ ver: t.ver, mtime: fs.statSync(found.dll).mtimeMs });
 
   const dll = fs.readFileSync(found.dll);
   const blob = encryptDll(dll);
@@ -146,15 +152,41 @@ function embedTarget(t) {
 
 function main() {
   let anyOk = false;
+  const problemas = [];
   for (const t of TARGETS) {
     const r = embedTarget(t);
     if (r.ok) anyOk = true;
+    if (r.reused) problemas.push(`${t.ver}: reusou blob ANTIGO (build ${t.tfm} não existe)`);
+    if (r.missing) problemas.push(`${t.ver}: sem DLL e sem blob — versão FORA do instalador`);
   }
   if (!anyOk) {
     console.error('[embed-civil3d] ERRO — nenhuma DLL encontrada nem blob prévio.');
     console.error('  Rode `dotnet build OSE_Reconectar.csproj -c Release` no projeto NETLOAD antes.');
     process.exit(1);
   }
+
+  // Os dois TFMs têm que vir do MESMO build. Se um deles ficou pra trás, o
+  // instalador sai com uma versão de DLL em cada pasta e o usuário de uma das
+  // versões de CAD nunca recebe a correção — sem nenhum erro aparecendo.
+  if (mtimes.length === TARGETS.length) {
+    const dt = Math.abs(mtimes[0].mtime - mtimes[1].mtime) / 1000;
+    if (dt > 300) {
+      problemas.push(`builds de TFM diferentes: ${mtimes.map(m => m.ver).join(' x ')} ` +
+                     `separados por ${Math.round(dt / 60)} min`);
+    }
+  }
+
+  if (problemas.length) {
+    console.error('\n[embed-civil3d] ERRO — as DUAS versões de CAD (2026 e 2027) precisam sair');
+    console.error('do mesmo build. Publicar assim entrega DLL velha pra uma delas:');
+    for (const p of problemas) console.error('  · ' + p);
+    console.error('\n  Rode `dotnet build "OSE_Reconectar.csproj" -c Release` (SEM -f) e repita.');
+    console.error('  Pra publicar mesmo assim, de propósito: NEXUS_EMBED_ALLOW_PARCIAL=1');
+    if (process.env.NEXUS_EMBED_ALLOW_PARCIAL !== '1') process.exit(1);
+    console.error('  (NEXUS_EMBED_ALLOW_PARCIAL=1 — seguindo mesmo assim)');
+  }
+
+  console.log(`\n[embed-civil3d] OK — 2026 e 2027 embutidos do mesmo build.`);
 }
 
 main();
