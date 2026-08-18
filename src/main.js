@@ -3340,8 +3340,16 @@ function c3dAutoInstallBundleOnStartup() {
     // updates onde a versão "bate" mas a DLL embedded mudou (ex: hot-fix).
     const r = c3dInstallBundleSync();
     if (r.ok) {
-      logUpdate(`civil3d:bundle: auto-install ok v${r.version}`);
-      _c3dNeedsCadRestart = false;
+      // 18/08/2026: quando SO UMA das pastas trava (Civil 2026 aberto e 2027
+      // fechado, p.ex.), o retorno vem { ok:true, restartCad:true } — e este
+      // ramo LIMPAVA o alerta, deixando a maquina com DLL velha em silencio.
+      // Aconteceu comigo (2027 na 377, 2026 parada na 376) e com a Katia, que
+      // rodou o CRIARINTSOLEIRA com a 2.55.365 achando que estava na 377 e
+      // gerou as soleiras 1,30 m acima. O alerta agora segue o restartCad.
+      logUpdate(`civil3d:bundle: auto-install ok v${r.version}` +
+                (r.restartCad ? ' (PARCIAL — CAD aberto, alguma pasta ficou com DLL velha)' : ''));
+      _c3dNeedsCadRestart = !!r.restartCad;
+      if (r.restartCad) _c3dEmitNeedsCadRestartToAllWindows();
       try { c3dEnsureTrustedPath(); } catch {}
       try { c3dEnsureAppLoader(); } catch {}
     }
