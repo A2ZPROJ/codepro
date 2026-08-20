@@ -11740,7 +11740,17 @@ body.presenting #presentingBadge { display: flex; }
             <div style="font-size:11px;color:var(--text3);margin-top:5px">Sem isso o Excel joga a aba inteira no PDF (colunas auxiliares e tudo). O Nexus acha o quadro pelo título "ORDEM DE SERVIÇO" e recorta; se a aba tiver área de impressão definida, ela manda.</div>
           </div>
 
-          <!-- 5) Exportar -->
+          <!-- 5) Papel -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">5. Papel</div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer">
+              <input id="abas-a4" type="checkbox" checked style="width:15px;height:15px;cursor:pointer"/>
+              Padronizar em A4 (paisagem ou retrato, conforme o desenho)
+            </label>
+            <div style="font-size:11px;color:var(--text3);margin-top:5px">O Excel usa o papel do driver da impressora padrão e ignora o A4 da planilha. Marcado, o Nexus reencaixa o PDF em A4 depois de exportar — continua vetorial.</div>
+          </div>
+
+          <!-- 6) Exportar -->
           <div style="display:flex;align-items:center;gap:12px;border-top:1px solid var(--border);padding-top:14px">
             <button id="abas-gerar" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:10px 20px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Exportar PDFs</button>
             <div id="abas-status" style="font-size:12px;color:var(--text3)"></div>
@@ -15082,6 +15092,7 @@ body.presenting #presentingBadge { display: flex; }
         destino:  _abasDir,
         prefixo:  ($('abas-prefixo').value || '').trim(),
         area:     ($('abas-area') ? ($('abas-area').value || '').trim() : ''),
+        papel:    ($('abas-a4') && $('abas-a4').checked) ? 'a4' : 'original',
       };
 
       _abasBusy = true;
@@ -15120,6 +15131,9 @@ body.presenting #presentingBadge { display: flex; }
           + (MODOS[r.modo_area] ? ' (' + MODOS[r.modo_area] + ')' : '') + '</div>'
         : (r.modo_area === 'aba_inteira'
             ? '<div style="font-size:11px;color:var(--red,#A11312);margin-top:2px">área impressa: aba inteira</div>' : '');
+      const papel = r.papel === 'a4'
+        ? '<div style="font-size:11px;color:var(--text3);margin-top:2px">papel: <b style="color:var(--text2)">A4</b></div>'
+        : '';
       const avisos = (Array.isArray(r.avisos) && r.avisos.length)
         ? '<div style="margin-top:10px;font-size:11px;color:var(--red,#A11312)">'
           + r.avisos.map(a => esc(a)).join('<br>') + '</div>'
@@ -15128,7 +15142,7 @@ body.presenting #presentingBadge { display: flex; }
         '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">'
         + fmtNum(r.n_pdfs,0) + ' PDF(s) gerado(s)</div>'
         + '<div style="font-size:11px;color:var(--text3);word-break:break-all">em ' + esc(r.pasta || '') + '</div>'
-        + area + avisos
+        + area + papel + avisos
         + lista
         + '<div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
         + '<button id="abas-abrir" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Abrir pasta</button>'

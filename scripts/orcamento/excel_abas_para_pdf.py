@@ -27,6 +27,12 @@ Ordem de decisao, por aba:
 Linhas ocultas continuam ocultas no PDF (o Excel nao imprime linha oculta).
 O arquivo fonte NUNCA e alterado (ReadOnly + export por Range).
 
+PAPEL A4
+--------
+O Excel usa o papel do DRIVER da impressora padrao (aqui, Foxit PDF Editor
+Printer), que ignora PageSetup.PaperSize: o PDF sai 966x746 pt em vez de A4.
+Por isso o papel e acertado depois, no PDF (padronizar_papel), mantendo vetor.
+
 Interface:
   --config <json>  arquivo JSON com os campos:
      planilha    (str)  xlsx de entrada (obrigatorio)
@@ -36,13 +42,15 @@ Interface:
      area        (str)  opcional; range fixo pra todas as abas (ex.: "E1:U75").
      auto_area   (bool) opcional, padrao True; detecta o quadro automaticamente.
      ancora      (str)  opcional; texto que ancora a deteccao.
+     papel       (str)  "a4" (padrao) reencaixa cada PDF em A4; "original"
+                        deixa o papel que o driver da impressora impuser.
      abrir_pasta (bool) opcional; sem efeito aqui (o Nexus abre a pasta).
 
   (tambem aceita as mesmas chaves via flags CLI; CLI sobrepoe o JSON.)
 
 Saida (stdout, ULTIMA linha): JSON
   ok:    {"ok":true,"n_pdfs":N,"pasta":"...","abas":[...],"area":"E1:U75",
-          "modo_area":"auto","avisos":[]}
+          "modo_area":"auto","papel":"a4","avisos":[]}
   erro:  {"ok":false,"erro":"..."}  + exit 1
 
 Robustez:
@@ -79,10 +87,10 @@ def _eprint(*a):
     print(*a, file=sys.stderr)
 
 
-def _emit_ok(n_pdfs, pasta, abas, area, modo_area, avisos):
+def _emit_ok(n_pdfs, pasta, abas, area, modo_area, papel, avisos):
     print(json.dumps({"ok": True, "n_pdfs": n_pdfs, "pasta": pasta, "abas": abas,
                       "area": area or "", "modo_area": modo_area or "",
-                      "avisos": avisos or []},
+                      "papel": papel or "original", "avisos": avisos or []},
                      ensure_ascii=False))
     sys.stdout.flush()
 
@@ -104,13 +112,15 @@ def build_config():
     ap.add_argument("--prefixo", help="So exporta abas que comecam com este prefixo.")
     ap.add_argument("--area", help="Range fixo a exportar em todas as abas (ex.: E1:U75).")
     ap.add_argument("--ancora", help="Texto que ancora a deteccao do quadro.")
+    ap.add_argument("--papel", help="a4 (padrao) ou original (papel do driver).")
     ap.add_argument("--sem-auto-area", dest="sem_auto_area", action="store_true",
                     help="Nao detectar o quadro; exporta a aba inteira.")
     ap.add_argument("--abrir-pasta", dest="abrir_pasta", action="store_true")
     args = ap.parse_args()
 
     cfg = {"planilha": None, "destino": None, "prefixo": "", "area": "",
-           "auto_area": True, "ancora": ANCORA_PADRAO, "abrir_pasta": False}
+           "auto_area": True, "ancora": ANCORA_PADRAO, "papel": "a4",
+           "abrir_pasta": False}
 
     if args.config:
         with open(args.config, "r", encoding="utf-8") as f:
@@ -130,6 +140,8 @@ def build_config():
         cfg["area"] = args.area
     if "ancora" in explicit and args.ancora is not None:
         cfg["ancora"] = args.ancora
+    if "papel" in explicit and args.papel is not None:
+        cfg["papel"] = args.papel
     if "sem_auto_area" in explicit:
         cfg["auto_area"] = False
     if "abrir_pasta" in explicit:
@@ -139,6 +151,9 @@ def build_config():
     cfg["area"] = (cfg.get("area") or "").strip()
     cfg["ancora"] = (cfg.get("ancora") or ANCORA_PADRAO).strip() or ANCORA_PADRAO
     cfg["auto_area"] = bool(cfg.get("auto_area", True))
+    cfg["papel"] = (cfg.get("papel") or "").strip().lower()
+    if cfg["papel"] in ("", "original", "driver", "nao", "false"):
+        cfg["papel"] = ""
     return cfg
 
 
@@ -280,6 +295,72 @@ def detectar_ultima_linha(xl, ws, topo, esq, dir_, cache=None):
     return topo
 
 
+def _ensure_fitz():
+    """PyMuPDF, instalando sob demanda. None se nao rolar."""
+    try:
+        import fitz
+        return fitz
+    except ImportError:
+        pass
+    _eprint("PyMuPDF nao encontrado; tentando instalar (pip install pymupdf)...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "pymupdf"])
+        import fitz
+        return fitz
+    except Exception as e:
+        _eprint("falhou instalar/importar PyMuPDF: %s" % e)
+        return None
+
+
+def padronizar_papel(caminhos, papel):
+    """Reencaixa cada PDF num papel fixo (hoje: A4), mantendo vetor.
+
+    O Excel usa o papel do DRIVER da impressora padrao: com a Foxit PDF Editor
+    Printer default, `PageSetup.PaperSize = xlPaperA4` e simplesmente ignorado e
+    o PDF sai 966x746 pt. Trocar a impressora padrao pelo Windows tambem nao
+    resolve (o Excel continua reportando a Foxit). Entao o papel e acertado
+    DEPOIS, no proprio PDF: pagina A4 nova + a pagina exportada centralizada e
+    escalada pra caber. Continua vetorial, so muda a moldura.
+    Orientacao segue o desenho (paisagem se for mais largo que alto).
+    """
+    if not caminhos or (papel or "").lower() not in ("a4",):
+        return None
+    fitz = _ensure_fitz()
+    if fitz is None:
+        return ("Nao consegui instalar o PyMuPDF: os PDFs ficaram no papel do "
+                "driver da impressora (nao A4).")
+
+    A4_MAIOR, A4_MENOR = 841.89, 595.28
+    falhas = 0
+    for caminho in caminhos:
+        try:
+            origem = fitz.open(caminho)
+            saida = fitz.open()
+            for pg in origem:
+                r = pg.rect
+                if r.width <= 0 or r.height <= 0:
+                    continue
+                larg, alt = ((A4_MAIOR, A4_MENOR) if r.width >= r.height
+                             else (A4_MENOR, A4_MAIOR))
+                nova = saida.new_page(width=larg, height=alt)
+                esc = min(larg / r.width, alt / r.height)
+                w, h = r.width * esc, r.height * esc
+                alvo = fitz.Rect((larg - w) / 2.0, (alt - h) / 2.0,
+                                 (larg + w) / 2.0, (alt + h) / 2.0)
+                nova.show_pdf_page(alvo, origem, pg.number)
+            tmp = caminho + ".a4.tmp"
+            saida.save(tmp, garbage=3, deflate=True)
+            saida.close()
+            origem.close()
+            os.replace(tmp, caminho)
+        except Exception as e:
+            falhas += 1
+            _eprint("papel A4 falhou em %s: %s" % (caminho, e))
+    if falhas:
+        return "%d PDF(s) ficaram no papel original (falha no ajuste pra A4)." % falhas
+    return None
+
+
 def _col_letra(n):
     """1 -> A, 27 -> AA."""
     s = ""
@@ -305,6 +386,7 @@ def exportar(cfg):
     area_fixa = (cfg.get("area") or "").strip()
     auto_area = bool(cfg.get("auto_area", True))
     ancora = (cfg.get("ancora") or ANCORA_PADRAO).strip()
+    papel = (cfg.get("papel") or "").strip().lower()
 
     if not planilha:
         raise RuntimeError("Campo 'planilha' (xlsx de entrada) e obrigatorio.")
@@ -419,7 +501,16 @@ def exportar(cfg):
             abas_geradas.append({"aba": nome, "pdf": pdf_path,
                                  "area": rng_addr or "", "modo": modo})
 
-        return abas_geradas, destino, area_reportada, modo_reportado, avisos
+        papel_feito = ""
+        if papel and abas_geradas:
+            # fora do laco: o Excel ja terminou, mexer no PDF nao custa Excel
+            problema = padronizar_papel([a["pdf"] for a in abas_geradas], papel)
+            if problema:
+                avisos.append(problema)
+            else:
+                papel_feito = papel
+        return (abas_geradas, destino, area_reportada, modo_reportado,
+                papel_feito, avisos)
     finally:
         try:
             if wb is not None:
@@ -445,7 +536,7 @@ def main():
         _emit_err("Argumentos invalidos.")
         return 1
     try:
-        abas, destino, area, modo, avisos = exportar(cfg)
+        abas, destino, area, modo, papel, avisos = exportar(cfg)
     except Exception as e:
         _emit_err(e)
         return 1
@@ -457,7 +548,7 @@ def main():
         _emit_err(msg)
         return 1
 
-    _emit_ok(len(abas), destino, [a["aba"] for a in abas], area, modo, avisos)
+    _emit_ok(len(abas), destino, [a["aba"] for a in abas], area, modo, papel, avisos)
     return 0
 
 
