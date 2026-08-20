@@ -411,8 +411,8 @@ def exportar(cfg):
     avisos = []
     usados = {}
     colunas_cache = None       # (topo, esq, dir): as abas sao clones do MODELO
-    colunas_tentado = False
     linha_cache = None         # ultima linha do quadro na aba anterior
+    sem_quadro = []            # abas em que nao achei quadro nenhum
     area_reportada = area_fixa
     modo_reportado = "explicita" if area_fixa else ""
     try:
@@ -463,9 +463,11 @@ def exportar(cfg):
                 if pa:
                     modo = "print_area"      # o Excel ja respeita sozinho
                 elif auto_area:
-                    if not colunas_tentado:
+                    # tenta em CADA aba ate achar. Cachear a FALHA da 1a aba era
+                    # bug: num arquivo de OSE a 1a aba e a RESUMO, que nao tem
+                    # quadro nenhum - e todas as OSEs saiam inteiras atras dela.
+                    if colunas_cache is None:
                         colunas_cache = detectar_colunas(ws, ancora)
-                        colunas_tentado = True
                     if colunas_cache:
                         topo, esq, dir_ = colunas_cache
                         base_row = detectar_ultima_linha(xl, ws, topo, esq, dir_,
@@ -473,19 +475,18 @@ def exportar(cfg):
                         linha_cache = base_row
                         rng_addr = _addr(topo, esq, base_row, dir_)
                         modo = "auto"
-                    elif not avisos:
-                        avisos.append(
-                            "Nao achei o quadro (ancora '%s') nem area de impressao "
-                            "definida - exportei a aba inteira. Informe a area na UI "
-                            "se precisar recortar." % ancora)
+                    else:
+                        sem_quadro.append(nome)
 
             # ---- exporta --------------------------------------------------
             try:
                 if rng_addr:
                     ws.Range(rng_addr).ExportAsFixedFormat(XL_TYPE_PDF, pdf_path)
                 else:
-                    # IgnorePrintAreas=False: respeita Print_Area quando existir
-                    ws.ExportAsFixedFormat(XL_TYPE_PDF, pdf_path, None, None, False)
+                    # sem 3o/4o/5o argumentos: em late binding o Excel derruba a
+                    # chamada ("Excecao" 0x800A03EC). O padrao de IgnorePrintAreas
+                    # ja e False, entao a Print_Area continua sendo respeitada.
+                    ws.ExportAsFixedFormat(XL_TYPE_PDF, pdf_path)
             except Exception as e:
                 # ultimo recurso: aba inteira, pra nao perder o PDF
                 avisos.append("Aba '%s': falha exportando %s (%s); exportei a aba inteira."
@@ -494,12 +495,26 @@ def exportar(cfg):
                 modo = "aba_inteira"
                 rng_addr = None
 
+            # o resumo da UI mostra a PRIMEIRA aba que teve area de verdade:
+            # se a 1a aba do arquivo for a RESUMO (sem quadro), reportar o modo
+            # dela daria a impressao de que tudo saiu inteiro.
             if not area_reportada and rng_addr:
                 area_reportada = rng_addr
-            if not modo_reportado:
+                modo_reportado = modo
+            elif not modo_reportado:
                 modo_reportado = modo
             abas_geradas.append({"aba": nome, "pdf": pdf_path,
                                  "area": rng_addr or "", "modo": modo})
+
+        if sem_quadro:
+            mostra = ", ".join(sem_quadro[:5])
+            if len(sem_quadro) > 5:
+                mostra += " (+%d)" % (len(sem_quadro) - 5)
+            avisos.append(
+                "Sem quadro (ancora '%s') e sem area de impressao em %d aba(s) - "
+                "essas sairam inteiras: %s. Informe a area na UI se precisar "
+                "recortar, ou use o prefixo pra exportar so as OSEs."
+                % (ancora, len(sem_quadro), mostra))
 
         papel_feito = ""
         if papel and abas_geradas:
