@@ -5,26 +5,51 @@ O nome de cada PDF = nome da aba (sanitizado), ex.: OSE-001.pdf, OSE-002.pdf...
 
 Motor de LINHA DE COMANDO que o Nexus (Electron) chama. Usa o Excel instalado
 na maquina via COM (win32com / pywin32): abre a planilha invisivel e para cada
-aba roda Worksheet.ExportAsFixedFormat(0, <caminho.pdf>) (0 = xlTypePDF).
+aba roda ExportAsFixedFormat(0, <caminho.pdf>) (0 = xlTypePDF).
+
+AREA IMPRESSA (o pulo do gato)
+------------------------------
+ws.ExportAsFixedFormat() joga no PDF a USED RANGE INTEIRA da aba. Nas planilhas
+de OSE isso arrasta as colunas auxiliares (dados brutos, tabelas de apoio,
+"NAO MEXER"...) e o PDF sai gigante - foi exatamente o defeito reclamado.
+Como as abas de OSE NAO tem Print_Area definida (conferido: 0 print areas em
+937 abas), nao adianta so pedir pro Excel respeitar a area de impressao.
+
+Ordem de decisao, por aba:
+  1. cfg["area"]                -> usa esse range (ex.: "E1:U75");
+  2. PageSetup.PrintArea != ""  -> respeita a area de impressao da aba;
+  3. auto_area (padrao ligado)  -> DETECTA o quadro da OSE:
+        - acha a celula da ancora (padrao "ORDEM DE SERVI");
+        - esquerda/topo = inicio da celula mesclada do titulo;
+        - direita = anda pra direita enquanto a moldura (bordas) continuar;
+        - baixo   = ultima linha com conteudo dentro dessas colunas;
+  4. senao                      -> aba inteira (comportamento antigo).
+Linhas ocultas continuam ocultas no PDF (o Excel nao imprime linha oculta).
+O arquivo fonte NUNCA e alterado (ReadOnly + export por Range).
 
 Interface:
   --config <json>  arquivo JSON com os campos:
      planilha    (str)  xlsx de entrada (obrigatorio)
      destino     (str)  pasta de saida (obrigatorio; criada se nao existir)
-     prefixo     (str)  opcional; se preenchido, so exporta abas cujo nome
-                        comeca com esse prefixo (ex.: "OSE"). Vazio = todas.
+     prefixo     (str)  opcional; so exporta abas cujo nome comeca com esse
+                        prefixo (ex.: "OSE"). Vazio = todas.
+     area        (str)  opcional; range fixo pra todas as abas (ex.: "E1:U75").
+     auto_area   (bool) opcional, padrao True; detecta o quadro automaticamente.
+     ancora      (str)  opcional; texto que ancora a deteccao.
      abrir_pasta (bool) opcional; sem efeito aqui (o Nexus abre a pasta).
 
   (tambem aceita as mesmas chaves via flags CLI; CLI sobrepoe o JSON.)
 
 Saida (stdout, ULTIMA linha): JSON
-  ok:    {"ok":true,"n_pdfs":N,"pasta":"<destino>","abas":[...]}
+  ok:    {"ok":true,"n_pdfs":N,"pasta":"...","abas":[...],"area":"E1:U75",
+          "modo_area":"auto","avisos":[]}
   erro:  {"ok":false,"erro":"..."}  + exit 1
 
 Robustez:
   - cria a pasta destino se nao existir;
   - se win32com/pywin32 nao estiver instalado, tenta `pip install pywin32`;
-  - garante xl.Quit() mesmo em erro (try/finally); DisplayAlerts=False, Visible=False.
+  - garante xl.Quit() mesmo em erro (try/finally); DisplayAlerts=False, Visible=False;
+  - se a deteccao falhar numa aba, cai pra aba inteira e registra em "avisos".
 
 Autor: Claude Code (Opus) p/ Lucas Abdala / 2S Engenharia.
 """
@@ -35,12 +60,29 @@ import argparse
 import subprocess
 
 
+# --- constantes COM do Excel ------------------------------------------------
+XL_TYPE_PDF = 0
+XL_LINESTYLE_NONE = -4142
+XL_EDGES = (7, 8, 9, 10)      # xlEdgeLeft, Top, Bottom, Right
+XL_VALUES = -4163
+XL_FORMULAS = -4123
+XL_PART = 2
+XL_BY_ROWS = 1
+XL_PREVIOUS = 2
+
+ANCORA_PADRAO = "ORDEM DE SERVI"   # pega "ORDEM DE SERVICO" com ou sem cedilha
+MAX_COLS_DIREITA = 200             # trava de seguranca no passeio pra direita
+MAX_LINHAS_REF = 40                # ate onde procurar a linha de referencia
+
+
 def _eprint(*a):
     print(*a, file=sys.stderr)
 
 
-def _emit_ok(n_pdfs, pasta, abas):
-    print(json.dumps({"ok": True, "n_pdfs": n_pdfs, "pasta": pasta, "abas": abas},
+def _emit_ok(n_pdfs, pasta, abas, area, modo_area, avisos):
+    print(json.dumps({"ok": True, "n_pdfs": n_pdfs, "pasta": pasta, "abas": abas,
+                      "area": area or "", "modo_area": modo_area or "",
+                      "avisos": avisos or []},
                      ensure_ascii=False))
     sys.stdout.flush()
 
@@ -60,10 +102,15 @@ def build_config():
     ap.add_argument("--planilha", help="Caminho do .xlsx de entrada.")
     ap.add_argument("--destino", help="Pasta de saida dos PDFs.")
     ap.add_argument("--prefixo", help="So exporta abas que comecam com este prefixo.")
+    ap.add_argument("--area", help="Range fixo a exportar em todas as abas (ex.: E1:U75).")
+    ap.add_argument("--ancora", help="Texto que ancora a deteccao do quadro.")
+    ap.add_argument("--sem-auto-area", dest="sem_auto_area", action="store_true",
+                    help="Nao detectar o quadro; exporta a aba inteira.")
     ap.add_argument("--abrir-pasta", dest="abrir_pasta", action="store_true")
     args = ap.parse_args()
 
-    cfg = {"planilha": None, "destino": None, "prefixo": "", "abrir_pasta": False}
+    cfg = {"planilha": None, "destino": None, "prefixo": "", "area": "",
+           "auto_area": True, "ancora": ANCORA_PADRAO, "abrir_pasta": False}
 
     if args.config:
         with open(args.config, "r", encoding="utf-8") as f:
@@ -79,15 +126,24 @@ def build_config():
         cfg["destino"] = args.destino
     if "prefixo" in explicit and args.prefixo is not None:
         cfg["prefixo"] = args.prefixo
+    if "area" in explicit and args.area is not None:
+        cfg["area"] = args.area
+    if "ancora" in explicit and args.ancora is not None:
+        cfg["ancora"] = args.ancora
+    if "sem_auto_area" in explicit:
+        cfg["auto_area"] = False
     if "abrir_pasta" in explicit:
         cfg["abrir_pasta"] = True
 
     cfg["prefixo"] = (cfg.get("prefixo") or "").strip()
+    cfg["area"] = (cfg.get("area") or "").strip()
+    cfg["ancora"] = (cfg.get("ancora") or ANCORA_PADRAO).strip() or ANCORA_PADRAO
+    cfg["auto_area"] = bool(cfg.get("auto_area", True))
     return cfg
 
 
 # ---------------------------------------------------------------------------
-# win32com (pywin32) — importa, instalando sob demanda se faltar
+# win32com (pywin32) - importa, instalando sob demanda se faltar
 # ---------------------------------------------------------------------------
 def _ensure_win32com():
     try:
@@ -128,12 +184,127 @@ def sanitize_filename(name):
 
 
 # ---------------------------------------------------------------------------
+# Deteccao do quadro (area a imprimir)
+# ---------------------------------------------------------------------------
+def _n_bordas(cell):
+    """Quantas das 4 bordas da celula estao desenhadas (0..4)."""
+    n = 0
+    for edge in XL_EDGES:
+        try:
+            if cell.Borders(edge).LineStyle != XL_LINESTYLE_NONE:
+                n += 1
+        except Exception:
+            pass
+    return n
+
+
+def detectar_colunas(ws, ancora):
+    """(topo, col_esq, col_dir) do quadro ancorado no titulo. None se nao achar.
+
+    Anda pra direita a partir do fim do titulo mesclado enquanto a MOLDURA
+    continuar: as colunas auxiliares coladas no quadro (rotulos verticais,
+    tabelas de apoio) nao tem borda, entao param o passeio.
+    """
+    try:
+        achou = ws.Cells.Find(What=ancora, LookIn=XL_VALUES, LookAt=XL_PART)
+    except Exception:
+        achou = None
+    if achou is None:
+        return None
+
+    try:
+        ma = achou.MergeArea
+        topo = int(ma.Row)
+        esq = int(ma.Column)
+        dir_ = esq + int(ma.Columns.Count) - 1
+    except Exception:
+        topo = int(achou.Row)
+        esq = dir_ = int(achou.Column)
+
+    # linha de referencia = primeira linha (do topo pra baixo) em que a celula
+    # da coluna da esquerda tem as 4 bordas: e a moldura fechada da tabela.
+    ref = None
+    for r in range(topo, topo + MAX_LINHAS_REF):
+        if _n_bordas(ws.Cells(r, esq)) >= 4:
+            ref = r
+            break
+    if ref is None:
+        ref = topo
+
+    col = dir_ + 1
+    limite = esq + MAX_COLS_DIREITA
+    while col <= limite:
+        if _n_bordas(ws.Cells(ref, col)) >= 2:
+            dir_ = col
+            col += 1
+        else:
+            break
+    return topo, esq, dir_
+
+
+def _conta_a(xl, ws, r1, c1, r2, c2):
+    try:
+        return float(xl.WorksheetFunction.CountA(
+            ws.Range(ws.Cells(r1, c1), ws.Cells(r2, c2))))
+    except Exception:
+        return 0.0
+
+
+def detectar_ultima_linha(xl, ws, topo, esq, dir_, cache=None):
+    """Ultima linha com conteudo DENTRO das colunas do quadro.
+
+    Range.Find(SearchDirection=xlPrevious) mente aqui (devolve a 1a linha),
+    entao a varredura e por CountA linha a linha, de baixo pra cima. Como as
+    abas de OSE sao clones do MODELO, o resultado da 1a aba vira `cache` e nas
+    demais so se confere, com UMA chamada, se sobrou algo abaixo dele.
+    """
+    try:
+        ur = ws.UsedRange
+        ultima = int(ur.Row) + int(ur.Rows.Count) - 1
+    except Exception:
+        ultima = topo
+    if ultima < topo:
+        return topo
+
+    if cache is not None and topo <= cache:
+        if ultima <= cache:
+            return cache
+        if _conta_a(xl, ws, cache + 1, esq, ultima, dir_) == 0:
+            return cache
+
+    linha = ultima
+    while linha > topo:
+        if _conta_a(xl, ws, linha, esq, linha, dir_) > 0:
+            return linha
+        linha -= 1
+    return topo
+
+
+def _col_letra(n):
+    """1 -> A, 27 -> AA."""
+    s = ""
+    while n > 0:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def _addr(topo, esq, base, dir_):
+    # montado na mao: Range.Address em late binding volta string, nao aceita
+    # ser chamado com argumentos.
+    return "%s%d:%s%d" % (_col_letra(esq), topo, _col_letra(dir_), base)
+
+
+# ---------------------------------------------------------------------------
 # Exportacao via Excel COM
 # ---------------------------------------------------------------------------
 def exportar(cfg):
     planilha = cfg.get("planilha")
     destino = cfg.get("destino")
     prefixo = (cfg.get("prefixo") or "").strip()
+    area_fixa = (cfg.get("area") or "").strip()
+    auto_area = bool(cfg.get("auto_area", True))
+    ancora = (cfg.get("ancora") or ANCORA_PADRAO).strip()
 
     if not planilha:
         raise RuntimeError("Campo 'planilha' (xlsx de entrada) e obrigatorio.")
@@ -155,7 +326,13 @@ def exportar(cfg):
     xl = None
     wb = None
     abas_geradas = []
+    avisos = []
     usados = {}
+    colunas_cache = None       # (topo, esq, dir): as abas sao clones do MODELO
+    colunas_tentado = False
+    linha_cache = None         # ultima linha do quadro na aba anterior
+    area_reportada = area_fixa
+    modo_reportado = "explicita" if area_fixa else ""
     try:
         try:
             xl = win32com.client.DispatchEx("Excel.Application")
@@ -170,6 +347,10 @@ def exportar(cfg):
 
         # ReadOnly=True pra nunca alterar o arquivo fonte
         wb = xl.Workbooks.Open(planilha, ReadOnly=True, UpdateLinks=0)
+        try:
+            xl.Calculation = -4135      # xlCalculationManual: sem isso, cada
+        except Exception:               # export recalcula as 937 abas.
+            pass
 
         pref_up = prefixo.upper()
         for ws in wb.Worksheets:
@@ -185,11 +366,60 @@ def exportar(cfg):
             else:
                 usados[key] = 0
             pdf_path = os.path.join(destino, base + ".pdf")
-            # 0 = xlTypePDF
-            ws.ExportAsFixedFormat(0, pdf_path)
-            abas_geradas.append({"aba": nome, "pdf": pdf_path})
 
-        return abas_geradas, destino
+            # ---- qual area exportar --------------------------------------
+            rng_addr = None
+            modo = "aba_inteira"
+            if area_fixa:
+                rng_addr = area_fixa
+                modo = "explicita"
+            else:
+                try:
+                    pa = str(ws.PageSetup.PrintArea or "").strip()
+                except Exception:
+                    pa = ""
+                if pa:
+                    modo = "print_area"      # o Excel ja respeita sozinho
+                elif auto_area:
+                    if not colunas_tentado:
+                        colunas_cache = detectar_colunas(ws, ancora)
+                        colunas_tentado = True
+                    if colunas_cache:
+                        topo, esq, dir_ = colunas_cache
+                        base_row = detectar_ultima_linha(xl, ws, topo, esq, dir_,
+                                                         linha_cache)
+                        linha_cache = base_row
+                        rng_addr = _addr(topo, esq, base_row, dir_)
+                        modo = "auto"
+                    elif not avisos:
+                        avisos.append(
+                            "Nao achei o quadro (ancora '%s') nem area de impressao "
+                            "definida - exportei a aba inteira. Informe a area na UI "
+                            "se precisar recortar." % ancora)
+
+            # ---- exporta --------------------------------------------------
+            try:
+                if rng_addr:
+                    ws.Range(rng_addr).ExportAsFixedFormat(XL_TYPE_PDF, pdf_path)
+                else:
+                    # IgnorePrintAreas=False: respeita Print_Area quando existir
+                    ws.ExportAsFixedFormat(XL_TYPE_PDF, pdf_path, None, None, False)
+            except Exception as e:
+                # ultimo recurso: aba inteira, pra nao perder o PDF
+                avisos.append("Aba '%s': falha exportando %s (%s); exportei a aba inteira."
+                              % (nome, rng_addr or "aba", e))
+                ws.ExportAsFixedFormat(XL_TYPE_PDF, pdf_path)
+                modo = "aba_inteira"
+                rng_addr = None
+
+            if not area_reportada and rng_addr:
+                area_reportada = rng_addr
+            if not modo_reportado:
+                modo_reportado = modo
+            abas_geradas.append({"aba": nome, "pdf": pdf_path,
+                                 "area": rng_addr or "", "modo": modo})
+
+        return abas_geradas, destino, area_reportada, modo_reportado, avisos
     finally:
         try:
             if wb is not None:
@@ -215,7 +445,7 @@ def main():
         _emit_err("Argumentos invalidos.")
         return 1
     try:
-        abas, destino = exportar(cfg)
+        abas, destino, area, modo, avisos = exportar(cfg)
     except Exception as e:
         _emit_err(e)
         return 1
@@ -227,7 +457,7 @@ def main():
         _emit_err(msg)
         return 1
 
-    _emit_ok(len(abas), destino, [a["aba"] for a in abas])
+    _emit_ok(len(abas), destino, [a["aba"] for a in abas], area, modo, avisos)
     return 0
 
 

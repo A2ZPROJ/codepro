@@ -11702,7 +11702,7 @@ body.presenting #presentingBadge { display: flex; }
       <div class="page-hero">
         <div class="page-hero-content">
           <h1 class="page-title">Gerar PDF Planilha OSE</h1>
-          <p class="page-subtitle">Cada aba da planilha vira um PDF separado (nome do PDF = nome da aba)</p>
+          <p class="page-subtitle">Cada aba da planilha vira um PDF separado (nome do PDF = nome da aba), recortado na área de impressão</p>
         </div>
       </div>
 
@@ -11733,7 +11733,14 @@ body.presenting #presentingBadge { display: flex; }
             <input id="abas-prefixo" type="text" placeholder="ex.: OSE — só exporta abas que começam assim" style="width:100%;max-width:360px;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;box-sizing:border-box"/>
           </div>
 
-          <!-- 4) Exportar -->
+          <!-- 4) Área de impressão (opcional) -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">4. Área a imprimir <span style="font-weight:400;color:var(--text3)">(opcional — vazio = detecta o quadro da OSE sozinho)</span></div>
+            <input id="abas-area" type="text" placeholder="ex.: E1:U75 — força esse intervalo em todas as abas" style="width:100%;max-width:360px;padding:7px 10px;font-family:inherit;font-size:12px;border:1.5px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface);outline:none;box-sizing:border-box"/>
+            <div style="font-size:11px;color:var(--text3);margin-top:5px">Sem isso o Excel joga a aba inteira no PDF (colunas auxiliares e tudo). O Nexus acha o quadro pelo título "ORDEM DE SERVIÇO" e recorta; se a aba tiver área de impressão definida, ela manda.</div>
+          </div>
+
+          <!-- 5) Exportar -->
           <div style="display:flex;align-items:center;gap:12px;border-top:1px solid var(--border);padding-top:14px">
             <button id="abas-gerar" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:10px 20px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Exportar PDFs</button>
             <div id="abas-status" style="font-size:12px;color:var(--text3)"></div>
@@ -15074,6 +15081,7 @@ body.presenting #presentingBadge { display: flex; }
         planilha: _abasXlsx,
         destino:  _abasDir,
         prefixo:  ($('abas-prefixo').value || '').trim(),
+        area:     ($('abas-area') ? ($('abas-area').value || '').trim() : ''),
       };
 
       _abasBusy = true;
@@ -15106,10 +15114,21 @@ body.presenting #presentingBadge { display: flex; }
           + abas.map(a => '<span style="font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:2px 8px;color:var(--text2)">' + esc(a) + '.pdf</span>').join('')
           + '</div>'
         : '';
+      const MODOS = { auto:'quadro detectado', explicita:'área informada', print_area:'área de impressão da aba', aba_inteira:'aba inteira' };
+      const area = r.area
+        ? '<div style="font-size:11px;color:var(--text3);margin-top:2px">área impressa: <b style="color:var(--text2)">' + esc(r.area) + '</b>'
+          + (MODOS[r.modo_area] ? ' (' + MODOS[r.modo_area] + ')' : '') + '</div>'
+        : (r.modo_area === 'aba_inteira'
+            ? '<div style="font-size:11px;color:var(--red,#A11312);margin-top:2px">área impressa: aba inteira</div>' : '');
+      const avisos = (Array.isArray(r.avisos) && r.avisos.length)
+        ? '<div style="margin-top:10px;font-size:11px;color:var(--red,#A11312)">'
+          + r.avisos.map(a => esc(a)).join('<br>') + '</div>'
+        : '';
       box.innerHTML =
         '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">'
         + fmtNum(r.n_pdfs,0) + ' PDF(s) gerado(s)</div>'
         + '<div style="font-size:11px;color:var(--text3);word-break:break-all">em ' + esc(r.pasta || '') + '</div>'
+        + area + avisos
         + lista
         + '<div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
         + '<button id="abas-abrir" style="background:var(--gray-900);color:white;border:none;border-radius:6px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Abrir pasta</button>'
