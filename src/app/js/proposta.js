@@ -16,9 +16,14 @@
     return 'R$ ' + Number(n || 0).toLocaleString('pt-BR',
       { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
+  // Escape canônico: delega pra window.esc (js/core/utils.js). O fallback é
+  // idêntico à versão canônica — inclui aspas simples/duplas, senão os
+  // value="..." dos inputs abaixo viram vetor de XSS armazenado.
   function esc(s) {
+    if (typeof window !== 'undefined' && typeof window.esc === 'function') return window.esc(s);
     return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
   function dataLonga(iso, cidade) {
     var d;

@@ -247,6 +247,41 @@ def _fmt_expr(expr, repl):
     s = (s.replace('*', ' × ').replace('/', ' ÷ ').replace('+', ' + ').replace('-', ' − '))
     return re.sub(r'\s+', ' ', s).strip()
 
+# ── Avaliador aritmético restrito ───────────────────────────────────────────
+# Substitui eval(): as fórmulas do memorial de cálculo vêm de configs editáveis,
+# e eval() com __builtins__ vazio ainda é contornável. Aqui só a árvore
+# sintática de uma conta é aceita — qualquer outro nó levanta ValueError.
+import ast as _ast
+import operator as _op
+
+_OPS_BIN = {
+    _ast.Add: _op.add, _ast.Sub: _op.sub, _ast.Mult: _op.mul,
+    _ast.Div: _op.truediv, _ast.FloorDiv: _op.floordiv,
+    _ast.Mod: _op.mod, _ast.Pow: _op.pow,
+}
+_OPS_UN = {_ast.UAdd: _op.pos, _ast.USub: _op.neg}
+
+
+def _eval_no(no):
+    if isinstance(no, _ast.Expression):
+        return _eval_no(no.body)
+    if isinstance(no, _ast.Constant):
+        if isinstance(no.value, bool) or not isinstance(no.value, (int, float)):
+            raise ValueError('constante nao numerica na formula')
+        return no.value
+    if isinstance(no, _ast.BinOp) and type(no.op) in _OPS_BIN:
+        return _OPS_BIN[type(no.op)](_eval_no(no.left), _eval_no(no.right))
+    if isinstance(no, _ast.UnaryOp) and type(no.op) in _OPS_UN:
+        return _OPS_UN[type(no.op)](_eval_no(no.operand))
+    raise ValueError('elemento nao permitido na formula: %s' % type(no).__name__)
+
+
+def _eval_aritmetico(expr):
+    """Avalia uma expressao puramente aritmetica. Mesmo resultado que o eval
+    anterior para toda formula valida; levanta ValueError para o resto."""
+    return _eval_no(_ast.parse(str(expr), mode='eval'))
+
+
 def memo_calc(formula, DATA, unit, nota=''):
     """Conta DIDÁTICA em 3 etapas, p/ qualquer um entender o que foi feito:
         FÓRMULA (em grandezas) -> SUBSTITUIÇÃO (valores) -> RESULTADO.
@@ -259,7 +294,7 @@ def memo_calc(formula, DATA, unit, nota=''):
     symb = _fmt_expr(expr, lambda m: GRANDEZA.get(m.group(1), m.group(1)))
     nums = _fmt_expr(expr, lambda m: _ptbr(DATA.get(m.group(1), 0)))
     numexpr = re.sub(r'\{(\w+)\}', lambda m: repr(float(DATA.get(m.group(1), 0))), expr)
-    try: res = eval(numexpr, {'__builtins__': {}})
+    try: res = _eval_aritmetico(numexpr)
     except Exception: res = None
     has_op = any(o in nums for o in (' × ',' ÷ ',' + ',' − '))
     nota_ok = bool(nota and re.search(r'[A-Za-zÀ-ÿ]', nota))

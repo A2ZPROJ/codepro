@@ -133,7 +133,7 @@
     const iv = Buffer.from(blob.iv, 'base64');
     const tag = Buffer.from(blob.tag, 'base64');
     const ct = Buffer.from(blob.data, 'base64');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
     decipher.setAuthTag(tag);
     const plain = Buffer.concat([decipher.update(ct), decipher.final()]);
     return JSON.parse(plain.toString('utf8'));
@@ -158,7 +158,7 @@
     const iv = Buffer.from(blob.iv, 'base64');
     const tag = Buffer.from(blob.tag, 'base64');
     const ct = Buffer.from(blob.data, 'base64');
-    const d = crypto.createDecipheriv('aes-256-gcm', kek, iv);
+    const d = crypto.createDecipheriv('aes-256-gcm', kek, iv, { authTagLength: 16 });
     d.setAuthTag(tag);
     return Buffer.concat([d.update(ct), d.final()]); // lança se kek errada
   }
@@ -275,7 +275,11 @@
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // Escape canônico: delega pra window.esc (js/core/utils.js). Fallback local
+  // idêntico à canônica (inclui a aspa simples) caso a ordem de carga atrase o módulo.
+  const esc = (s) => (typeof window !== 'undefined' && typeof window.esc === 'function')
+    ? window.esc(s)
+    : String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const money = (v) => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const pct = (v) => (v * 100).toFixed(1) + '%';
   const toast = (m, t) => { try { (t === 'error' ? window.toastError : window.toastSuccess || window.toast)?.(m); } catch {} };
@@ -792,8 +796,8 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div style="grid-column:1/-1">${fLabel('Descrição')}<input id="m-desc" value="${esc(l?.descricao || '')}" style="${inp()}"/></div>
         <div>${fLabel('Tipo')}<select id="m-tipo" style="${inp()}"><option value="saida" ${tipoIni !== 'entrada' ? 'selected' : ''}>Saída</option><option value="entrada" ${tipoIni === 'entrada' ? 'selected' : ''}>Entrada</option></select></div>
-        <div>${fLabel('Valor (R$)')}<input id="m-valor" type="text" value="${l ? l.valor : ''}" placeholder="0,00" style="${inp()}"/></div>
-        <div>${fLabel('Data')}<input id="m-data" type="date" value="${l?.data || todayStr()}" style="${inp()}"/></div>
+        <div>${fLabel('Valor (R$)')}<input id="m-valor" type="text" value="${esc(l ? l.valor : '')}" placeholder="0,00" style="${inp()}"/></div>
+        <div>${fLabel('Data')}<input id="m-data" type="date" value="${esc(l?.data || todayStr())}" style="${inp()}"/></div>
         <div>${fLabel('Categoria')}<select id="m-cat" style="${inp()}">${optsCategoria(tipoIni, l?.categoria)}</select></div>
         <div>${fLabel('Conta')}<select id="m-conta" style="${inp()}"><option value="">— sem conta —</option>${contas.map(c => `<option value="${c.id}" ${l?.contaId === c.id ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></div>
         <div>${fLabel('Status')}<select id="m-status" style="${inp()}"><option value="pago" ${l?.status !== 'pendente' ? 'selected' : ''}>Pago / realizado</option><option value="pendente" ${l?.status === 'pendente' ? 'selected' : ''}>Pendente (a pagar/receber)</option></select></div>
@@ -1237,7 +1241,7 @@
     ov.innerHTML = `
       <div style="background:var(--surface);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:100%;max-width:520px;max-height:90vh;overflow:auto">
         <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center">
-          <div style="font-size:16px;font-weight:700;color:var(--text)">${titulo}</div>
+          <div style="font-size:16px;font-weight:700;color:var(--text)">${esc(titulo)}</div>
           <button id="m-x" style="margin-left:auto;background:none;border:none;font-size:22px;color:var(--text3);cursor:pointer;line-height:1">×</button>
         </div>
         <div style="padding:22px">${bodyHtml}</div>

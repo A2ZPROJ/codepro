@@ -46,6 +46,16 @@ MAPAS = os.path.join(BASE, "mapas")
 # posicao/tamanho corretos (imagens flutuantes ancoradas a pagina, full-bleed),
 # alem da configuracao de pagina (pgSz/pgMar) e dos estilos. Partimos DELE.
 # Preferimos o template embutido no bundle; caimos no da pasta topografia.
+def _urlopen_https(req, timeout=12):
+    """urlopen restrito a http(s). urllib tambem abre file:// e ftp://; com URL
+    montada a partir de dado de entrada isso vira leitura de arquivo local."""
+    alvo = req.full_url if hasattr(req, "full_url") else str(req)
+    if not alvo.lower().startswith(("http://", "https://")):
+        raise ValueError("esquema de URL nao permitido: %s" % alvo[:40])
+    # nosemgrep: dynamic-urllib-use-detected
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
 def _first_existing(paths, fallback=None):
     for p in paths:
         if p and os.path.exists(p):
@@ -3000,7 +3010,7 @@ def _resolver_ibge(municipio, uf):
         uf = (uf or "PR").strip().upper()
         url = "https://servicodados.ibge.gov.br/api/v1/localidades/estados/%s/municipios" % uf
         req = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})
-        raw = urllib.request.urlopen(req, timeout=12).read()
+        raw = _urlopen_https(req, timeout=12).read()
         if raw[:2] == b"\x1f\x8b":
             raw = gzip.decompress(raw)
         alvo = _norm(municipio)
@@ -3032,7 +3042,7 @@ def _ibge_pop_area(codigo):
         url = ("https://servicodados.ibge.gov.br/api/v3/agregados/4714/"
                "periodos/2022/variaveis/%s?localidades=N6%%5B%s%%5D" % (var, codigo))
         req = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})
-        raw = urllib.request.urlopen(req, timeout=12).read()
+        raw = _urlopen_https(req, timeout=12).read()
         if raw[:2] == b"\x1f\x8b":
             raw = gzip.decompress(raw)
         d = json.loads(raw.decode("utf-8"))

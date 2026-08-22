@@ -1186,12 +1186,21 @@ def extrair_modelo_sqlite(db_path, scenario_id=None):
         con.text_factory = lambda b: b.decode("utf-8", "replace")
         cur = con.cursor()
 
+        def _ident(name):
+            # Identificador (tabela/coluna) vai por interpolacao — SQL nao aceita
+            # parametro em nome de objeto. Os nomes vem de constantes internas;
+            # a checagem existe para que continuem vindo dai.
+            if not _re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(name or "")):
+                raise ValueError("identificador SQL invalido: %r" % (name,))
+            return '"%s"' % name
+
         def _has(t):
             return bool(cur.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (t,)).fetchone())
 
         def _cols(t):
-            return [c[1] for c in cur.execute('PRAGMA table_info("%s")' % t)]
+            # nosemgrep: formatted-sql-query,sqlalchemy-execute-raw-query
+            return [c[1] for c in cur.execute("PRAGMA table_info(%s)" % _ident(t))]
 
         if scenario_id:
             scen = scenario_id
@@ -1211,8 +1220,11 @@ def extrair_modelo_sqlite(db_path, scenario_id=None):
             if key not in c or not sel:
                 return out
             has_alt = "AlternativeID" in c
-            q = 'SELECT %s,%s%s FROM "%s"' % (
-                key, ",".join(sel), ",AlternativeID" if has_alt else "", table)
+            # nosemgrep: formatted-sql-query,sqlalchemy-execute-raw-query
+            q = "SELECT %s,%s%s FROM %s" % (
+                _ident(key), ",".join(_ident(c) for c in sel),
+                ",AlternativeID" if has_alt else "", _ident(table))
+            # nosemgrep: formatted-sql-query,sqlalchemy-execute-raw-query
             for row in cur.execute(q):
                 if has_alt and row[-1] not in active_alts:
                     continue

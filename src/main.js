@@ -203,11 +203,17 @@ if (!isDev) {
     wc.on('will-navigate', (event, url) => {
       if (!url.startsWith('file://')) event.preventDefault();
     });
-    // Previne abertura de novas janelas (exceto para impressão)
+    // Previne abertura de novas janelas. SÓ http/https saem pro navegador do
+    // sistema; qualquer outro esquema (file:, search-ms:, ms-msdt:, javascript:,
+    // e os protocol handlers do Windows em geral) é negado sem tocar no shell.
+    // NÃO existe caso legítimo de window.open('file://...') no app: a impressão
+    // do renderer usa window.open('', '_blank') (=> about:blank) ou iframe
+    // oculto + contentWindow.print(); nenhum dos dois precisa de 'allow' — e o
+    // 'allow' antigo abria janela filha herdando nodeIntegration: true.
     wc.setWindowOpenHandler(({ url }) => {
-      if (url.startsWith('file://')) return { action: 'allow' };
-      // Abre links externos no navegador do sistema (não no Electron)
-      shell.openExternal(url);
+      let proto = '';
+      try { proto = new URL(url).protocol; } catch { /* about:blank, relativa, lixo */ }
+      if (proto === 'https:' || proto === 'http:') shell.openExternal(url);
       return { action: 'deny' };
     });
   });
@@ -533,16 +539,38 @@ ipcMain.on('get-update-state', (event)=>{
   event.returnValue = updateState;
 });
 
+// ── PERMISSÕES — LISTA ÚNICA ────────────────────────────────────────
+// ⚠ A mainWindow NÃO usa partition própria, então _wireReuniaoCapture() registra
+// na MESMA defaultSession do app.whenReady(). E setPermissionRequestHandler
+// SOBRESCREVE o handler anterior — havia dois, e o segundo (reuniões) negava
+// geolocation em silêncio em produção. Por isso os dois pontos chamam
+// applyNexusPermissionHandlers() com ESTA lista.
+// Tirar 'geolocation' quebra o coletor de auditoria (precisão de rua);
+// tirar 'media'/'display-capture' quebra a gravação de reuniões.
+const NEXUS_ALLOWED_PERMISSIONS = new Set([
+  'geolocation',      // coletor de auditoria — app interno corporativo
+  'media',            // mic + câmera (reuniões)
+  'display-capture',  // captura de tela (reuniões)
+  'mediaKeySystem',
+  'background-sync',
+]);
+
+function applyNexusPermissionHandlers(sess) {
+  if (!sess) return;
+  sess.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(NEXUS_ALLOWED_PERMISSIONS.has(permission));
+  });
+  // Coerente com o request handler acima — antes só liberava media/display-capture,
+  // o que fazia navigator.permissions.query({name:'geolocation'}) mentir.
+  sess.setPermissionCheckHandler((_wc, permission) => NEXUS_ALLOWED_PERMISSIONS.has(permission));
+}
+
 app.whenReady().then(()=>{
-  // Fase D: permite geolocation pra coletor de auditoria (precisão de rua).
-  // Por default Electron nega geolocation silenciosamente; aqui aprovamos
-  // automaticamente porque é app interno corporativo.
+  // Fase D: geolocation pro coletor de auditoria + media/display-capture das
+  // reuniões — tudo num handler só (ver NEXUS_ALLOWED_PERMISSIONS acima).
   try {
     const { session } = require('electron');
-    session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
-      if (permission === 'geolocation') return callback(true);
-      callback(false);
-    });
+    applyNexusPermissionHandlers(session.defaultSession);
   } catch (e) { console.warn('setPermissionRequestHandler falhou:', e.message); }
 
   createBootWindow();
@@ -552,7 +580,21 @@ app.whenReady().then(()=>{
   // Instala/atualiza bundle do plugin Civil 3D em segundo plano.
   // Civil 3D carrega a DLL automaticamente do %APPDATA%\Autodesk\
   // ApplicationPlugins\Nexus.bundle\ — Lucas só precisa abrir o CAD.
-  setTimeout(() => { try { c3dAutoInstallBundleOnStartup(); } catch {} }, 500);
+  // Agora é async (2.84.187): as 4 chamadas de PowerShell lá dentro não seguram
+  // mais o event loop. O `.catch` é obrigatório — sem ele uma rejeição vira
+  // unhandledRejection e some do log.
+  setTimeout(() => {
+    try { Promise.resolve(c3dAutoInstallBundleOnStartup()).catch(e => logUpdate('civil3d:bundle: auto-install rejeitou: ' + (e && e.message))); } catch {}
+  }, 500);
+
+  // Aquece em 2º plano os dois probes que antes travavam a UI: as raízes do
+  // OneDrive (reg query) e o servidor de Maringá (UNC/SMB). Assim, quando a aba
+  // de cotações/análises chamar os resolvedores SÍNCRONOS, o resultado já está
+  // em cache e ninguém espera nada.
+  setTimeout(() => {
+    try { oneDriveRootsWarm().catch(() => {}); } catch {}
+    try { sondarServidorLegacy().catch(() => {}); } catch {}
+  }, 1500);
 
   // Espelho do Supabase (NEXUS-DADOS): baixa em 2º plano logo depois do boot e
   // reforça a cada 30 min. Nunca bloqueia a UI nem quebra se estiver sem rede.
@@ -684,17 +726,10 @@ function _wireReuniaoCapture(win) {
   if (!win || !win.webContents) return;
   const sess = win.webContents.session;
   // Permite captura de tela + media (mic, áudio do sistema). Sem isso, Chromium nega.
-  sess.setPermissionRequestHandler((wc, permission, callback) => {
-    if (permission === 'media' || permission === 'display-capture'
-        || permission === 'mediaKeySystem' || permission === 'background-sync') {
-      return callback(true);
-    }
-    callback(false);
-  });
-  sess.setPermissionCheckHandler((wc, permission) => {
-    if (permission === 'media' || permission === 'display-capture') return true;
-    return false;
-  });
+  // ⚠ Esta é a MESMA defaultSession do app.whenReady() (mainWindow não tem
+  // partition) e o handler SOBRESCREVE o anterior — por isso vai a lista
+  // completa (NEXUS_ALLOWED_PERMISSIONS), senão geolocation morre aqui.
+  applyNexusPermissionHandlers(sess);
   // Handler SÍNCRONO — usa cache pré-populada via 'get-screen-sources'.
   // `audio: 'loopback'` SÓ funciona quando source é tela inteira (screen:),
   // não em janela individual. Pra janelas, retornamos só vídeo — caso
@@ -813,9 +848,23 @@ ipcMain.handle('parse-ose', async (event, { mapaDxf, perfisDxf, excelPath }) => 
 
 ipcMain.handle('rename-files', async (event, { folder, items }) => {
   const results = [];
+  if (!Array.isArray(items)) return results;
   for (const item of items) {
     try {
-      fs.renameSync(path.join(folder, item.from), path.join(folder, item.to));
+      // basename nos dois lados: `item.to` com '..\' saía da pasta escolhida.
+      // nosemgrep: path-join-resolve-traversal -- o path.basename AQUI e justamente
+      // a blindagem contra traversal; `folder` vem do dialog nativo, nao do renderer.
+      const from = path.join(folder, path.basename(String(item.from || '')));
+      // nosemgrep: path-join-resolve-traversal
+      const to   = path.join(folder, path.basename(String(item.to   || '')));
+      if (!path.basename(String(item.to || ''))) throw new Error('nome de destino vazio');
+      // No Windows rename SUBSTITUI o destino sem avisar: num lote com colisão
+      // (OSE-12 -> OSE-13 com OSE-13 já lá) o arquivo era destruído em silêncio.
+      // Renome só-de-caixa (OSE-1 -> ose-1) aponta pro mesmo arquivo e é liberado.
+      if (fs.existsSync(to) && to.toLowerCase() !== from.toLowerCase()) {
+        throw new Error('destino já existe: ' + path.basename(to));
+      }
+      fs.renameSync(from, to);
       results.push({ from: item.from, ok: true });
     } catch(e) {
       results.push({ from: item.from, ok: false, error: e.message });
@@ -1109,7 +1158,8 @@ function c3dDecryptBlob(blob) {
   const ciphertext = blob.slice(37);
 
   const key = c3dDeriveKey();
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  // authTagLength explícito: o blob NXC3 sempre carrega tag de 16 bytes.
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
   decipher.setAuthTag(tag);
   const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   if (plain.length !== size) throw new Error('tamanho descriptografado incorreto');
@@ -1129,9 +1179,11 @@ function c3dGetDepsSrcDir(ver) {
 // Detecta a versão do AutoCAD/Civil 3D ABERTO via COM (acad.Version -> major).
 // Retorna { major, ver } (ex.: 25 -> '2026', 26 -> '2027') ou null se não houver
 // instância aberta. Usado só no NETLOAD manual — pra escolher a DLL certa.
-function c3dDetectRunningCad() {
+// ⚠ ASSÍNCRONA desde 2.84.187 (era `spawnSync` com timeout de 8 s, segurando o
+// event loop). Chamador único: o handler `civil3d:extract`, que já é async.
+async function c3dDetectRunningCad() {
   try {
-    const { spawnSync } = require('child_process');
+    const { execFile } = require('child_process');
     const ps = `
       $ErrorActionPreference='Stop';
       try {
@@ -1139,9 +1191,13 @@ function c3dDetectRunningCad() {
         Write-Output $a.Version;
       } catch { Write-Output 'NONE'; }
     `.trim();
-    const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps],
-      { windowsHide: true, timeout: 8000, encoding: 'utf8' });
-    const out = (r.stdout || '').trim();
+    const out = await new Promise((resolve) => {
+      execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps],
+        { windowsHide: true, timeout: 8000, encoding: 'utf8' },
+        // spawnSync não lançava em erro/timeout: só devolvia stdout vazio → null.
+        // Mantido igual de propósito (resolve, nunca reject).
+        (_err, stdout) => resolve(String(stdout || '').trim()));
+    });
     if (!out || out === 'NONE') return null;
     const major = parseInt(String(out).split('.')[0], 10);
     if (!Number.isFinite(major)) return null;
@@ -1156,7 +1212,7 @@ ipcMain.handle('civil3d:extract', async () => {
     // instância fechada). Aproveitamos pra detectar a versão e liberar a DLL
     // CERTA (2026 ou 2027). O caminho normal é o bundle, que auto-carrega as
     // duas no startup — este botão é só pra "carregar agora sem reabrir o CAD".
-    const running = c3dDetectRunningCad();
+    const running = await c3dDetectRunningCad();
     if (!running) {
       return { ok: false, error: 'Abra o Civil 3D antes de liberar o plugin manualmente. (Pelo bundle ele carrega sozinho ao abrir.)' };
     }
@@ -1201,13 +1257,20 @@ ipcMain.handle('civil3d:netload', async () => {
       return { ok: false, error: 'DLL não foi extraída ainda' };
     }
     const { spawn } = require('child_process');
-    const escapedPath = C3D_PLUGIN_PATH.replace(/'/g, "''");
+    // O caminho entra DENTRO de uma string AutoLISP, onde "\" e' escape:
+    // C:\Users\natalia\... virava "\n" e o NETLOAD dizia "arquivo nao
+    // encontrado" so' pra certos nomes de usuario. A troca de "\" por "/" e'
+    // feita AQUI, no Node: do lado PowerShell o .Replace('\\','/') virava,
+    // no template literal do JS, uma busca por contrabarra DUPLA — que nunca
+    // existe num caminho do Windows, entao o path saia intacto.
+    const lispPath = C3D_PLUGIN_PATH.replace(/\\/g, '/');
+    const escapedPath = lispPath.replace(/'/g, "''"); // escape de aspa simples do PowerShell
     const ps = `
       $ErrorActionPreference = 'Stop';
       try {
         $acad = [Runtime.InteropServices.Marshal]::GetActiveObject('AutoCAD.Application');
         $doc  = $acad.ActiveDocument;
-        $cmd  = '(command "_.NETLOAD" "' + '${escapedPath}'.Replace('\\\\','/') + '") ';
+        $cmd  = '(command "_.NETLOAD" "' + '${escapedPath}' + '") ';
         $doc.SendCommand($cmd);
         Write-Output 'OK';
       } catch {
@@ -1797,7 +1860,10 @@ ipcMain.handle('topografia:abrir-pasta', async (_e, p) => {
 // "Instale o Python 3", mesmo com o Python instalado: o instalador oficial NÃO marca
 // "Add to PATH" por padrão, então o fallback do PATH também falhava.
 // Agora a busca é dinâmica: env → pastas padrão (por usuário e por máquina) → registro.
-function _pyCandidatos() {
+// ⚠ ASSÍNCRONA desde 2.84.187: os dois `reg query` eram execFileSync e travavam
+// o event loop. Chamadores (2): orcRceResolvePython e o handler
+// `nexus:python-redetectar` — ambos async.
+async function _pyCandidatos() {
   const out = [];
   const add = p => { if (p && !out.includes(p)) out.push(p); };
   add(process.env.NEXUS_PYTHON || '');
@@ -1819,18 +1885,23 @@ function _pyCandidatos() {
 
   // registro: pega instalações que não estão nas pastas padrão
   try {
-    const { execFileSync } = require('child_process');
     for (const hive of ['HKCU', 'HKLM']) {
-      let saida = '';
-      try {
-        saida = execFileSync('reg', ['query', `${hive}\\Software\\Python\\PythonCore`, '/s', '/v', 'ExecutablePath'],
-                             { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
-      } catch { continue; }
+      const saida = await regQueryAsync([`${hive}\\Software\\Python\\PythonCore`, '/s', '/v', 'ExecutablePath']);
+      if (!saida) continue;
       for (const m of saida.matchAll(/ExecutablePath\s+REG_SZ\s+(.+?)\s*$/gmi)) add(m[1].trim());
     }
   } catch {}
 
   return out;
+}
+// `reg query` sem travar o event loop. Devolve '' em qualquer falha (chave
+// inexistente, timeout) — mesmo contrato do try/catch{continue} de antes.
+function regQueryAsync(args, timeout = 8000) {
+  const { execFile } = require('child_process');
+  return new Promise((resolve) => {
+    execFile('reg', ['query', ...args], { encoding: 'utf8', windowsHide: true, timeout },
+      (err, stdout) => resolve(err ? '' : String(stdout || '')));
+  });
 }
 // O stub do WindowsApps é um reparse point de 0 byte que só abre a Microsoft Store —
 // se entrar como "python válido", o app trava esperando um processo que não faz nada.
@@ -1857,34 +1928,45 @@ function orcRceResolveScript() {
 }
 
 let _pyCache;
-function orcRceResolvePython() {
+let _pyDetectando = null;   // dedup: 2 abas pedindo Python ao mesmo tempo = 1 detecção só
+// ⚠ ASSÍNCRONA desde 2.84.187 (era um `execFileSync --version` por candidato, 8 s
+// cada, no processo principal). TODOS os 9 chamadores estão em contexto async
+// (ipcMain.handle async ou `async function rhCvRun`) e foram marcados com `await`.
+async function orcRceResolvePython() {
   if (_pyCache !== undefined) return _pyCache;
-  const { execFileSync } = require('child_process');
-  const testa = (cmd, args) => {
-    try {
-      execFileSync(cmd, [...args, '--version'], { stdio: 'ignore', windowsHide: true, timeout: 8000 });
-      return true;
-    } catch { return false; }
-  };
+  if (_pyDetectando) return _pyDetectando;
+  _pyDetectando = (async () => {
+    const { execFile } = require('child_process');
+    const testa = (cmd, args) => new Promise((resolve) => {
+      try {
+        execFile(cmd, [...args, '--version'], { windowsHide: true, timeout: 8000 },
+          (err) => resolve(!err));
+      } catch { resolve(false); }
+    });
 
-  // 1) caminhos absolutos (env → pastas padrão → registro); confirma que EXECUTA mesmo
-  for (const c of _pyCandidatos()) {
-    if (_pyUtilizavel(c) && testa(c, [])) { _pyCache = { cmd: c, args: [] }; break; }
-  }
-  // 2) launcher "py -3" (existe mesmo sem PATH; é o mais confiável no Windows)
-  if (!_pyCache && testa('py', ['-3'])) _pyCache = { cmd: 'py', args: ['-3'] };
-  // 3) "python" do PATH, por último (pode ser o stub da Store)
-  if (!_pyCache && testa('python', [])) _pyCache = { cmd: 'python', args: [] };
+    let achado;
+    // 1) caminhos absolutos (env → pastas padrão → registro); confirma que EXECUTA mesmo
+    for (const c of await _pyCandidatos()) {
+      if (_pyUtilizavel(c) && await testa(c, [])) { achado = { cmd: c, args: [] }; break; }
+    }
+    // 2) launcher "py -3" (existe mesmo sem PATH; é o mais confiável no Windows)
+    if (!achado && await testa('py', ['-3'])) achado = { cmd: 'py', args: ['-3'] };
+    // 3) "python" do PATH, por último (pode ser o stub da Store)
+    if (!achado && await testa('python', [])) achado = { cmd: 'python', args: [] };
 
-  if (_pyCache) logUpdate('python: usando ' + _pyCache.cmd + ' ' + _pyCache.args.join(' '));
-  else { logUpdate('python: NAO encontrado'); _pyCache = null; }
-  return _pyCache;
+    if (achado) logUpdate('python: usando ' + achado.cmd + ' ' + achado.args.join(' '));
+    else { logUpdate('python: NAO encontrado'); achado = null; }
+    _pyCache = achado;
+    return _pyCache;
+  })();
+  try { return await _pyDetectando; }
+  finally { _pyDetectando = null; }
 }
 // permite reavaliar sem reiniciar o app (ex.: usuário acabou de instalar o Python)
 ipcMain.handle('nexus:python-redetectar', async () => {
   _pyCache = undefined;
-  const r = orcRceResolvePython();
-  return { ok: !!r, python: r ? `${r.cmd} ${r.args.join(' ')}`.trim() : null, candidatos: _pyCandidatos() };
+  const r = await orcRceResolvePython();
+  return { ok: !!r, python: r ? `${r.cmd} ${r.args.join(' ')}`.trim() : null, candidatos: await _pyCandidatos() };
 });
 
 ipcMain.handle('orc-rce:select-oses', async () => {
@@ -1918,7 +2000,7 @@ ipcMain.handle('orc-rce:gerar', async (_e, cfg) => {
     const script = orcRceResolveScript();
     if (!script) return { ok: false, erro: 'Gerador Python não encontrado (scripts/orcamento/gerar_orcamento_rce.py).' };
 
-    const py = orcRceResolvePython();
+    const py = await orcRceResolvePython();
     if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
 
     // grava config.json num tmp
@@ -2058,7 +2140,7 @@ ipcMain.handle('orc-elev:gerar', async (event, cfg) => {
     const script = orcElevResolveScript();
     if (!script) return { ok: false, erro: 'Wrapper Python não encontrado (scripts/orcamento-elevatoria/gerar_orcamento_elevatoria.py).' };
 
-    const py = orcRceResolvePython();
+    const py = await orcRceResolvePython();
     if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
 
     const tmpJson = path.join(os.tmpdir(), `nexus_orc_elev_${Date.now()}.json`);
@@ -2127,16 +2209,58 @@ ipcMain.handle('orc-elev:abrir', async (_e, p) => {
 // inteiro — procuramos este sufixo debaixo de qualquer pasta de 1º nível do OneDrive 2S.
 const NEXUS_DADOS_TAIL = path.join('002. ACCIONA', '001. BLOCO 02', '_APOIO', 'NEXUS-DADOS');
 const NEXUS_DADOS_SERVER_LEGACY = '\\\\2s-eng-servidor\\maringa\\_PROGRAMAS';
+
+// ── SERVIDOR DE MARINGÁ (UNC): TESTAR 1x POR SESSÃO, NUNCA NO MAIN THREAD ────────
+// `fs.accessSync('\\\\2s-eng-servidor\\...')` FORA da Tailscale segura o processo
+// dezenas de segundos no timeout de SMB do Windows. E isso rodava dentro de
+// nexusDadosBases(), ou seja, em TODA operação de cotações/fornecedores/análises —
+// a aba de cotações travava inteira, uma vez por clique.
+// Agora: o teste é ASSÍNCRONO (fs.promises.access numa corrida com um timer de
+// 2,5 s) e o veredito fica CACHEADO por 5 min. Os leitores síncronos apenas
+// consultam a flag — nunca esperam o SMB. Enquanto não há veredito, o servidor
+// vale como indisponível (o OneDrive já é a fonte primária) e o probe roda em 2º
+// plano; se a Tailscale subir no meio da sessão, o TTL de 5 min faz o servidor
+// reaparecer sozinho.
+const SVR_TTL = 5 * 60 * 1000;
+const SVR_TIMEOUT = 2500;
+let _svr = { ok: false, t: 0, promessa: null };
+
+function sondarServidorLegacy() {
+  if (_svr.promessa) return _svr.promessa;                                  // dedup
+  if (_svr.t && Date.now() - _svr.t < SVR_TTL) return Promise.resolve(_svr.ok);
+  const probe = fs.promises.access(NEXUS_DADOS_SERVER_LEGACY, fs.constants.R_OK)
+    .then(() => true).catch(() => false);
+  let timer;
+  const limite = new Promise(r => { timer = setTimeout(() => r(false), SVR_TIMEOUT); });
+  _svr.promessa = Promise.race([probe, limite]).then(ok => {
+    clearTimeout(timer);
+    _svr = { ok, t: Date.now(), promessa: null };
+    logUpdate('nexus-dados: servidor Maringá ' + (ok
+      ? 'DISPONÍVEL'
+      : 'indisponível (fora da Tailscale?) — seguindo só com OneDrive/cache'));
+    return ok;
+  });
+  return _svr.promessa;
+}
+// Consulta SÍNCRONA e instantânea: só lê o cache, jamais toca no SMB.
+function servidorLegacyDisponivel() {
+  if (!_svr.t || Date.now() - _svr.t >= SVR_TTL) {
+    try { sondarServidorLegacy().catch(() => {}); } catch {}   // refaz em 2º plano
+  }
+  return _svr.ok;                                              // último valor conhecido
+}
+// Lever manual pra reavaliar na hora (além do TTL de 5 min).
+function invalidarServidorLegacy() { _svr = { ok: _svr.ok, t: 0, promessa: null }; }
 // TODAS as raízes de OneDrive da máquina. NÃO exige "2S ENGENHARIA" no nome da conta
 // (o rótulo do tenant varia); só ordena colocando as que citam 2S na frente.
-function oneDriveRoots() {
+// Monta a lista a partir da saída crua do `reg query` (pura — serve pro caminho
+// síncrono e pro aquecimento assíncrono).
+function _oneDriveRootsFrom(regOut) {
   const roots = [];
   const add = p => { try { if (p && fs.existsSync(p) && !roots.includes(p)) roots.push(p); } catch {} };
   add(process.env.NEXUS_ONEDRIVE_2S);
   try {
-    const { execFileSync } = require('child_process');
-    const out = execFileSync('reg', ['query', 'HKCU\\Software\\Microsoft\\OneDrive\\Accounts', '/s'], { encoding: 'utf8', windowsHide: true });
-    const blocos = out.split(/\r?\n\s*\r?\n/);
+    const blocos = String(regOut || '').split(/\r?\n\s*\r?\n/);
     for (const preferido of [true, false]) {
       for (const b of blocos) {
         if (/2S ENGENHARIA/i.test(b) !== preferido) continue;
@@ -2150,6 +2274,37 @@ function oneDriveRoots() {
     for (const n of fs.readdirSync(home)) if (/^OneDrive/i.test(n)) add(path.join(home, n));
   } catch {}
   return roots;
+}
+// ⚠ CONTINUA SÍNCRONA DE PROPÓSITO. Ela é chamada por nexusDadosBases() →
+// dadosReadDirs()/dadosWriteDir()/nexusDadosWriteBase(), que por sua vez são usadas
+// em ~20 pontos SÍNCRONOS espalhados (cotacoesLoad, fornecedoresLoad,
+// analises-list/load, precosCatalogoPath, memorialCfgDir...). Propagar async por
+// essa cascata toda tem risco alto de sobrar um chamador sem `await` — e um
+// chamador esquecido aqui devolve uma Promise onde se esperava um array de paths,
+// falhando em silêncio. O custo real (o `reg query`) foi eliminado de outro jeito:
+// CACHE de 5 min + aquecimento assíncrono no boot (oneDriveRootsWarm), de modo que
+// na prática o caminho síncrono nunca chega a spawnar o `reg`.
+let _odRootsCache = null;                 // { v: string[], t: number }
+const OD_ROOTS_TTL = 5 * 60 * 1000;       // contas de OneDrive não mudam durante a sessão
+function oneDriveRoots() {
+  if (_odRootsCache && Date.now() - _odRootsCache.t < OD_ROOTS_TTL) return _odRootsCache.v;
+  let out = '';
+  try {
+    const { execFileSync } = require('child_process');
+    // timeout novo (antes era ILIMITADO): mesmo no fallback síncrono o main thread
+    // não pode ficar preso indefinidamente num `reg` travado.
+    out = execFileSync('reg', ['query', 'HKCU\\Software\\Microsoft\\OneDrive\\Accounts', '/s'],
+                       { encoding: 'utf8', windowsHide: true, timeout: 8000 });
+  } catch {}
+  const v = _oneDriveRootsFrom(out);
+  _odRootsCache = { v, t: Date.now() };
+  return v;
+}
+// Aquece o cache sem travar o event loop. Chamada no boot.
+async function oneDriveRootsWarm() {
+  const out = await regQueryAsync(['HKCU\\Software\\Microsoft\\OneDrive\\Accounts', '/s']);
+  _odRootsCache = { v: _oneDriveRootsFrom(out), t: Date.now() };
+  return _odRootsCache.v;
 }
 function oneDrive2SRoot() { return oneDriveRoots()[0] || null; }   // compat
 
@@ -2233,7 +2388,9 @@ function nexusDadosBases() {
   add(oneDriveDadosDir());        // _APOIO\NEXUS-DADOS   (base do app)
   add(oneDriveOrcEeeDir());       // _APOIO\ORÇAMENTO EEE (a do Lucas — as duas valem)
   if (process.env.NEXUS_ORC_EEE_DIR && fs.existsSync(process.env.NEXUS_ORC_EEE_DIR)) add(process.env.NEXUS_ORC_EEE_DIR);
-  try { fs.accessSync(NEXUS_DADOS_SERVER_LEGACY, fs.constants.R_OK); add(NEXUS_DADOS_SERVER_LEGACY); } catch {}
+  // ⚠ era fs.accessSync no UNC — travava o main thread a cada chamada (ver
+  // sondarServidorLegacy). Agora só lê a flag cacheada.
+  if (servidorLegacyDisponivel()) add(NEXUS_DADOS_SERVER_LEGACY);
   return bases;
 }
 // Cada "sub" que o app pede tem apelidos, porque a ORÇAMENTO EEE guarda as mesmas coisas
@@ -2250,7 +2407,11 @@ function nexusDadosWriteBase() {
   if (od) return od;
   const root = oneDrive2SRoot();
   if (root) { const p = path.join(root, '001. SERVIDOR PARANÁ', NEXUS_DADOS_TAIL); try { fs.mkdirSync(p, { recursive: true }); return p; } catch {} }
-  try { fs.accessSync(NEXUS_DADOS_SERVER_LEGACY, fs.constants.W_OK); return NEXUS_DADOS_SERVER_LEGACY; } catch {}
+  // Só paga o custo do SMB (aqui é W_OK, o cache guarda R_OK) se JÁ sabemos que o
+  // servidor responde; fora da Tailscale nem tenta.
+  if (servidorLegacyDisponivel()) {
+    try { fs.accessSync(NEXUS_DADOS_SERVER_LEGACY, fs.constants.W_OK); return NEXUS_DADOS_SERVER_LEGACY; } catch {}
+  }
   return null;
 }
 // leitura: todas as fontes × todos os apelidos da subpasta (só o que existe de verdade)
@@ -2605,14 +2766,21 @@ ipcMain.handle('orc-elev:analises-load', async (_e, file) => {
 });
 // Aplica o catálogo de preços de cotação (precos.json) por CIDADE/SB -> {key:[preço,fonte]}.
 // Usado no Importar da análise p/ já trazer os preços CP (ex.: painel) preenchidos.
+// ⚠ Devolve null quando não há catálogo acessível. O fallback no UNC só é
+// oferecido se o servidor estiver comprovadamente no ar — senão o readFileSync do
+// chamador ficava dezenas de segundos preso no timeout de SMB fora da Tailscale.
 function precosCatalogoPath() {
   for (const d of dadosReadDirs('COTACOES NEXUS')) { const p = path.join(d, 'precos.json'); if (fs.existsSync(p)) return p; }
-  return path.join(NEXUS_DADOS_SERVER_LEGACY, 'COTACOES NEXUS', 'precos.json');
+  // nosemgrep: path-join-resolve-traversal -- os 3 componentes sao constantes deste arquivo.
+  if (servidorLegacyDisponivel()) return path.join(NEXUS_DADOS_SERVER_LEGACY, 'COTACOES NEXUS', 'precos.json');
+  return null;
 }
 function _normTxt(s) { return String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toUpperCase().trim(); }
 ipcMain.handle('orc-elev:catalogo-aplicar', async (_e, ctx) => {
   try {
-    const cat = JSON.parse(fs.readFileSync(precosCatalogoPath(), 'utf8'));
+    const cp = precosCatalogoPath();
+    if (!cp) return { ok: false, erro: 'Catálogo de preços (precos.json) não encontrado — servidor de Maringá indisponível e sem cópia local/OneDrive.', precos: {} };
+    const cat = JSON.parse(fs.readFileSync(cp, 'utf8'));
     const itens = (cat && cat.itens) || {};
     const cidade = _normTxt(ctx && ctx.cidade);
     const sb = _normTxt(ctx && ctx.sb).replace(/^SB[-\s]*/, '');
@@ -2647,7 +2815,7 @@ function rhCvStore() { return path.join(app.getPath('userData'), 'curriculos'); 
 async function rhCvRun(cfg) {
   const script = rhCvScript();
   if (!script) return { ok: false, erro: 'Script curriculos.py não encontrado.' };
-  const py = orcRceResolvePython();
+  const py = await orcRceResolvePython();
   if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
   cfg.store = rhCvStore();
   const tmpJson = path.join(os.tmpdir(), `nexus_rh_cv_${Date.now()}.json`);
@@ -2861,7 +3029,7 @@ ipcMain.handle('memorial:gerar', async (_e, cfg) => {
     const script = memorialResolveScript();
     if (!script) return { ok: false, erro: 'Gerador Python não encontrado (scripts/memorial/gerar_memorial_descritivo.py).' };
 
-    const py = orcRceResolvePython();
+    const py = await orcRceResolvePython();
     if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
 
     // garante as libs Python (pyshp/matplotlib/...) — instala sozinho em maquina nova
@@ -2951,7 +3119,7 @@ ipcMain.handle('geoide:corrigir', async (_e, { alvos, modelo, somar, dry }) => {
     if (!alvos || !alvos.length) return { ok: false, erro: 'Nenhum arquivo/pasta selecionado.' };
     const script = geoideResolve('corrigir_geoide.py');
     if (!script) return { ok: false, erro: 'Script não encontrado (scripts/geoide/corrigir_geoide.py).' };
-    const py = orcRceResolvePython();
+    const py = await orcRceResolvePython();
     if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
     const deps = await memorialGarantirDeps(py);          // instala pyproj se faltar
     if (!deps.ok) return { ok: false, erro: deps.erro };
@@ -3124,7 +3292,7 @@ ipcMain.handle('mapa:gerar', async (_e, cfg) => {
 
     const script = mapaResolveScript();
     if (!script) return { ok: false, erro: 'Gerador Python não encontrado (scripts/mapa-geral/gerar_mapa.py).' };
-    const py = orcRceResolvePython();
+    const py = await orcRceResolvePython();
     if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
 
     const tmpJson = path.join(os.tmpdir(), `nexus_mapa_${Date.now()}.json`);
@@ -3177,7 +3345,7 @@ ipcMain.handle('monografia:gerar', async (event, params) => {
     const script = path.join(os.homedir(), 'jarvis', 'gerar_monografia.py');
     if (!fs.existsSync(script))
       return { ok: false, erro: 'Gerador não encontrado: ' + script };
-    const py = orcRceResolvePython();
+    const py = await orcRceResolvePython();
     if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
 
     const args = [...py.args, script, params.pdfPath];
@@ -3272,7 +3440,7 @@ ipcMain.handle('abas-pdf:gerar', async (_e, cfg) => {
     const script = abasPdfResolveScript();
     if (!script) return { ok: false, erro: 'Motor Python não encontrado (scripts/orcamento/excel_abas_para_pdf.py).' };
 
-    const py = orcRceResolvePython();
+    const py = await orcRceResolvePython();
     if (!py) return { ok: false, erro: 'Python não encontrado. Instale o Python 3 ou defina NEXUS_PYTHON.' };
 
     const tmpJson = path.join(os.tmpdir(), `nexus_abas_pdf_${Date.now()}.json`);
@@ -3322,7 +3490,7 @@ ipcMain.handle('abas-pdf:abrir', async (_e, p) => {
 
 // Auto-install/refresh no startup do Nexus. Roda silencioso; falhas (Civil
 // 3D aberto, etc) ficam no log e podem ser tentadas de novo via UI.
-function c3dAutoInstallBundleOnStartup() {
+async function c3dAutoInstallBundleOnStartup() {
   try {
     // SEMPRE garante o TrustedPaths ANTES de qualquer coisa — é o que evita o
     // diálogo SECURELOAD ("Unsigned Executable") do AutoCAD travar o CAD na
@@ -3330,10 +3498,10 @@ function c3dAutoInstallBundleOnStartup() {
     // skip/erro, porque um profile de CAD novo pode ter surgido desde a última
     // vez. O bundle fica em pasta gravável (%APPDATA%) → o AutoCAD não confia
     // sozinho; só carrega sem prompt se o caminho estiver no TrustedPaths.
-    try { c3dEnsureTrustedPath(); } catch {}
+    try { await c3dEnsureTrustedPath(); } catch {}
     // Registra tb o auto-loader nativo (chave Applications) — o PackageContents
     // do bundle NÃO auto-carrega no Civil 3D 2027; esta chave garante a carga.
-    try { c3dEnsureAppLoader(); } catch {}
+    try { await c3dEnsureAppLoader(); } catch {}
 
     // Sempre chama c3dInstallBundleSync — ele compara byte-a-byte e faz skip se
     // a DLL no bundle já é idêntica. Comparar só pela versão deixa passar
@@ -3350,8 +3518,8 @@ function c3dAutoInstallBundleOnStartup() {
                 (r.restartCad ? ' (PARCIAL — CAD aberto, alguma pasta ficou com DLL velha)' : ''));
       _c3dNeedsCadRestart = !!r.restartCad;
       if (r.restartCad) _c3dEmitNeedsCadRestartToAllWindows();
-      try { c3dEnsureTrustedPath(); } catch {}
-      try { c3dEnsureAppLoader(); } catch {}
+      try { await c3dEnsureTrustedPath(); } catch {}
+      try { await c3dEnsureAppLoader(); } catch {}
     }
     else if (r.restartCad) {
       logUpdate('civil3d:bundle: skip (CAD aberto) — bundle stale, flagged needs-cad-restart');
@@ -3396,27 +3564,49 @@ app.on('browser-window-created', (_e, win) => {
 // TrustedPaths vazio nos 4 profiles com o log dizendo "OK em  profile(s)" — o espaço
 // duplo era o contador vindo vazio.
 // `-EncodedCommand` + `execFileSync` não passam por cmd.exe nem por escape de aspas.
-function psRun(script, timeout = 15000) {
-  const { execFileSync } = require('child_process');
+//
+// ⚠ ASSÍNCRONA desde 2.84.187. Antes era `execFileSync` e cada chamada SEGURAVA o
+// event loop do processo principal por até 15 s. No boot são 4 chamadas
+// (c3dEnsureTrustedPath + c3dEnsureAppLoader, 2x cada) mais a de acadEstaAberto —
+// a janela do Nexus ficava congelada até ~1 min sem nada na tela.
+// ⚠ O nome mudou de `psRun` p/ `psRunAsync` DE PROPÓSITO: se escapar algum chamador
+// sem `await`, ele estoura ReferenceError na hora em vez de comparar uma Promise
+// com string ('NO_BRANCH', /^OK:\d+$/) e logar "FALHOU" em silêncio — que é
+// exatamente o modo de falha que escondeu o bug do cmd.exe por semanas.
+const _psCache = new Map();          // script -> { t, p }
+const PS_CACHE_TTL = 60 * 1000;      // colapsa só a rajada do boot; não congela a sessão
+function psRunAsync(script, timeout = 15000) {
+  const agora = Date.now();
+  const hit = _psCache.get(script);
+  if (hit && agora - hit.t < PS_CACHE_TTL) return hit.p;   // mesmo script no boot = 1 processo só
+  const { execFile } = require('child_process');
   const enc = Buffer.from(script, 'utf16le').toString('base64');
-  return execFileSync(
-    'powershell.exe',
-    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', enc],
-    { windowsHide: true, timeout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
-  ).trim();
+  const p = new Promise((resolve, reject) => {
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', enc],
+      { windowsHide: true, timeout, encoding: 'utf8' },
+      (err, stdout) => (err ? reject(err) : resolve(String(stdout || '').trim())),
+    );
+  });
+  // falha NÃO fica cacheada: um erro transitório não pode virar verdade por 60 s
+  p.catch(() => { const c = _psCache.get(script); if (c && c.p === p) _psCache.delete(script); });
+  _psCache.set(script, { t: agora, p });
+  return p;
 }
 
 // true se o Civil 3D está aberto. Importa porque o AutoCAD mantém o profile em
 // memória e o REESCREVE no fechamento — qualquer TrustedPaths gravado com ele
 // aberto é APAGADO quando o usuário fecha o CAD (gotcha confirmado 09/07 na Katia).
-function acadEstaAberto() {
+async function acadEstaAberto() {
   try {
-    return psRun("if (Get-Process acad -ErrorAction SilentlyContinue) { 'SIM' } else { 'NAO' }", 8000) === 'SIM';
+    const r = await psRunAsync("if (Get-Process acad -ErrorAction SilentlyContinue) { 'SIM' } else { 'NAO' }", 8000);
+    return r === 'SIM';
   } catch { return false; }
 }
 
-function c3dEnsureTrustedPath() {
-  const civilAberto = acadEstaAberto();
+async function c3dEnsureTrustedPath() {
+  const civilAberto = await acadEstaAberto();
   for (const t of C3D_TARGETS) {
     const trustedDir = c3dBundleDllDir(t.ver);
     if (!fs.existsSync(trustedDir)) continue;          // só registra versão instalada
@@ -3461,7 +3651,7 @@ if ($script:n -eq 0) { Write-Output 'NO_PROFILES'; } else { Write-Output ('OK:' 
 exit 0;
 `.trim();
 
-      const out = psRun(ps);
+      const out = await psRunAsync(ps);
       if (out === 'NO_BRANCH')
         logUpdate(`civil3d:bundle: TrustedPaths (${t.ver}/${regVer}) PULADO — Civil ${t.ver} nunca foi aberto (ramo do registro ${regVer} inexistente). Abra o Civil ${t.ver} 1x e reabra o Nexus.`);
       else if (out === 'NO_PROFILES')
@@ -3491,7 +3681,7 @@ exit 0;
 //   HKCU\Software\Autodesk\AutoCAD\<R25.1|R26.0>\<ProductKey>\Applications\Nexus<ver>
 //   LOADER (REG_SZ) = <bundle>\Contents\Civil3D\<ver>\GerarProjetoMND.dll
 //   MANAGED=1 (assembly .NET) · LOADCTRLS=2 (carrega no startup) · DESCRIPTION
-function c3dEnsureAppLoader() {
+async function c3dEnsureAppLoader() {
   for (const t of C3D_TARGETS) {
     const dllPath = c3dBundleDllPath(t.ver);
     if (!fs.existsSync(dllPath)) continue;              // só registra versão instalada
@@ -3519,7 +3709,7 @@ Get-ChildItem $baseRegPath -ErrorAction SilentlyContinue | ForEach-Object {
 if ($script:n -eq 0) { Write-Output 'NO_PRODUCTKEY'; } else { Write-Output ('OK:' + $script:n); }
 exit 0;
 `.trim();
-      const out = psRun(ps);
+      const out = await psRunAsync(ps);
       if (out === 'NO_BRANCH')
         logUpdate(`civil3d:bundle: AppLoader (${t.ver}/${regVer}) PULADO — Civil ${t.ver} nunca aberto (ramo ${regVer} inexistente).`);
       else if (out === 'NO_PRODUCTKEY')

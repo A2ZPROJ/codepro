@@ -49,7 +49,7 @@ function decryptBlob(blob) {
   const size = blob.readUInt32LE(33);
   const ciphertext = blob.slice(37);
 
-  const decipher = crypto.createDecipheriv('aes-256-gcm', deriveKey(), iv);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', deriveKey(), iv, { authTagLength: 16 });
   decipher.setAuthTag(tag);
   const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   if (plain.length !== size) throw new Error('tamanho descriptografado incorreto');

@@ -63,17 +63,17 @@
 ">
 <link rel="manifest" href="manifest.json">
 <title>Nexus — Gestão Integrada</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
-<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha384-c6Rcwz4e4CITMbu/NBmnNS8yN2sC3cUElMEMfP3vqqKFp7GOYaaBBCqmaWBjmkjb" crossorigin="anonymous" referrerpolicy="no-referrer"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" integrity="sha384-NElt3Op+9NBMCYaef5HxeJmU4Xeard/Lku8ek6hoPTvYkQPh3zLIrJP7KiRocsxO" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js" integrity="sha384-fCAW/rDWORTbQXSiB7mOg0QtQ5c+r0f544y6XoKjuVva0nMBlCpNUjiFeG5iMdS3" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js" integrity="sha384-BIsA8GBrihzaRmijjpqTCihj8D5Vox3hyBFg9sJiTGAEOv6KusZ8QOCKbTFEAfhm" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js" integrity="sha384-ieG+IKD0d/ZPXyCBTMVAbqsQdns8QGJR/e26WMw7M4fkaI/rHcS/YIoi+ah9WGge" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <script src="vendor/supabase.umd.js"></script>
@@ -86,6 +86,8 @@
   const SUPABASE_URL = 'https://xszpzsmdpbgaiodeqcpi.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhzenB6c21kcGJnYWlvZGVxY3BpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzMTI5ODYsImV4cCI6MjA4OTg4ODk4Nn0.Wv_tcovD5nc13tmrfkgsVb6M6tS-CC7q6HVjphpzTrQ';
   // Pagar.me PUBLIC key — safe to expose no client (não é secret, só tokeniza cartão)
+  const TENANT_A2Z = 'd5e83240-786d-416d-b289-c9ca510b396d';
+  window.TENANT_A2Z = TENANT_A2Z;
   const PAGARME_PUBLIC_KEY = 'pk_Gq4nynKcdeiw9AVP';
   window.PAGARME_PUBLIC_KEY = PAGARME_PUBLIC_KEY;
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -335,8 +337,9 @@
     }
     // Financeiro — RESTRITO aos SÓCIOS DA A2Z (tenant A2Z = Lucas + Matheus).
     // NÃO usar is_super_admin: o Daniel é super_admin da 2S e não pode ver A2Z.
-    if (currentUser.tenant_id === 'd5e83240-786d-416d-b289-c9ca510b396d'
-        || currentUser.access_code === 'A2ZP-MSTR' || currentUser.access_code === 'S8LO-AATC') {
+    // Só pelo tenant. Os access_codes que ficavam aqui eram credencial de login
+    // (a senha do Supabase Auth É o access_code) impressa no bundle distribuído.
+    if (currentUser.tenant_id === TENANT_A2Z) {
       const finBtn = document.getElementById('finSbBtn');
       if (finBtn) finBtn.style.display = '';
       const adminDiv = document.getElementById('sbAdminDivider');
@@ -367,8 +370,7 @@
     window._userAllowedTabs = userTabs; // exposto pro renderModulosGrid usar
     // A2Z (Lucas + Matheus) — mesmo critério do Financeiro. Usado pra liberar o
     // módulo "A2Z Projetos" (Proposta Comercial) por padrão só pros sócios A2Z.
-    window._ehA2Z = (currentUser.tenant_id === 'd5e83240-786d-416d-b289-c9ca510b396d'
-      || currentUser.access_code === 'A2ZP-MSTR' || currentUser.access_code === 'S8LO-AATC');
+    window._ehA2Z = (currentUser.tenant_id === TENANT_A2Z);
 
     // ── Tab gating por plano (decisão produto 2026-05-04) ──
     // Tier do plano determina quais abas o tenant tem acesso.
@@ -770,8 +772,7 @@
     };
     // Financeiro é EXCLUSIVO do tenant A2Z (Lucas+Matheus) — nem super_admin de
     // outra empresa (Daniel/2S) pode ver. Checado SEMPRE, sobrepõe o loop abaixo.
-    const ehA2Z = (currentUser.tenant_id === 'd5e83240-786d-416d-b289-c9ca510b396d'
-                   || currentUser.access_code === 'A2ZP-MSTR' || currentUser.access_code === 'S8LO-AATC');
+    const ehA2Z = (currentUser.tenant_id === TENANT_A2Z);
     // super_admin (Lucas/Daniel) sempre vê tudo. Demais: gate por plano + allowed_tabs.
     const isSuperAdmin = !!currentUser.is_super_admin;
     if (isSuperAdmin) {
@@ -1093,8 +1094,8 @@
     document.getElementById('epProgressoVal').textContent=(p.progresso||0)+'%';
     document.getElementById('epObs').value=p.observacoes||'';
     // Populate selects
-    const respOpts='<option value="">—</option>'+(window._responsaveis||[]).map(r=>`<option value="${r.id}">${r.nome}${r.empresa?' · '+r.empresa.nome:''}</option>`).join('');
-    const empOpts='<option value="">—</option>'+(window._equipes||[]).map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+    const respOpts='<option value="">—</option>'+(window._responsaveis||[]).map(r=>`<option value="${esc(r.id)}">${esc(r.nome)}${r.empresa?' · '+esc(r.empresa.nome):''}</option>`).join('');
+    const empOpts='<option value="">—</option>'+(window._equipes||[]).map(e=>`<option value="${esc(e.id)}">${esc(e.nome)}</option>`).join('');
     ['epProjetista','epCadista','epCoordenador','epPlanilhista'].forEach(id=>{const el=document.getElementById(id);if(el){el.innerHTML=respOpts;el.value='';}});
     ['epEmpProjetista','epCliente'].forEach(id=>{const el=document.getElementById(id);if(el){el.innerHTML=empOpts;el.value='';}});
     if(p.projetista)document.getElementById('epProjetista').value=p.projetista.id||'';
@@ -1176,8 +1177,8 @@
       const dt=c.at?.toDate?c.at.toDate():new Date();
       return `<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--border)">
         <div style="flex:1;min-width:0">
-          <div style="font-family:DM Mono,monospace;font-size:12px;font-weight:500;color:var(--text)">${c.code}</div>
-          ${c.nomeDocumento?`<div style="font-size:11px;color:var(--text3)">${c.nomeDocumento}</div>`:''}
+          <div style="font-family:DM Mono,monospace;font-size:12px;font-weight:500;color:var(--text)">${esc(c.code)}</div>
+          ${c.nomeDocumento?`<div style="font-size:11px;color:var(--text3)">${esc(c.nomeDocumento)}</div>`:''}
         </div>
         <span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;background:${cs.bg};color:${cs.color};white-space:nowrap">${cs.label}</span>
         <span style="font-size:10px;color:var(--text3);white-space:nowrap">${dt.toLocaleDateString('pt-BR')}</span>
@@ -1190,10 +1191,10 @@
     el.innerHTML=`
       <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--border)">
         <div>
-          <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px">${p.name}</div>
+          <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px">${esc(p.name)}</div>
           <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
             <span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;background:${st.bg};color:${st.color}">${st.label}</span>
-            ${p.tipoRelatorio?`<span style="font-size:10px;color:var(--text3)">${p.tipoRelatorio}</span>`:''}
+            ${p.tipoRelatorio?`<span style="font-size:10px;color:var(--text3)">${esc(p.tipoRelatorio)}</span>`:''}
             ${entregaTag}
           </div>
         </div>
@@ -1203,7 +1204,7 @@
         ${_progressBar(p.progresso)}
       </div>
       ${(team||companies)?`<div style="padding:14px 24px;border-bottom:1px solid var(--border);display:flex;gap:16px;flex-wrap:wrap">${team}${companies}</div>`:''}
-      ${p.observacoes?`<div style="padding:14px 24px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.7"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);display:block;margin-bottom:4px">Observações</span>${p.observacoes}</div>`:''}
+      ${p.observacoes?`<div style="padding:14px 24px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.7"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);display:block;margin-bottom:4px">Observações</span>${esc(p.observacoes)}</div>`:''}
       <div style="padding:12px 24px 4px;display:flex;align-items:center;justify-content:space-between;gap:8px">
         <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3)">Sub-itens · documentos (${codes.length})</span>
         <div style="display:flex;align-items:center;gap:8px">
@@ -1385,10 +1386,10 @@
         const avatars=[p.projetista,p.cadista,p.coordenador,p.planilhista].filter(Boolean).map(r=>{
           const cor=r.empresa?.cor||'#2563eb';
           const init=r.nome.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-          return `<span title="${r.nome}" style="width:20px;height:20px;border-radius:50%;background:${cor};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;border:1.5px solid var(--surface);flex-shrink:0">${init}</span>`;
+          return `<span title="${esc(r.nome)}" style="width:20px;height:20px;border-radius:50%;background:${cor};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;border:1.5px solid var(--surface);flex-shrink:0">${esc(init)}</span>`;
         }).join('');
         return `<div class="kanban-card" onclick="openProjectDetail('${p.id}')" style="${isAtrasado?'border-left:3px solid #dc2626;':''}">
-          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:5px;line-height:1.4">${p.name}</div>
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:5px;line-height:1.4">${esc(p.name)}</div>
           ${_progressBar(p.progresso)}
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;flex-wrap:wrap;gap:4px">
             <div style="display:flex;gap:3px">${avatars}</div>
@@ -1607,10 +1608,10 @@
   };
 
   window.initGRDTab = () => {
-    const opts = (window._projects||[]).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+    const opts = (window._projects||[]).map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
     const sel = document.getElementById('grdProjectSel');
     if(sel) sel.innerHTML = '<option value="">— Selecione um projeto —</option>'+opts;
-    const logoOpts = (window._equipes||[]).map(e=>`<option value="${e.logo_url||''}">${e.nome}</option>`).join('');
+    const logoOpts = (window._equipes||[]).map(e=>`<option value="${esc(_safeUrl(e.logo_url||''))}">${esc(e.nome)}</option>`).join('');
     const logoEsq = document.getElementById('grdLogoEsq');
     if(logoEsq) logoEsq.innerHTML = '<option value="">Sem logo</option>'+logoOpts;
     const logoDir = document.getElementById('grdLogoDir');
@@ -1748,12 +1749,12 @@
       const sel = window._grdGetEquipeItem(r.id);
       const checked = sel ? 'checked' : '';
       const funcao = sel?.funcao || '';
-      const funcOpts = '<option value="">— Função —</option>'+window._grdEquipeFuncoes.map(f=>`<option value="${f}"${funcao===f?' selected':''}>${f}</option>`).join('');
+      const funcOpts = '<option value="">— Função —</option>'+window._grdEquipeFuncoes.map(f=>`<option value="${esc(f)}"${funcao===f?' selected':''}>${esc(f)}</option>`).join('');
       return `<label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:4px 0">
         <input type="checkbox" ${checked} onchange="window.toggleGRDEquipe('${r.id}',this.checked)" style="accent-color:var(--accent);width:14px;height:14px">
-        <span style="font-size:12px;font-weight:600;color:var(--text);min-width:140px">${r.nome}</span>
+        <span style="font-size:12px;font-weight:600;color:var(--text);min-width:140px">${esc(r.nome)}</span>
         <select onchange="window.setGRDEquipeFuncao('${r.id}',this.value)" style="padding:3px 6px;font-size:11px;border:1px solid var(--border2);border-radius:5px;color:var(--text);background:var(--surface);outline:none;cursor:pointer;${sel?'':'opacity:.45;pointer-events:none'}">${funcOpts}</select>
-        ${r.empresa?.nome?`<span style="font-size:11px;color:var(--text3)">${r.empresa.nome}</span>`:''}
+        ${r.empresa?.nome?`<span style="font-size:11px;color:var(--text3)">${esc(r.empresa.nome)}</span>`:''}
       </label>`;
     }).join('');
   };
@@ -1838,16 +1839,16 @@
     const equipeNorm = equipeRaw.map(it => typeof it === 'string' ? {id:it, funcao:''} : it);
     const respMap = Object.fromEntries((window._responsaveis||[]).map(r=>[r.id,r]));
     const equipeRows = equipeNorm
-      .map(it => { const r = respMap[it.id]; if (!r) return ''; return `<tr><td>${it.funcao||'—'}</td><td>${r.nome||''}</td><td>${r.empresa?.nome||'—'}</td></tr>`; })
+      .map(it => { const r = respMap[it.id]; if (!r) return ''; return `<tr><td>${esc(it.funcao||'—')}</td><td>${esc(r.nome||'')}</td><td>${esc(r.empresa?.nome||'—')}</td></tr>`; })
       .filter(Boolean).join('');
-    const logoEsqHtml = logoEsqUrl ? `<img src="${logoEsqUrl}" style="height:52px;max-width:130px;object-fit:contain;display:block"/>` : `<div style="height:52px;width:130px"></div>`;
-    const logoDirHtml = logoDirUrl ? `<img src="${logoDirUrl}" style="height:52px;max-width:130px;object-fit:contain;display:block"/>` : `<div style="height:52px;width:130px"></div>`;
+    const logoEsqHtml = logoEsqUrl ? `<img src="${esc(_safeUrl(logoEsqUrl))}" style="height:52px;max-width:130px;object-fit:contain;display:block"/>` : `<div style="height:52px;width:130px"></div>`;
+    const logoDirHtml = logoDirUrl ? `<img src="${esc(_safeUrl(logoDirUrl))}" style="height:52px;max-width:130px;object-fit:contain;display:block"/>` : `<div style="height:52px;width:130px"></div>`;
     const fmtToStr = f => Array.isArray(f) ? f.join(', ') : (f||'');
-    const tableRows = rows.map(r=>`<tr><td>${r.codigo||''}</td><td style="text-align:center">${r.revisao||''}</td><td>${r.descricao||''}</td><td style="text-align:center">${fmtToStr(r.formato)}</td></tr>`).join('');
+    const tableRows = rows.map(r=>`<tr><td>${esc(r.codigo||'')}</td><td style="text-align:center">${esc(r.revisao||'')}</td><td>${esc(r.descricao||'')}</td><td style="text-align:center">${esc(fmtToStr(r.formato))}</td></tr>`).join('');
     // Timbrado por empresa (cabeçalho/rodapé). Se houver, substitui a faixa de logos.
     const tb = window._grdTimbrado || {};
-    const tbHeaderImg = tb.header ? `<img class="tb-h" src="${tb.header}" alt=""/>` : '';
-    const tbFooterImg = tb.footer ? `<div class="tb-f"><img src="${tb.footer}" alt=""/></div>` : '';
+    const tbHeaderImg = tb.header ? `<img class="tb-h" src="${esc(_safeUrl(tb.header))}" alt=""/>` : '';
+    const tbFooterImg = tb.footer ? `<div class="tb-f"><img src="${esc(_safeUrl(tb.footer))}" alt=""/></div>` : '';
     const headerBlock = tb.header
       ? `${tbHeaderImg}<div class="grd-title-bar">GUIA DE REMESSA DE DOCUMENTOS</div>`
       : `<div class="grd-header"><div class="grd-logo-box">${logoEsqHtml}</div><div class="grd-title">GUIA DE REMESSA DE DOCUMENTOS</div><div class="grd-logo-box" style="text-align:right">${logoDirHtml}</div></div>`;
@@ -1867,7 +1868,7 @@
       </table>`;
     const css2 = `<style>table.info2{width:100%;border-collapse:collapse;border:1px solid #94a3b8;margin-bottom:8px}table.info2 td{padding:4px 9px;border:1px solid #94a3b8;font-size:10.5px}table.info2 td.lbl{background:#e2e8f0;font-weight:700;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;width:90px;white-space:nowrap}body{position:relative}.draft-wm{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:9999}.draft-wm span{font-size:160px;font-weight:900;color:rgba(220,38,38,.18);transform:rotate(-30deg);letter-spacing:8px;border:8px solid rgba(220,38,38,.22);padding:18px 60px;border-radius:12px;font-family:Arial,sans-serif}@media print{.draft-wm{position:fixed!important}}.tb-h{width:100%;display:block;margin-bottom:6px}.tb-f{position:fixed;bottom:0;left:0;right:0}.tb-f img{width:100%;display:block}.grd-title-bar{text-align:center;font-size:18px;font-weight:800;color:#b91c1c;letter-spacing:.3px;margin:0 0 10px;padding-bottom:6px;border-bottom:2px solid #b91c1c}body.has-tb{padding-bottom:96px}@media print{.tb-f{position:fixed}}</style>`;
     const draftWm = isDraft ? `<div class="draft-wm"><span>RASCUNHO</span></div>` : '';
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>GRD ${grdNumFmt}${isDraft?' (RASCUNHO)':''}</title>${css}${css2}</head><body${(tb.header||tb.footer)?' class="has-tb"':''}>${draftWm}${headerBlock}<table class="info-table"><tr><td class="lbl">Projeto</td><td style="font-size:12px;font-weight:600" colspan="2">${projNome}</td><td class="lbl" style="text-align:center">Número</td><td class="num">${grdNumFmt}</td></tr><tr><td class="lbl">Cliente</td><td colspan="2">${cliente}</td><td class="lbl" style="text-align:center">Data</td><td class="dt">${dataFmt}</td></tr><tr><td class="lbl">Local</td><td colspan="4">${local}</td></tr></table>${infoProjeto}<div class="banner"><span>RELAÇÃO DE DOCUMENTOS EMITIDOS VIA GRD N°</span><span>${grdNumFmt}</span></div><table class="docs"><thead><tr><th style="width:34%">Número do Documento</th><th style="width:8%">Revisão</th><th>Descrição / Título</th><th style="width:8%">Formato</th></tr></thead><tbody>${tableRows||'<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:16px">Nenhum documento selecionado</td></tr>'}</tbody></table>${equipeSection}<div class="footer">Gerado pelo Nexus · ${new Date().toLocaleDateString('pt-BR')}</div>${tbFooterImg}</body></html>`;
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>GRD ${esc(grdNumFmt)}${isDraft?' (RASCUNHO)':''}</title>${css}${css2}</head><body${(tb.header||tb.footer)?' class="has-tb"':''}>${draftWm}${headerBlock}<table class="info-table"><tr><td class="lbl">Projeto</td><td style="font-size:12px;font-weight:600" colspan="2">${esc(projNome)}</td><td class="lbl" style="text-align:center">Número</td><td class="num">${esc(grdNumFmt)}</td></tr><tr><td class="lbl">Cliente</td><td colspan="2">${esc(cliente)}</td><td class="lbl" style="text-align:center">Data</td><td class="dt">${dataFmt}</td></tr><tr><td class="lbl">Local</td><td colspan="4">${esc(local)}</td></tr></table>${infoProjeto}<div class="banner"><span>RELAÇÃO DE DOCUMENTOS EMITIDOS VIA GRD N°</span><span>${esc(grdNumFmt)}</span></div><table class="docs"><thead><tr><th style="width:34%">Número do Documento</th><th style="width:8%">Revisão</th><th>Descrição / Título</th><th style="width:8%">Formato</th></tr></thead><tbody>${tableRows||'<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:16px">Nenhum documento selecionado</td></tr>'}</tbody></table>${equipeSection}<div class="footer">Gerado pelo Nexus · ${new Date().toLocaleDateString('pt-BR')}</div>${tbFooterImg}</body></html>`;
   };
 
   window._setPreviewMode = (mode, title) => {
@@ -1962,12 +1963,12 @@
         <div style="font-size:12px;color:var(--text3)">Importe o cabeçalho e o rodapé do seu papel timbrado (PNG/JPG). Aparecem no topo e no rodapé das GRDs e Termos de Aceite da sua empresa. Deixe em branco pra manter o atual.</div>
         <div>
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px">Cabeçalho</div>
-          <div id="tbHeaderPrev" style="border:1px dashed var(--border2);border-radius:6px;padding:8px;min-height:44px;background:var(--surface2);margin-bottom:6px">${tb.header?`<img src="${tb.header}" style="width:100%;display:block"/>`:'<span style="font-size:11px;color:var(--text3)">Nenhum</span>'}</div>
+          <div id="tbHeaderPrev" style="border:1px dashed var(--border2);border-radius:6px;padding:8px;min-height:44px;background:var(--surface2);margin-bottom:6px">${tb.header?`<img src="${esc(_safeUrl(tb.header))}" style="width:100%;display:block"/>`:'<span style="font-size:11px;color:var(--text3)">Nenhum</span>'}</div>
           <input type="file" id="tbHeaderFile" accept="image/*" style="font-size:12px"/>
         </div>
         <div>
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px">Rodapé</div>
-          <div id="tbFooterPrev" style="border:1px dashed var(--border2);border-radius:6px;padding:8px;min-height:44px;background:var(--surface2);margin-bottom:6px">${tb.footer?`<img src="${tb.footer}" style="width:100%;display:block"/>`:'<span style="font-size:11px;color:var(--text3)">Nenhum</span>'}</div>
+          <div id="tbFooterPrev" style="border:1px dashed var(--border2);border-radius:6px;padding:8px;min-height:44px;background:var(--surface2);margin-bottom:6px">${tb.footer?`<img src="${esc(_safeUrl(tb.footer))}" style="width:100%;display:block"/>`:'<span style="font-size:11px;color:var(--text3)">Nenhum</span>'}</div>
           <input type="file" id="tbFooterFile" accept="image/*" style="font-size:12px"/>
         </div>
         <div id="tbErr" style="display:none;color:#dc2626;font-size:12px"></div>
@@ -1984,7 +1985,7 @@
         const file = f.files?.[0]; if(!file) return;
         if(file.size > 2*1024*1024){ const e=document.getElementById('tbErr'); if(e){e.textContent='Imagem muito grande (máx 2MB). Otimize antes.'; e.style.display='block';} f.value=''; return; }
         const rd = new FileReader();
-        rd.onload = () => { const p=document.getElementById(prevId); p.innerHTML = `<img src="${rd.result}" style="width:100%;display:block"/>`; p.dataset.b64 = rd.result; };
+        rd.onload = () => { const p=document.getElementById(prevId); p.innerHTML = `<img src="${esc(_safeUrl(rd.result))}" style="width:100%;display:block"/>`; p.dataset.b64 = rd.result; };
         rd.readAsDataURL(file);
       });
     };
@@ -2017,10 +2018,10 @@
     const dataFmt  = dataVal ? new Date(dataVal+'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
     const rows     = (window._grdRows||[]).filter(r=>r.incluir);
     const fmtToStr = f => Array.isArray(f) ? f.join(', ') : (f||'');
-    const docRows  = rows.map((r,i)=>`<tr><td style="text-align:center">${i+1}</td><td>${r.codigo||''}</td><td style="text-align:center">${r.revisao||''}</td><td>${r.descricao||''}</td><td style="text-align:center">${fmtToStr(r.formato)}</td></tr>`).join('');
-    const tbH = tb.header ? `<img class="tb-h" src="${tb.header}"/>` : '';
-    const tbF = tb.footer ? `<div class="tb-f"><img src="${tb.footer}"/></div>` : '';
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Termo de Aceite — GRD ${grdNum}</title><style>
+    const docRows  = rows.map((r,i)=>`<tr><td style="text-align:center">${i+1}</td><td>${esc(r.codigo||'')}</td><td style="text-align:center">${esc(r.revisao||'')}</td><td>${esc(r.descricao||'')}</td><td style="text-align:center">${esc(fmtToStr(r.formato))}</td></tr>`).join('');
+    const tbH = tb.header ? `<img class="tb-h" src="${esc(_safeUrl(tb.header))}"/>` : '';
+    const tbF = tb.footer ? `<div class="tb-f"><img src="${esc(_safeUrl(tb.footer))}"/></div>` : '';
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Termo de Aceite — GRD ${esc(grdNum)}</title><style>
       *{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a1a;padding:18px 26px ${tb.footer?'110px':'26px'}}
       .tb-h{width:100%;display:block;margin-bottom:10px}.tb-f{position:fixed;bottom:0;left:0;right:0}.tb-f img{width:100%;display:block}
       h1{text-align:center;font-size:18px;color:#b91c1c;border-bottom:2px solid #b91c1c;padding-bottom:6px;margin-bottom:14px;letter-spacing:.3px}
@@ -2030,10 +2031,10 @@
       .sign{margin-top:54px;display:flex;justify-content:space-around;gap:40px}.sign div{flex:1;text-align:center;border-top:1px solid #1a1a1a;padding-top:6px;font-size:11px;color:#475569}
       @media print{@page{margin:10mm 12mm}}
     </style></head><body>${tbH}<h1>TERMO DE ACEITE</h1>
-      <table class="info"><tr><td class="l">Projeto</td><td>${projNome}</td><td class="l">GRD N°</td><td>${grdNum}</td></tr>
-      <tr><td class="l">Cliente</td><td>${cliente}</td><td class="l">Data</td><td>${dataFmt}</td></tr>
-      <tr><td class="l">Local</td><td colspan="3">${local}</td></tr></table>
-      <p class="t">Declaramos, para os devidos fins, que recebemos e <b>aceitamos</b> os documentos relacionados abaixo, referentes à Guia de Remessa de Documentos (GRD) N° <b>${grdNum}</b>, do projeto <b>${projNome}</b>, devidamente conferidos quanto à quantidade e ao conteúdo.</p>
+      <table class="info"><tr><td class="l">Projeto</td><td>${esc(projNome)}</td><td class="l">GRD N°</td><td>${esc(grdNum)}</td></tr>
+      <tr><td class="l">Cliente</td><td>${esc(cliente)}</td><td class="l">Data</td><td>${dataFmt}</td></tr>
+      <tr><td class="l">Local</td><td colspan="3">${esc(local)}</td></tr></table>
+      <p class="t">Declaramos, para os devidos fins, que recebemos e <b>aceitamos</b> os documentos relacionados abaixo, referentes à Guia de Remessa de Documentos (GRD) N° <b>${esc(grdNum)}</b>, do projeto <b>${esc(projNome)}</b>, devidamente conferidos quanto à quantidade e ao conteúdo.</p>
       <table class="docs"><thead><tr><th style="width:6%">#</th><th style="width:30%">Número do Documento</th><th style="width:8%">Rev.</th><th>Descrição / Título</th><th style="width:12%">Formato</th></tr></thead><tbody>${docRows||'<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:12px">Nenhum documento</td></tr>'}</tbody></table>
       <div class="sign"><div>Entregue por<br><br>&nbsp;</div><div>Recebido / Aceite<br><br>&nbsp;</div></div>
       ${tbF}</body></html>`;
@@ -2050,19 +2051,19 @@
     const st=STATUS_INFO[p.status]||STATUS_INFO.a_iniciar;
     const today=new Date().toLocaleDateString('pt-BR');
     const teamRows=[
-      p.projetista?`<tr><td>Projetista</td><td>${p.projetista.nome}</td><td>${p.projetista.empresa?.nome||'—'}</td></tr>`:'',
-      p.cadista?`<tr><td>Cadista</td><td>${p.cadista.nome}</td><td>${p.cadista.empresa?.nome||'—'}</td></tr>`:'',
-      p.coordenador?`<tr><td>Coordenador</td><td>${p.coordenador.nome}</td><td>${p.coordenador.empresa?.nome||'—'}</td></tr>`:'',
-      p.planilhista?`<tr><td>Técnico GIS</td><td>${p.planilhista.nome}</td><td>${p.planilhista.empresa?.nome||'—'}</td></tr>`:'',
+      p.projetista?`<tr><td>Projetista</td><td>${esc(p.projetista.nome)}</td><td>${esc(p.projetista.empresa?.nome||'—')}</td></tr>`:'',
+      p.cadista?`<tr><td>Cadista</td><td>${esc(p.cadista.nome)}</td><td>${esc(p.cadista.empresa?.nome||'—')}</td></tr>`:'',
+      p.coordenador?`<tr><td>Coordenador</td><td>${esc(p.coordenador.nome)}</td><td>${esc(p.coordenador.empresa?.nome||'—')}</td></tr>`:'',
+      p.planilhista?`<tr><td>Técnico GIS</td><td>${esc(p.planilhista.nome)}</td><td>${esc(p.planilhista.empresa?.nome||'—')}</td></tr>`:'',
     ].filter(Boolean).join('');
     const codeRows=codes.map((c,i)=>{
       const cs=CODE_STATUS[c.statusCodigo]||CODE_STATUS.em_elaboracao;
       const dt=c.at?.toDate?c.at.toDate():new Date();
-      return `<tr><td>${i+1}</td><td style="font-family:monospace">${c.code}</td><td>${c.nomeDocumento||'—'}</td><td>${cs.label}</td><td>${dt.toLocaleDateString('pt-BR')}</td></tr>`;
+      return `<tr><td>${i+1}</td><td style="font-family:monospace">${esc(c.code)}</td><td>${esc(c.nomeDocumento||'—')}</td><td>${cs.label}</td><td>${dt.toLocaleDateString('pt-BR')}</td></tr>`;
     }).join('');
     const css=`<style>body{font-family:Segoe UI,sans-serif;max-width:800px;margin:40px auto;color:#1a1a1a;font-size:13px}h1{font-size:22px;font-weight:700;margin-bottom:4px}h2{font-size:13px;font-weight:600;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.8px;color:#64748b}table{width:100%;border-collapse:collapse;margin-bottom:16px}th{background:#f1f5f9;padding:7px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #e2e8f0}td{padding:7px 10px;border-bottom:1px solid #e2e8f0;font-size:12px}.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}.footer{margin-top:32px;font-size:10px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:10px}@media print{body{margin:20px}}</style>`;
     const sc=`<script>window.onload=function(){window.print();}<\/script>`;
-    const projHtml=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Relatório — ${p.name}</title>${css}</head><body><h1>${p.name}</h1><span class="badge" style="background:${st.bg};color:${st.color}">${st.label}</span>${p.tipoRelatorio?`<span class="badge" style="background:#f1f5f9;color:#64748b;margin-left:6px">${p.tipoRelatorio}</span>`:''}${p.dataEntrega?`<span style="font-size:12px;color:#64748b;margin-left:8px">Entrega: ${new Date(p.dataEntrega+'T00:00:00').toLocaleDateString('pt-BR')}</span>`:''}<div style="margin-top:10px;display:flex;align-items:center;gap:8px"><div style="flex:1;height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden"><div style="width:${p.progresso||0}%;height:100%;background:#0a0a0a;border-radius:99px"></div></div><span style="font-size:12px;font-weight:700;color:#0a0a0a">${p.progresso||0}%</span></div>${p.observacoes?`<h2>Observações</h2><p style="white-space:pre-wrap;color:#475569">${p.observacoes}</p>`:''}${teamRows?`<h2>Equipe</h2><table><tr><th>Função</th><th>Nome</th><th>Empresa</th></tr>${teamRows}</table>`:''}<h2>Códigos (${codes.length})</h2><table><tr><th>#</th><th>Código</th><th>Documento</th><th>Status</th><th>Data</th></tr>${codeRows||'<tr><td colspan="5" style="color:#94a3b8;text-align:center">Nenhum código vinculado</td></tr>'}</table><div class="footer">Gerado pelo Nexus · A2Z Projetos · ${today}</div>${sc}</body></html>`;
+    const projHtml=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Relatório — ${esc(p.name)}</title>${css}</head><body><h1>${esc(p.name)}</h1><span class="badge" style="background:${st.bg};color:${st.color}">${st.label}</span>${p.tipoRelatorio?`<span class="badge" style="background:#f1f5f9;color:#64748b;margin-left:6px">${esc(p.tipoRelatorio)}</span>`:''}${p.dataEntrega?`<span style="font-size:12px;color:#64748b;margin-left:8px">Entrega: ${new Date(p.dataEntrega+'T00:00:00').toLocaleDateString('pt-BR')}</span>`:''}<div style="margin-top:10px;display:flex;align-items:center;gap:8px"><div style="flex:1;height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden"><div style="width:${p.progresso||0}%;height:100%;background:#0a0a0a;border-radius:99px"></div></div><span style="font-size:12px;font-weight:700;color:#0a0a0a">${p.progresso||0}%</span></div>${p.observacoes?`<h2>Observações</h2><p style="white-space:pre-wrap;color:#475569">${esc(p.observacoes)}</p>`:''}${teamRows?`<h2>Equipe</h2><table><tr><th>Função</th><th>Nome</th><th>Empresa</th></tr>${teamRows}</table>`:''}<h2>Códigos (${codes.length})</h2><table><tr><th>#</th><th>Código</th><th>Documento</th><th>Status</th><th>Data</th></tr>${codeRows||'<tr><td colspan="5" style="color:#94a3b8;text-align:center">Nenhum código vinculado</td></tr>'}</table><div class="footer">Gerado pelo Nexus · A2Z Projetos · ${today}</div>${sc}</body></html>`;
     const blob=new Blob([projHtml],{type:'text/html'});
     const blobUrl=URL.createObjectURL(blob);
     const frame=document.getElementById('grdPreviewFrame');
@@ -3660,16 +3661,16 @@
           const cor=r.empresa?.cor||'#2563eb';
           const init=r.nome.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
           return r.empresa?.logo_url
-            ?`<img src="${r.empresa.logo_url}" title="${r.nome}" style="width:22px;height:22px;border-radius:50%;border:1.5px solid var(--surface);object-fit:contain;background:#fff"/>`
-            :`<span title="${r.nome}" style="width:22px;height:22px;border-radius:50%;background:${cor};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;border:1.5px solid var(--surface)">${init}</span>`;
+            ?`<img src="${esc(_safeUrl(r.empresa.logo_url))}" title="${esc(r.nome)}" style="width:22px;height:22px;border-radius:50%;border:1.5px solid var(--surface);object-fit:contain;background:#fff"/>`
+            :`<span title="${esc(r.nome)}" style="width:22px;height:22px;border-radius:50%;background:${cor};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;border:1.5px solid var(--surface)">${esc(init)}</span>`;
         }).join('');
         return `<div style="display:flex;align-items:center;gap:10px;padding:11px 20px;border-bottom:1px solid var(--border);transition:background .15s;${isAtrasado?'background:rgba(220,38,38,.03)':''}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='${isAtrasado?'rgba(220,38,38,.03)':''}'"  >
           <div style="width:8px;height:8px;border-radius:50%;background:${st.color};flex-shrink:0"></div>
           <div style="flex:1;min-width:0">
-            <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</div>
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px">
               <span style="font-size:10px;padding:1px 6px;border-radius:6px;font-weight:600;background:${st.bg};color:${st.color}">${st.label}</span>
-              ${p.tipoRelatorio?`<span style="font-size:10px;color:var(--text3)">${p.tipoRelatorio}</span>`:''}
+              ${p.tipoRelatorio?`<span style="font-size:10px;color:var(--text3)">${esc(p.tipoRelatorio)}</span>`:''}
               ${entregaTag}
             </div>
           </div>
@@ -3894,7 +3895,7 @@
     }
     myEl.innerHTML=myCodes.slice(0,20).map(c=>{
       const dt=c.at?.toDate?c.at.toDate():new Date();
-      return `<div class="hist-row"><div class="hist-main"><span class="hist-code">${c.code}</span>${c.company?`<span class="hist-company">${c.company}</span>`:''}</div><div class="hist-sub">${dt.toLocaleDateString('pt-BR')}</div><div class="hist-actions"><button class="action-btn" onclick="cpyH('${c.code}',this)">Copiar</button></div></div>`;
+      return `<div class="hist-row"><div class="hist-main"><span class="hist-code">${esc(c.code)}</span>${c.company?`<span class="hist-company">${esc(c.company)}</span>`:''}</div><div class="hist-sub">${dt.toLocaleDateString('pt-BR')}</div><div class="hist-actions"><button class="action-btn" onclick="cpyH('${esc(c.code)}',this)">Copiar</button></div></div>`;
     }).join('');
   };
 
@@ -12624,13 +12625,13 @@ body.presenting #presentingBadge { display: flex; }
       ]);
       const selT = document.getElementById('orc-new-tabela');
       selT.innerHTML = (tabs || []).map(t =>
-        `<option value="${t.id}">${t.fonte} — ${t.nome}</option>`
+        `<option value="${window.esc(t.id)}">${window.esc(t.fonte)} — ${window.esc(t.nome)}</option>`
       ).join('') || '<option value="">Nenhuma tabela vigente</option>';
 
       const selO = document.getElementById('orc-new-bdi-obras');
       const selM = document.getElementById('orc-new-bdi-materiais');
       const opts = (tipo) => (bdis || []).filter(b => b.tipo === tipo).map(b =>
-        `<option value="${b.id}">${b.nome}</option>`
+        `<option value="${window.esc(b.id)}">${window.esc(b.nome)}</option>`
       ).join('');
       selO.innerHTML = opts('OBRAS') || '<option value="">Nenhum BDI Obras cadastrado</option>';
       selM.innerHTML = opts('MATERIAIS') || '<option value="">Nenhum BDI Materiais cadastrado</option>';
@@ -12824,10 +12825,10 @@ body.presenting #presentingBadge { display: flex; }
         const tdR = td + ';text-align:right;font-family:\'DM Mono\',monospace';
         return '<tr>'
           + `<td style="${td};color:var(--text3)">${idx+1}</td>`
-          + `<td style="${td}"><span style="padding:1px 6px;border-radius:6px;background:var(--surface2);font-size:9px;font-weight:700;color:var(--text2)">${it.fonte_snapshot || 'MANUAL'}</span></td>`
-          + `<td style="${td};font-family:'DM Mono',monospace;color:var(--text2)">${it.codigo_snapshot || '—'}</td>`
-          + `<td style="${td};color:var(--text)">${(it.descricao_snapshot || '').replace(/</g,'&lt;')}</td>`
-          + `<td style="${td};text-align:center;color:var(--text2)">${it.unidade_snapshot || '—'}</td>`
+          + `<td style="${td}"><span style="padding:1px 6px;border-radius:6px;background:var(--surface2);font-size:9px;font-weight:700;color:var(--text2)">${window.esc(it.fonte_snapshot || 'MANUAL')}</span></td>`
+          + `<td style="${td};font-family:'DM Mono',monospace;color:var(--text2)">${window.esc(it.codigo_snapshot || '—')}</td>`
+          + `<td style="${td};color:var(--text)">${window.esc(it.descricao_snapshot || '')}</td>`
+          + `<td style="${td};text-align:center;color:var(--text2)">${window.esc(it.unidade_snapshot || '—')}</td>`
           + `<td style="${tdR}"><input type="number" step="0.0001" value="${q}" onchange="window.orcEditItemQty(${it.id}, this.value)" style="width:90px;padding:4px 6px;font-family:inherit;font-size:11px;text-align:right;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text)"/></td>`
           + `<td style="${tdR};color:var(--text2)">${fmtMoney(v)}</td>`
           + `<td style="${td};text-align:center"><select onchange="window.orcEditItemBdi(${it.id}, this.value)" style="padding:3px 6px;font-size:10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:inherit">`
@@ -12917,10 +12918,10 @@ body.presenting #presentingBadge { display: flex; }
         const fonte = r.tabelas_preco?.fonte || '—';
         const td = 'padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px';
         return `<div class="orc-search-row" data-id="${r.id}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:11px" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">`
-          + `<span style="padding:1px 6px;border-radius:6px;background:var(--surface2);font-size:9px;font-weight:700;color:var(--text3);white-space:nowrap">${fonte}</span>`
-          + `<span style="font-family:'DM Mono',monospace;color:var(--text3);min-width:85px">${r.codigo}</span>`
-          + `<span style="flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(r.descricao || '').replace(/</g,'&lt;')}</span>`
-          + `<span style="color:var(--text3);min-width:36px;text-align:right">${r.unidade || '—'}</span>`
+          + `<span style="padding:1px 6px;border-radius:6px;background:var(--surface2);font-size:9px;font-weight:700;color:var(--text3);white-space:nowrap">${window.esc(fonte)}</span>`
+          + `<span style="font-family:'DM Mono',monospace;color:var(--text3);min-width:85px">${window.esc(r.codigo)}</span>`
+          + `<span style="flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${window.esc(r.descricao || '')}</span>`
+          + `<span style="color:var(--text3);min-width:36px;text-align:right">${window.esc(r.unidade || '—')}</span>`
           + `<span style="font-family:'DM Mono',monospace;color:var(--text);min-width:90px;text-align:right">${fmtMoney(r.valor_unitario)}</span>`
           + `<button onclick="event.stopPropagation();window.orcAddItem(${r.id})" style="background:var(--gray-900);color:white;border:none;border-radius:4px;padding:4px 10px;font-size:10px;cursor:pointer;font-weight:600">+ Add</button>`
           + `</div>`;
@@ -28961,10 +28962,10 @@ body.presenting #presentingBadge { display: flex; }
                 </tr></thead>
                 <tbody>
                   ${v.issues.slice(0,500).map(i => `<tr>
-                    <td style="padding:4px 8px;border-bottom:1px solid var(--border);color:#b91c1c;font-weight:600">${i.tipo}</td>
-                    <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${i.linha}</td>
-                    <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${i.ose||''}</td>
-                    <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${i.msg}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid var(--border);color:#b91c1c;font-weight:600">${window.esc(i.tipo)}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${window.esc(i.linha)}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${window.esc(i.ose||'')}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${window.esc(i.msg)}</td>
                   </tr>`).join('')}
                 </tbody>
               </table>
@@ -28972,7 +28973,7 @@ body.presenting #presentingBadge { display: flex; }
             </div>`
           : `<div style="margin-top:10px;padding:12px;background:#dcfce7;color:#15803d;border-radius:6px;font-size:12px;font-weight:600">✓ Nenhum problema encontrado</div>`;
         return `<div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border)">
-          <div style="font-weight:700;font-size:13px;margin-bottom:8px">${_basename(path)}</div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px">${window.esc(_basename(path))}</div>
           <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${v.totalEdges} trechos · ${v.totalOses} OSEs${hasOriginal?' · original encontrado (CT validada)':' · sem original (CT não validada)'}</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px">
             ${hasOriginal ? badge(!c.ctChanged, 'CT imutável', c.ctChanged) : infoBadge('CT não validada', 0)}
@@ -45776,11 +45777,11 @@ window.deleteFromBucket = async function(bucketName, path) {
     function ehSocioA2Z(){
       const tid = window._tenantId || window._currentUserData?.tenant_id || null;
       const lic = window.__LICENSE__ || window.electronAPI?.getLicense?.() || {};
-      const code = (lic.access_code || window._currentUserData?.access_code || '').toUpperCase();
       const email = (lic.email || window._currentUserData?.email || '').toLowerCase();
+      // Fallbacks por access_code sairam daqui: o access_code E a senha do
+      // Supabase Auth, e ficava impresso no bundle distribuido a clientes.
+      // Os dois socios A2Z ja pertencem ao A2Z_TENANT.
       return tid === A2Z_TENANT
-        || code === 'A2ZP-MSTR'            // Lucas (fundador A2Z)
-        || code === 'S8LO-AATC'            // Matheus (sócio A2Z)
         || email === 'lucas.abdala@a2zprojetos.com.br';
     }
     window.ehSocioA2Z = ehSocioA2Z; // financeiro.js usa pra decidir escopo Pessoal x A2Z

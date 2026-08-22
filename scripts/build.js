@@ -28,6 +28,9 @@ const publish = process.argv.includes('--publish');
 
 function run(cmd) {
   console.log(`\n▶ ${cmd}`);
+  // Script de build local: `cmd` so recebe literais definidos neste arquivo,
+  // nunca entrada de usuario ou da rede.
+  // nosemgrep: detect-child-process
   execSync(cmd, { cwd: root, stdio: 'inherit' });
 }
 

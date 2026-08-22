@@ -1,6 +1,6 @@
 {
   "name": "codepro",
-  "version": "2.84.186",
+  "version": "2.84.187",
   "description": "Nexus â€” GestÃ£o Integrada A2Z Projetos",
   "main": "src/main.js",
   "scripts": {
@@ -121,7 +121,7 @@
     "@napi-rs/canvas": "^0.1.100",
     "@sentry/electron": "^7.14.0",
     "@supabase/supabase-js": "^2.102.1",
-    "adm-zip": "^0.5.17",
+    "adm-zip": "^0.6.0",
     "bytenode": "^1.5.7",
     "docx": "^9.6.1",
     "docx-preview": "^0.3.7",
@@ -133,7 +133,7 @@
     "pdfmake": "^0.3.7",
     "pizzip": "^3.2.0",
     "shapefile": "^0.6.6",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@sentry/cli": "^2.58.6",
@@ -150,11 +150,3 @@
     "@sentry/cli@2.58.6": true
   }
 }
-
-
-
-
-
-
-
-

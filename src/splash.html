@@ -625,6 +625,15 @@ function hideError() {
   document.getElementById('errorMsg').classList.remove('show');
 }
 
+// Retorna o OBJETO DO USUÁRIO quando encontra, ou um sentinela — nunca null:
+//   { status: 'invalid' } → o servidor RESPONDEU e negou: código não existe,
+//                           usuário desativado (ativo=false) ou deleted_at.
+//   { status: 'offline' } → não deu pra falar com o servidor (rede, DNS, 5xx,
+//                           JSON corrompido) — não dá pra afirmar nada.
+// ⚠ Antes os dois casos viravam `null`, e o init() lia isso como "offline":
+// desativar alguém no Supabase não bloqueava por até 7 dias (gate offline).
+// Sentinela NUNCA tem `id`; usuário real sempre tem — é assim que os call
+// sites distinguem (`res && res.id`).
 async function queryUser(code) {
   // Fase B do RLS hardening (2026-05-02): em vez de SELECT direto em usuarios
   // (que vai virar bloqueado quando a PARTE 5 do SQL for ativada), chamamos
@@ -644,15 +653,20 @@ async function queryUser(code) {
         body: JSON.stringify({ p_code: code }),
       }
     );
-    if (!resp.ok) return null;
-    const rows = await resp.json();
-    if (!Array.isArray(rows) || !rows.length) return null;
+    // 4xx/5xx: o servidor não respondeu a pergunta — tratar como offline,
+    // NUNCA como "código inválido" (senão um 503 desloga a empresa inteira).
+    if (!resp.ok) return { status: 'offline' };
+    let rows;
+    try { rows = await resp.json(); } catch (e) { return { status: 'offline' }; }
+    if (!Array.isArray(rows)) return { status: 'offline' };
+    // 200 + lista vazia = a RPC auth_login filtrou: inexistente/inativo/deletado.
+    if (!rows.length) return { status: 'invalid' };
     const user = rows[0];
     // Re-injeta access_code: a RPC omite por design, mas o re-login offline
     // (saved.access_code em tryAutoLogin) precisa dele pra revalidar online.
     user.access_code = code;
     return user;
-  } catch(e) { return null; }
+  } catch(e) { return { status: 'offline' }; }
 }
 
 async function doLogin() {
@@ -675,12 +689,19 @@ async function doLogin() {
     return;
   }
 
-  const user = await queryUser(code);
+  const res = await queryUser(code);
 
   btn.disabled = false;
   btn.innerHTML = 'Entrar <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
 
-  if (!user) { showError('Código de acesso inválido. Verifique e tente novamente.'); return; }
+  // Sentinela (sem `id`) = não achou. 'offline' não é culpa do código digitado.
+  if (!res || !res.id) {
+    showError(res && res.status === 'offline'
+      ? 'Não foi possível falar com o servidor. Verifique a conexão e tente novamente.'
+      : 'Código de acesso inválido. Verifique e tente novamente.');
+    return;
+  }
+  const user = res;
   if (user.ativo === false) { showError('Acesso desativado. Contate o administrador.'); return; }
 
   if (user.license_expires) {
@@ -1012,17 +1033,25 @@ async function init() {
     }
   }
 
-  // Re-sync com Supabase. Sucesso → atualiza last_online_login. Falha (offline
-  // ou Supabase fora do ar) → checa gate de 7 dias; expirado bloqueia entrada.
+  // Re-sync com Supabase. Sucesso → atualiza last_online_login.
+  // status 'invalid' (servidor negou: desativado/deletado) → derruba a licença
+  // NA HORA, sem gate. status 'offline' (rede/5xx) → checa gate de 7 dias.
   const OFFLINE_MAX_DAYS = 7;
   let bootOffline = false;
   if (saved && saved.id && saved.access_code) {
-    let fresh = null;
-    try { fresh = await queryUser(saved.access_code); } catch (e) { fresh = null; }
+    let fresh = { status: 'offline' };
+    try { fresh = await queryUser(saved.access_code); } catch (e) { fresh = { status: 'offline' }; }
     if (fresh && fresh.id) {
       const merged = { ...saved, ...fresh, last_online_login: Date.now() };
       store.set('license', merged);
       saved = merged;
+    } else if (fresh && fresh.status === 'invalid') {
+      // O servidor RESPONDEU e negou (desativado/deletado/código inexistente).
+      // Isso NÃO é offline: derruba a licença local na hora e manda pra tela de
+      // código, sem passar pelo gate de 7 dias.
+      store.delete('license');
+      saved = null;
+      setTimeout(() => showError('Acesso desativado ou código inválido. Contate o administrador.'), 600);
     } else {
       bootOffline = true;
       const lastOnline = saved.last_online_login || 0;

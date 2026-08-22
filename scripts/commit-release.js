@@ -20,6 +20,9 @@ const version = pkg.version;
 const tag = `v${version}`;
 
 function git(args, opts = {}) {
+  // Script de release local: `args` vem de literais deste arquivo (subcomandos
+  // git), nunca de entrada externa.
+  // nosemgrep: detect-child-process
   return execSync(`git ${args}`, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', ...opts }).trim();
 }
 function gitTry(args) {
